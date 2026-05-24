@@ -274,3 +274,259 @@ function validate_password(string $password): string|bool
     return true;
 }
 
+// Verification tokens (password reset, appointment confirmation, etc.)
+function create_verification_token(int $user_id, string $task = 'password_reset', int $expiry_minutes = 60): string
+{
+    $db = get_db();
+    $code = bin2hex(random_bytes(32));
+    $expires_at = date('Y-m-d H:i:s', time() + ($expiry_minutes * 60));
+    
+    // Delete old tokens for this user+task
+    $stmt = $db->prepare('DELETE FROM verification WHERE user_id = ? AND task = ?');
+    $stmt->execute([$user_id, $task]);
+    
+    // Create new token
+    $stmt = $db->prepare('INSERT INTO verification (user_id, code, task, expires_at) VALUES (?, ?, ?, ?)');
+    $stmt->execute([$user_id, $code, $task, $expires_at]);
+    
+    return $code;
+}
+
+function validate_verification_token(string $code, string $task = 'password_reset'): ?int
+{
+    $db = get_db();
+    $stmt = $db->prepare('SELECT user_id FROM verification WHERE code = ? AND task = ? AND (expires_at IS NULL OR expires_at > NOW())');
+    $stmt->execute([$code, $task]);
+    $row = $stmt->fetch();
+    return $row ? (int)$row['user_id'] : null;
+}
+
+function get_user_by_verification_code(string $code): ?array
+{
+    $db = get_db();
+    $stmt = $db->prepare('SELECT u.id, u.email, u.password_hash, u.full_name, u.first_name, u.last_name, u.phone, u.role, u.is_active FROM users u JOIN verification v ON u.id = v.user_id WHERE v.code = ? AND v.task = ? AND (v.expires_at IS NULL OR v.expires_at > NOW())');
+    $stmt->execute([$code, 'password_reset']);
+    $row = $stmt->fetch();
+    return $row ?: null;
+}
+
+function delete_verification_token(string $code): void
+{
+    $db = get_db();
+    $stmt = $db->prepare('DELETE FROM verification WHERE code = ?');
+    $stmt->execute([$code]);
+}
+
+// Collect email / SMTP diagnostics without attempting to send
+function email_diagnostics(string $to_email, string $subject): array
+{
+    $smtp_host = get_setting('smtp_host');
+    $smtp_port = (int) get_setting('smtp_port', '587');
+    $smtp_encryption = get_setting('smtp_encryption', 'tls');
+    $smtp_username = get_setting('smtp_username');
+    $mail_from_address = get_setting('mail_from_address');
+    $mail_from_name = get_setting('mail_from_name', APP_NAME ?? 'Boomy Appointments');
+
+    $debug = [];
+    $debug[] = "SMTP Host: " . ($smtp_host ?: '(not set)');
+    $debug[] = "SMTP Port: $smtp_port";
+    $debug[] = "SMTP Encryption: $smtp_encryption";
+    $debug[] = "From Address: " . ($mail_from_address ?: '(not set)');
+    $debug[] = "From Name: $mail_from_name";
+    $debug[] = "To: $to_email";
+    $debug[] = "Subject: $subject";
+
+    $debug[] = "PHP Version: " . PHP_VERSION;
+    $debug[] = "OpenSSL extension: " . (extension_loaded('openssl') ? 'loaded' : 'NOT loaded');
+    $debug[] = "cURL extension: " . (extension_loaded('curl') ? 'loaded' : 'NOT loaded');
+    $debug[] = "Filesystem writable check (phpmailer/): " . (is_writable(__DIR__ . '/phpmailer') ? 'writable' : 'not writable or not present');
+
+    if ($smtp_username) {
+        $len = strlen($smtp_username);
+        $masked = $len > 3 ? substr($smtp_username, 0, 2) . str_repeat('*', max(0, $len - 4)) . substr($smtp_username, -2) : str_repeat('*', $len);
+        $debug[] = "SMTP Username: $masked (length=$len)";
+    } else {
+        $debug[] = "SMTP Username: (not set)";
+    }
+
+    if ($smtp_host) {
+        $resolved = gethostbyname($smtp_host);
+        $debug[] = "DNS lookup for $smtp_host -> $resolved";
+    }
+
+    if ($smtp_host && $smtp_port) {
+        $errno = 0; $errstr = '';
+        $conn = @fsockopen($smtp_host, $smtp_port, $errno, $errstr, 5);
+        if ($conn) {
+            $debug[] = "TCP connect to $smtp_host:$smtp_port succeeded";
+            fclose($conn);
+        } else {
+            $debug[] = "TCP connect to $smtp_host:$smtp_port failed: " . ($errstr ?: 'unknown error') . " (errno=$errno)";
+        }
+    }
+
+    return $debug;
+}
+
+function send_password_reset_email(string $email, string $code): bool
+{
+    $user = get_user_by_email($email);
+    if (!$user) return false;
+    
+    $app_name = APP_NAME ?? 'Boomy Appointments';
+    $reset_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . '/reset_password.php?code=' . urlencode($code);
+    
+    $subject = "Password Reset - $app_name";
+    $body_html = "
+        <h2>Password Reset Request</h2>
+        <p>Hi {$user['full_name']},</p>
+        <p>You requested to reset your password. Click the link below to create a new password:</p>
+        <p><a href=\"{$reset_url}\" style=\"background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;\">Reset Password</a></p>
+        <p>Or copy this link: {$reset_url}</p>
+        <p>This link expires in 60 minutes.</p>
+        <p>If you didn't request this, you can ignore this email.</p>
+        <p>Best regards,<br>$app_name</p>
+    ";
+    
+    $body_plain = "
+Password Reset Request
+
+Hi {$user['full_name']},
+
+You requested to reset your password. Visit this link to create a new password:
+{$reset_url}
+
+This link expires in 60 minutes.
+
+If you didn't request this, you can ignore this email.
+
+Best regards,
+$app_name
+    ";
+    
+    return send_email($email, $subject, $body_html, $body_plain);
+}
+
+function send_email(string $to_email, string $subject, string $body_html, string $body_plain = ''): array|bool
+{
+    // Get SMTP settings from database
+    $smtp_host = get_setting('smtp_host');
+    $smtp_port = (int) get_setting('smtp_port', '587');
+    $smtp_encryption = get_setting('smtp_encryption', 'tls');
+    $smtp_username = get_setting('smtp_username');
+    $smtp_password = get_setting('smtp_password');
+    $mail_from_address = get_setting('mail_from_address');
+    $mail_from_name = get_setting('mail_from_name', APP_NAME ?? 'Boomy Appointments');
+    
+    $debug = [];
+    $debug[] = "SMTP Host: " . ($smtp_host ?: '(not set)');
+    $debug[] = "SMTP Port: $smtp_port";
+    $debug[] = "SMTP Encryption: $smtp_encryption";
+    $debug[] = "From Address: " . ($mail_from_address ?: '(not set)');
+    $debug[] = "From Name: $mail_from_name";
+    $debug[] = "To: $to_email";
+    $debug[] = "Subject: $subject";
+
+    // Additional diagnostics
+    $debug[] = "PHP Version: " . PHP_VERSION;
+    $debug[] = "OpenSSL extension: " . (extension_loaded('openssl') ? 'loaded' : 'NOT loaded');
+    $debug[] = "cURL extension: " . (extension_loaded('curl') ? 'loaded' : 'NOT loaded');
+    $debug[] = "Filesystem writable check (phpmailer/): " . (is_writable(__DIR__ . '/phpmailer') ? 'writable' : 'not writable or not present');
+
+    // Mask SMTP username for safety (show length and first/last chars)
+    if ($smtp_username) {
+        $len = strlen($smtp_username);
+        $masked = $len > 3 ? substr($smtp_username, 0, 2) . str_repeat('*', max(0, $len - 4)) . substr($smtp_username, -2) : str_repeat('*', $len);
+        $debug[] = "SMTP Username: $masked (length=$len)";
+    } else {
+        $debug[] = "SMTP Username: (not set)";
+    }
+
+    // Quick DNS resolution check
+    if ($smtp_host) {
+        $resolved = gethostbyname($smtp_host);
+        $debug[] = "DNS lookup for $smtp_host -> $resolved";
+    }
+
+    // Quick TCP connectivity check (non-blocking short timeout)
+    if ($smtp_host && $smtp_port) {
+        $errno = 0; $errstr = '';
+        $conn = @fsockopen($smtp_host, $smtp_port, $errno, $errstr, 5);
+        if ($conn) {
+            $debug[] = "TCP connect to $smtp_host:$smtp_port succeeded";
+            fclose($conn);
+        } else {
+            $debug[] = "TCP connect to $smtp_host:$smtp_port failed: " . ($errstr ?: 'unknown error') . " (errno=$errno)";
+        }
+    }
+    
+    // Check if PHPMailer is available
+    if (!file_exists(__DIR__ . '/phpmailer/PHPMailer.php')) {
+        $debug[] = "❌ ERROR: PHPMailer library not found at /phpmailer/PHPMailer.php";
+        $debug[] = "Download PHPMailer files:";
+        $debug[] = "  - wget https://raw.githubusercontent.com/PHPMailer/PHPMailer/master/src/PHPMailer.php -O phpmailer/PHPMailer.php";
+        $debug[] = "  - wget https://raw.githubusercontent.com/PHPMailer/PHPMailer/master/src/SMTP.php -O phpmailer/SMTP.php";
+        $debug[] = "  - wget https://raw.githubusercontent.com/PHPMailer/PHPMailer/master/src/Exception.php -O phpmailer/Exception.php";
+        return $debug;
+    }
+    
+    // Validate SMTP settings
+    if (!$smtp_host) {
+        $debug[] = "❌ ERROR: SMTP Host not configured";
+        return $debug;
+    }
+    if (!$mail_from_address) {
+        $debug[] = "❌ ERROR: From email address not configured";
+        return $debug;
+    }
+    
+    try {
+        $debug[] = "✓ PHPMailer library found";
+        
+        require_once __DIR__ . '/phpmailer/PHPMailer.php';
+        require_once __DIR__ . '/phpmailer/SMTP.php';
+        require_once __DIR__ . '/phpmailer/Exception.php';
+        
+        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+        $debug[] = "✓ PHPMailer instantiated";
+        
+        // Enable debug output
+        $mail->SMTPDebug = \PHPMailer\PHPMailer\SMTP::DEBUG_SERVER;
+        $mail->Debugoutput = function($str, $level) use (&$debug) {
+            $debug[] = "🔍 SMTP Debug: $str";
+        };
+        
+        $debug[] = "Connecting to $smtp_host:$smtp_port (encryption: $smtp_encryption)...";
+        
+        $mail->isSMTP();
+        $mail->Host = $smtp_host;
+        $mail->Port = $smtp_port;
+        $mail->SMTPAuth = true;
+        $mail->Username = $smtp_username;
+        $mail->Password = $smtp_password;
+        $mail->SMTPSecure = $smtp_encryption === 'tls' ? \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS : \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
+        
+        $mail->setFrom($mail_from_address, $mail_from_name);
+        $mail->addAddress($to_email);
+        $mail->isHTML(true);
+        $mail->Subject = $subject;
+        $mail->Body = $body_html;
+        if ($body_plain) {
+            $mail->AltBody = $body_plain;
+        }
+        
+        $debug[] = "Sending email...";
+        if ($mail->send()) {
+            $debug[] = "✓ Email sent successfully";
+            return true;
+        } else {
+            $debug[] = "❌ ERROR: " . $mail->ErrorInfo;
+            return $debug;
+        }
+    } catch (\Exception $e) {
+        $debug[] = "❌ EXCEPTION: " . $e->getMessage();
+        return $debug;
+    }
+}
+
+

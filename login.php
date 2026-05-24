@@ -27,9 +27,64 @@ init_session();
       <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
 
       <button type="submit">Sign in</button>
+      <p style="text-align: center; margin-top: 12px;"><a href="#" onclick="openForgotPasswordModal(event)">Forgot password?</a></p>
     </form>
   </article>
 </main>
+
+<!-- Forgot Password Modal -->
+<dialog id="forgotPasswordModal">
+  <article>
+    <h2>Reset Password</h2>
+    <p>Enter your email address and we'll send you a link to reset your password.</p>
+    <form id="forgotPasswordForm" action="auth.php?action=forgot_password" method="post" data-api>
+      <label for="forgotEmail">Email</label>
+      <input type="email" id="forgotEmail" name="email" required>
+      
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      
+      <button type="submit">Send Reset Link</button>
+      <button type="button" onclick="closeForgotPasswordModal()">Cancel</button>
+      <div id="forgotPasswordMsg"></div>
+    </form>
+  </article>
+</dialog>
+
 <script src="assets/js/global.js"></script>
+<script>
+function openForgotPasswordModal(e) {
+  e.preventDefault();
+  document.getElementById('forgotPasswordModal').showModal();
+}
+
+function closeForgotPasswordModal() {
+  document.getElementById('forgotPasswordModal').close();
+}
+
+// Handle forgot password form submission
+const forgotForm = document.getElementById('forgotPasswordForm');
+if (forgotForm) {
+  forgotForm.addEventListener('submit', function(e) {
+    const msgDiv = document.getElementById('forgotPasswordMsg');
+    
+    window.addEventListener('api:success', (evt) => {
+      if (evt.detail.form === forgotForm) {
+        msgDiv.innerHTML = '<p style="color: green; margin-top: 8px;">✓ Check your email for the reset link</p>';
+        setTimeout(() => {
+          closeForgotPasswordModal();
+          document.getElementById('forgotEmail').value = '';
+          msgDiv.innerHTML = '';
+        }, 3000);
+      }
+    });
+
+    window.addEventListener('api:error', (evt) => {
+      if (evt.detail.form === forgotForm) {
+        msgDiv.innerHTML = '<p style="color: red; margin-top: 8px;">✗ ' + (evt.detail.json.error || 'Error sending reset link') + '</p>';
+      }
+    });
+  });
+}
+</script>
 </body>
 </html>

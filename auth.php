@@ -182,6 +182,98 @@ try {
         exit;
     }
 
+    if ($action === 'forgot_password') {
+        $data = input_data();
+        $email = trim((string)($data['email'] ?? ''));
+        $token = $data['csrf_token'] ?? null;
+
+        if (!verify_csrf_token($token)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'csrf']);
+            exit;
+        }
+
+        $emailValidation = validate_email($email);
+        if ($emailValidation !== true) {
+            http_response_code(422);
+            echo json_encode(['error' => $emailValidation]);
+            exit;
+        }
+
+        // Check if user exists
+        $user = get_user_by_email($email);
+        if (!$user) {
+            // Don't reveal if email exists (security best practice)
+            echo json_encode(['ok' => true, 'message' => 'If an account exists with this email, a password reset link will be sent']);
+            exit;
+        }
+
+        // Create verification token and send email
+        $code = create_verification_token((int)$user['id'], 'password_reset');
+        $email_sent = send_password_reset_email($email, $code);
+
+        if ($email_sent) {
+            echo json_encode(['ok' => true, 'message' => 'Password reset link sent to your email']);
+        } else {
+            http_response_code(500);
+            echo json_encode(['error' => 'Failed to send reset email']);
+        }
+        exit;
+    }
+
+    if ($action === 'reset_password') {
+        $data = input_data();
+        $code = trim((string)($data['code'] ?? ''));
+        $password = (string)($data['password'] ?? '');
+        $password_confirm = (string)($data['password_confirm'] ?? '');
+        $token = $data['csrf_token'] ?? null;
+
+        if (!verify_csrf_token($token)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'csrf']);
+            exit;
+        }
+
+        // Validate code
+        $user_id = validate_verification_token($code, 'password_reset');
+        if (!$user_id) {
+            http_response_code(422);
+            echo json_encode(['error' => 'Invalid or expired reset link']);
+            exit;
+        }
+
+        // Verify passwords match
+        if ($password !== $password_confirm) {
+            http_response_code(422);
+            echo json_encode(['error' => 'Passwords do not match']);
+            exit;
+        }
+
+        // Validate password
+        $pass_err = validate_password($password);
+        if ($pass_err !== true) {
+            http_response_code(422);
+            echo json_encode(['error' => $pass_err]);
+            exit;
+        }
+
+        // Update password
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        $db = get_db();
+        $stmt = $db->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+        if (!$stmt->execute([$hash, $user_id])) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Failed to update password']);
+            exit;
+        }
+
+        // Delete verification token
+        delete_verification_token($code);
+
+        echo json_encode(['ok' => true, 'message' => 'Password updated successfully', 'redirect' => 'login.php']);
+        exit;
+    }
+
     http_response_code(400);
     echo json_encode(['error' => 'unknown action']);
 } catch (Throwable $e) {

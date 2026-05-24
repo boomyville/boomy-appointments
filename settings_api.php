@@ -20,7 +20,7 @@ try {
             'booking_firstname_display', 'booking_firstname_required', 'booking_firstname_letters_only', 'booking_firstname_min', 'booking_firstname_max',
             'booking_lastname_display', 'booking_lastname_required', 'booking_lastname_letters_only', 'booking_lastname_min', 'booking_lastname_max',
             'booking_middlename_display', 'booking_middlename_required', 'booking_middlename_letters_only', 'booking_middlename_min', 'booking_middlename_max',
-            'booking_email_display', 'booking_email_required', 'booking_email_allowed_domains',
+            'booking_email_display', 'booking_email_required',
             'booking_phone_display', 'booking_phone_required', 'booking_phone_numbers_only', 'booking_phone_min', 'booking_phone_max',
             'password_min_length', 'password_max_length', 'password_require_lowercase', 'password_require_uppercase', 'password_require_number', 'password_require_symbol',
             'email_whitelist_enabled', 'email_domain_whitelist', 'email_domain_blacklist',
@@ -56,7 +56,7 @@ try {
                 'booking_firstname_display', 'booking_firstname_required', 'booking_firstname_letters_only', 'booking_firstname_min', 'booking_firstname_max',
                 'booking_lastname_display', 'booking_lastname_required', 'booking_lastname_letters_only', 'booking_lastname_min', 'booking_lastname_max',
                 'booking_middlename_display', 'booking_middlename_required', 'booking_middlename_letters_only', 'booking_middlename_min', 'booking_middlename_max',
-                'booking_email_display', 'booking_email_required', 'booking_email_allowed_domains',
+                'booking_email_display', 'booking_email_required',
                 'booking_phone_display', 'booking_phone_required', 'booking_phone_numbers_only', 'booking_phone_min', 'booking_phone_max'
             ],
             'authentication' => [
@@ -119,6 +119,54 @@ try {
         }
 
         echo json_encode(['ok' => true]);
+        exit;
+    }
+
+    if ($action === 'test_email') {
+        // Verify admin
+        if (empty($_SESSION['user']['role']) || $_SESSION['user']['role'] !== 'admin') {
+            http_response_code(403);
+            echo json_encode(['error' => 'forbidden']);
+            exit;
+        }
+
+        $raw = file_get_contents('php://input');
+        $data = $raw ? json_decode($raw, true) : $_POST;
+        $token = $data['csrf_token'] ?? null;
+        if (!verify_csrf_token($token)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'csrf']);
+            exit;
+        }
+
+        $to_email = $_SESSION['user']['email'];
+        $subject = 'Test Email from ' . (get_setting('site_name') ?? 'Boomy Appointments');
+        $body_html = '
+            <h2>Test Email</h2>
+            <p>This is a test email to verify your SMTP configuration is working correctly.</p>
+            <p>If you received this, your email settings are properly configured!</p>
+        ';
+        $body_plain = "Test Email\n\nThis is a test email to verify your SMTP configuration is working correctly.\n\nIf you received this, your email settings are properly configured!";
+
+        // Send email and get debug info
+        $result = send_email($to_email, $subject, $body_html, $body_plain);
+
+        if ($result === true) {
+            // gather diagnostics even on success for visibility
+            $diag = email_diagnostics($to_email, $subject);
+            echo json_encode(['ok' => true, 'sent_to' => $to_email, 'message' => 'Test email sent successfully', 'debug' => $diag]);
+        } else if (is_array($result)) {
+            // Return debug messages collected during send
+            http_response_code(422);
+            echo json_encode([
+                'error' => 'Failed to send email',
+                'debug' => $result
+            ]);
+        } else {
+            http_response_code(500);
+            $diag = email_diagnostics($to_email, $subject);
+            echo json_encode(['error' => 'Unknown error sending email', 'debug' => $diag]);
+        }
         exit;
     }
 

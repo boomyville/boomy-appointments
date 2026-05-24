@@ -40,6 +40,20 @@ CREATE TABLE `users` (
   UNIQUE KEY `idx_user_email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 2B. VERIFICATION TOKENS
+CREATE TABLE `verification` (
+  `id` INT UNSIGNED AUTO_INCREMENT,
+  `user_id` INT UNSIGNED NOT NULL,
+  `code` VARCHAR(64) NOT NULL,
+  `task` VARCHAR(32) NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `expires_at` TIMESTAMP NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_verification_code` (`code`),
+  KEY `idx_verification_user_task` (`user_id`, `task`),
+  CONSTRAINT `fk_verification_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 3. APPOINTMENT TYPES
 CREATE TABLE `appointment_types` (
   `id` INT UNSIGNED AUTO_INCREMENT,

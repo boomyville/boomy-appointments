@@ -31,7 +31,6 @@ $middlename_max = (int) get_setting('booking_middlename_max', '50');
 
 $email_display = (int) get_setting('booking_email_display', '1');
 $email_required = (int) get_setting('booking_email_required', '1');
-$email_allowed_domains = get_setting('booking_email_allowed_domains', '');
 
 $phone_display = (int) get_setting('booking_phone_display', '1');
 $phone_required = (int) get_setting('booking_phone_required', '0');
@@ -109,7 +108,7 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
         <option value="m/d/Y H:i" <?php echo $date_format === 'm/d/Y H:i' ? 'selected' : ''; ?>>MM/DD/YYYY HH:MM</option>
       </select>
 
-      <p><strong>Current date and time:</strong> <span data-server-time-format="<?php echo htmlspecialchars($date_format); ?>"></span></p>
+      <p><strong>Current date and time:</strong> <span data-server-time-format="<?php echo htmlspecialchars($date_format); ?>"><?php echo date($date_format); ?></span></p>
 
       <input type="hidden" name="tab" value="general">
       <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
@@ -163,8 +162,7 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
           <label><input type="checkbox" name="booking_email_display" value="1" <?php echo $email_display ? 'checked' : ''; ?>> Display</label>
           <label><input type="checkbox" name="booking_email_required" value="1" <?php echo $email_required ? 'checked' : ''; ?> id="email_required"> Required</label>
         </div>
-        <label for="booking_email_allowed_domains">Allowed domains (one per line, leave empty for all)</label>
-        <textarea id="booking_email_allowed_domains" name="booking_email_allowed_domains" rows="4"><?php echo htmlspecialchars($email_allowed_domains); ?></textarea>
+        <p style="font-size: 0.9em; color: #666;"><em>Email domain validation (whitelist/blacklist) is configured in the <strong>Authentication</strong> tab.</em></p>
       </fieldset>
 
       <fieldset class="field-group">
@@ -253,6 +251,12 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
       <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <button type="submit">Save PHPMailer</button>
       <div id="phpmailerMsg"></div>
+
+      <hr>
+      <h3>Test Email Configuration</h3>
+      <p>Send a test email to verify your SMTP settings are correct.</p>
+      <button type="button" id="testEmailBtn" onclick="testEmailConfiguration(event)">Send Test Email</button>
+      <div id="testEmailMsg"></div>
     </form>
   </section>
 
@@ -328,6 +332,70 @@ setupFieldDependencies('booking_phone');
     });
   }
 });
+
+// Test email configuration
+async function testEmailConfiguration(e) {
+  e.preventDefault();
+  const btn = document.getElementById('testEmailBtn');
+  const msgDiv = document.getElementById('testEmailMsg');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  msgDiv.innerHTML = '';
+  
+  try {
+    const response = await fetch('settings_api.php?action=test_email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ csrf_token: document.querySelector('input[name="csrf_token"]').value })
+    });
+    const data = await response.json();
+    
+    if (data.ok) {
+      msgDiv.innerHTML = '<p class="success-msg">✓ Test email sent successfully to ' + (data.sent_to || 'admin') + '</p>';
+      // If diagnostics were returned, show them under the success message
+      if (data.debug && Array.isArray(data.debug)) {
+        let debugHtml = '<div style="background: #f0fff4; border-left: 4px solid #28a745; padding: 12px; margin-top: 12px; border-radius: 4px;">';
+        debugHtml += '<p style="color: #155724; margin: 0 0 8px 0; font-weight: bold;">Diagnostics:</p>';
+        debugHtml += '<pre style="margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 0.9em; color: #0b3a23;">';
+        data.debug.forEach(line => {
+          debugHtml += htmlspecialchars(line) + '\n';
+        });
+        debugHtml += '</pre></div>';
+        msgDiv.innerHTML += debugHtml;
+      }
+      setTimeout(() => msgDiv.innerHTML = '', 10000);
+    } else if (data.debug && Array.isArray(data.debug)) {
+      // Show debug messages
+      let debugHtml = '<div style="background: #f5f5f5; border-left: 4px solid #dc3545; padding: 12px; margin-top: 12px; border-radius: 4px;">';
+      debugHtml += '<p style="color: #dc3545; margin: 0 0 8px 0; font-weight: bold;">Debug Information:</p>';
+      debugHtml += '<pre style="margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 0.9em; color: #333;">';
+      data.debug.forEach(line => {
+        debugHtml += htmlspecialchars(line) + '\n';
+      });
+      debugHtml += '</pre></div>';
+      msgDiv.innerHTML = debugHtml;
+    } else {
+      msgDiv.innerHTML = '<p class="error-msg">✗ ' + (data.error || 'Failed to send test email') + '</p>';
+    }
+  } catch (err) {
+    msgDiv.innerHTML = '<p class="error-msg">✗ Error: ' + err.message + '</p>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send Test Email';
+  }
+}
+
+function htmlspecialchars(str) {
+  const map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return str.replace(/[&<>"']/g, m => map[m]);
+}
 
 </script>
 </body>
