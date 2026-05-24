@@ -1,0 +1,157 @@
+-- Install SQL for Boomy Appointments
+-- Creates database schema and seed data
+
+CREATE DATABASE IF NOT EXISTS boomy_appointments CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE boomy_appointments;
+
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS `settings`;
+DROP TABLE IF EXISTS `unavailabilities`;
+DROP TABLE IF EXISTS `appointments`;
+DROP TABLE IF EXISTS `provider_appointment_types`;
+DROP TABLE IF EXISTS `appointment_types`;
+DROP TABLE IF EXISTS `customers`;
+DROP TABLE IF EXISTS `users`;
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- 1. SETTINGS
+CREATE TABLE `settings` (
+  `setting_key` VARCHAR(64) NOT NULL,
+  `setting_value` TEXT NULL,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`setting_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2. USERS
+CREATE TABLE `users` (
+  `id` INT UNSIGNED AUTO_INCREMENT,
+  `email` VARCHAR(191) NOT NULL,
+  `password_hash` VARCHAR(255) NOT NULL,
+  `full_name` VARCHAR(128) NOT NULL,
+  `first_name` VARCHAR(64) NULL,
+  `last_name` VARCHAR(64) NULL,
+  `phone` VARCHAR(32) NULL,
+  `role` ENUM('admin','provider') NOT NULL DEFAULT 'provider',
+  `working_plan` JSON NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_user_email` (`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 3. APPOINTMENT TYPES
+CREATE TABLE `appointment_types` (
+  `id` INT UNSIGNED AUTO_INCREMENT,
+  `name` VARCHAR(128) NOT NULL,
+  `duration_minutes` INT UNSIGNED NOT NULL,
+  `color_hex` CHAR(7) NOT NULL DEFAULT '#3b4351',
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 4. PROVIDER <-> APPT TYPES
+CREATE TABLE `provider_appointment_types` (
+  `provider_id` INT UNSIGNED NOT NULL,
+  `appointment_type_id` INT UNSIGNED NOT NULL,
+  PRIMARY KEY (`provider_id`,`appointment_type_id`),
+  CONSTRAINT `fk_pivot_provider` FOREIGN KEY (`provider_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_pivot_type` FOREIGN KEY (`appointment_type_id`) REFERENCES `appointment_types` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 5. CUSTOMERS
+CREATE TABLE `customers` (
+  `id` INT UNSIGNED AUTO_INCREMENT,
+  `email` VARCHAR(191) NOT NULL,
+  `mobile` VARCHAR(32) NOT NULL,
+  `full_name` VARCHAR(128) NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_customer_lookup` (`email`,`mobile`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 6. APPOINTMENTS
+CREATE TABLE `appointments` (
+  `id` INT UNSIGNED AUTO_INCREMENT,
+  `customer_id` INT UNSIGNED NOT NULL,
+  `provider_id` INT UNSIGNED NOT NULL,
+  `appointment_type_id` INT UNSIGNED NOT NULL,
+  `start_time` DATETIME NOT NULL,
+  `end_time` DATETIME NOT NULL,
+  `status` ENUM('booked','unconfirmed','confirmed','present','completed','no_show') NOT NULL DEFAULT 'booked',
+  `hash_key` CHAR(64) NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_appointment_hash` (`hash_key`),
+  KEY `idx_appt_chronology` (`provider_id`,`start_time`,`end_time`),
+  CONSTRAINT `fk_appt_customer` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `fk_appt_provider` FOREIGN KEY (`provider_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT `fk_appt_type` FOREIGN KEY (`appointment_type_id`) REFERENCES `appointment_types` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 7. UNAVAILABILITIES
+CREATE TABLE `unavailabilities` (
+  `id` INT UNSIGNED AUTO_INCREMENT,
+  `provider_id` INT UNSIGNED NULL,
+  `start_time` DATETIME NOT NULL,
+  `end_time` DATETIME NOT NULL,
+  `reason` VARCHAR(255) NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_unavail_chronology` (`provider_id`,`start_time`,`end_time`),
+  CONSTRAINT `fk_unavail_provider` FOREIGN KEY (`provider_id`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Seed settings
+INSERT INTO `settings` (`setting_key`,`setting_value`) VALUES
+('site_name','Boomy Appointments'),
+('organization_email','appointments@example.com'),
+('date_format','d/m/Y H:i'),
+('booking_deadline_hours','24'),
+('email_whitelist_enabled','0'),
+('email_domain_whitelist',''),
+('email_domain_blacklist',''),
+('password_min_length','8'),
+('password_max_length','128'),
+('password_require_lowercase','1'),
+('password_require_uppercase','1'),
+('password_require_number','1'),
+('password_require_symbol','1'),
+('booking_firstname_display','1'),
+('booking_firstname_required','1'),
+('booking_firstname_letters_only','0'),
+('booking_firstname_min','2'),
+('booking_firstname_max','50'),
+('booking_lastname_display','1'),
+('booking_lastname_required','1'),
+('booking_lastname_letters_only','0'),
+('booking_lastname_min','2'),
+('booking_lastname_max','50'),
+('booking_middlename_display','0'),
+('booking_middlename_required','0'),
+('booking_middlename_letters_only','0'),
+('booking_middlename_min','2'),
+('booking_middlename_max','50'),
+('booking_email_display','1'),
+('booking_email_required','1'),
+('booking_email_allowed_domains',''),
+('booking_phone_display','1'),
+('booking_phone_required','0'),
+('booking_phone_numbers_only','1'),
+('booking_phone_min','10'),
+('booking_phone_max','20'),
+('smtp_host','smtp.gmail.com'),
+('smtp_port','587'),
+('smtp_encryption','tls'),
+('smtp_username',''),
+('smtp_password',''),
+('mail_from_address',''),
+('mail_from_name','Boomy Appointments');
+
+-- Seed appointment types
+INSERT INTO `appointment_types` (`name`,`duration_minutes`,`color_hex`) VALUES
+('Comprehensive Eye Examination',30,'#1a5fb4'),
+('Contact Lens Fitting & Review',30,'#e66100'),
+('Emergency Red Eye Evaluation',15,'#c01c28');
+
+-- Done

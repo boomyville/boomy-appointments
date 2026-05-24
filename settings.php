@@ -1,424 +1,334 @@
 <?php
-
-declare(strict_types=1);
-
 require_once __DIR__ . '/functions.php';
-
+init_session();
 require_login();
-$pdo = get_pdo();
+$user = $_SESSION['user'];
 
-// helper
-function json_response(array $payload): void
-{
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode($payload);
-    exit;
-}
+// Load existing settings
+$site_name = get_setting('site_name', APP_NAME ?? 'Boomy Appointments');
+$org_email = get_setting('organization_email', '');
+$date_format = get_setting('date_format', 'd/m/Y H:i');
+$booking_deadline = get_setting('booking_deadline_hours', '24');
 
-$allowedDateFormats = [
-    'Y/m/d H:i' => 'YYYY/MM/DD HH:MM',
-    'm/d/Y H:i' => 'MM/DD/YYYY HH:MM',
-    'd/m/Y H:i' => 'DD/MM/YYYY HH:MM',
-];
+// Booking fields
+$firstname_display = (int) get_setting('booking_firstname_display', '1');
+$firstname_required = (int) get_setting('booking_firstname_required', '1');
+$firstname_letters_only = (int) get_setting('booking_firstname_letters_only', '0');
+$firstname_min = (int) get_setting('booking_firstname_min', '2');
+$firstname_max = (int) get_setting('booking_firstname_max', '50');
 
-$isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+$lastname_display = (int) get_setting('booking_lastname_display', '1');
+$lastname_required = (int) get_setting('booking_lastname_required', '1');
+$lastname_letters_only = (int) get_setting('booking_lastname_letters_only', '0');
+$lastname_min = (int) get_setting('booking_lastname_min', '2');
+$lastname_max = (int) get_setting('booking_lastname_max', '50');
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $tab = $_POST['tab'] ?? 'general';
-    $errors = [];
+$middlename_display = (int) get_setting('booking_middlename_display', '0');
+$middlename_required = (int) get_setting('booking_middlename_required', '0');
+$middlename_letters_only = (int) get_setting('booking_middlename_letters_only', '0');
+$middlename_min = (int) get_setting('booking_middlename_min', '2');
+$middlename_max = (int) get_setting('booking_middlename_max', '50');
 
-    if ($tab === 'general') {
-        $siteName = trim((string) ($_POST['site_name'] ?? ''));
-        $orgEmail = trim((string) ($_POST['org_email'] ?? ''));
-        $dateFormat = (string) ($_POST['date_format'] ?? 'd/m/Y H:i');
+$email_display = (int) get_setting('booking_email_display', '1');
+$email_required = (int) get_setting('booking_email_required', '1');
+$email_allowed_domains = get_setting('booking_email_allowed_domains', '');
 
-        if ($siteName === '') {
-            $errors[] = 'Site name must not be empty.';
-        }
+$phone_display = (int) get_setting('booking_phone_display', '1');
+$phone_required = (int) get_setting('booking_phone_required', '0');
+$phone_numbers_only = (int) get_setting('booking_phone_numbers_only', '1');
+$phone_min = (int) get_setting('booking_phone_min', '10');
+$phone_max = (int) get_setting('booking_phone_max', '20');
 
-        if (!filter_var($orgEmail, FILTER_VALIDATE_EMAIL)) {
-            $errors[] = 'Enter a valid organization email.';
-        }
+// PHPMailer/Gmail settings
+$smtp_host = get_setting('smtp_host', 'smtp.gmail.com');
+$smtp_port = (int) get_setting('smtp_port', '587');
+$smtp_encryption = get_setting('smtp_encryption', 'tls');
+$smtp_username = get_setting('smtp_username', '');
+$smtp_password = get_setting('smtp_password', '');
+$mail_from_address = get_setting('mail_from_address', '');
+$mail_from_name = get_setting('mail_from_name', APP_NAME ?? 'Boomy Appointments');
 
-        if (!array_key_exists($dateFormat, $allowedDateFormats)) {
-            $errors[] = 'Select a valid date format.';
-        }
-
-        if (empty($errors)) {
-            save_setting($pdo, 'site_name', $siteName);
-            save_setting($pdo, 'org_email', $orgEmail);
-            save_setting($pdo, 'date_format', $dateFormat);
-
-            if ($isAjax) {
-                json_response(['success' => true, 'message' => 'General settings saved.']);
-            }
-
-            flash('success', 'General settings saved.');
-            header('Location: settings.php');
-            exit;
-        }
-    }
-
-    if ($tab === 'booking') {
-        $prefixes = ['firstname', 'lastname', 'middlename'];
-
-        foreach ($prefixes as $p) {
-            $display = isset($_POST["{$p}_display"]) ? '1' : '0';
-            $required = isset($_POST["{$p}_required"]) ? '1' : '0';
-            $lettersOnly = isset($_POST["{$p}_letters_only"]) ? '1' : '0';
-            $min = (int) ($_POST["{$p}_min_length"] ?? 1);
-            $max = (int) ($_POST["{$p}_max_length"] ?? 100);
-
-            if ($display === '0') {
-                $required = '0';
-            }
-
-            if ($min < 1) {
-                $errors[] = ucfirst($p) . ': min length must be at least 1.';
-            }
-
-            if ($max < $min) {
-                $errors[] = ucfirst($p) . ": max length must be >= min length.";
-            }
-
-            // store as strings
-            if (empty($errors)) {
-                save_setting($pdo, "booking_{$p}_display", $display);
-                save_setting($pdo, "booking_{$p}_required", $required);
-                save_setting($pdo, "booking_{$p}_letters_only", $lettersOnly);
-                save_setting($pdo, "booking_{$p}_min_length", (string) $min);
-                save_setting($pdo, "booking_{$p}_max_length", (string) $max);
-            }
-        }
-
-        // email group
-        $emailDisplay = isset($_POST['email_display']) ? '1' : '0';
-        $emailRequired = isset($_POST['email_required']) ? '1' : '0';
-        if ($emailDisplay === '0') {
-            $emailRequired = '0';
-        }
-
-        $rawDomains = (string) ($_POST['email_allowed_domains'] ?? '');
-        $domains = array_filter(array_map('trim', preg_split('/\r?\n/', $rawDomains)), fn($d) => $d !== '');
-        $domainsValue = implode("\n", $domains);
-
-        if (empty($errors)) {
-            save_setting($pdo, 'booking_email_display', $emailDisplay);
-            save_setting($pdo, 'booking_email_required', $emailRequired);
-            save_setting($pdo, 'booking_email_allowed_domains', $domainsValue);
-        }
-
-        // phone group
-        $phoneDisplay = isset($_POST['phone_display']) ? '1' : '0';
-        $phoneRequired = isset($_POST['phone_required']) ? '1' : '0';
-        if ($phoneDisplay === '0') {
-            $phoneRequired = '0';
-        }
-
-        $phoneNumbersOnly = isset($_POST['phone_numbers_symbols_only']) ? '1' : '0';
-        $phoneMin = (int) ($_POST['phone_min_length'] ?? 1);
-        $phoneMax = (int) ($_POST['phone_max_length'] ?? 100);
-
-        if ($phoneMin < 1) {
-            $errors[] = 'Phone: min length must be at least 1.';
-        }
-
-        if ($phoneMax < $phoneMin) {
-            $errors[] = 'Phone: max length must be >= min length.';
-        }
-
-        if (empty($errors)) {
-            save_setting($pdo, 'booking_phone_display', $phoneDisplay);
-            save_setting($pdo, 'booking_phone_required', $phoneRequired);
-            save_setting($pdo, 'booking_phone_numbers_symbols_only', $phoneNumbersOnly);
-            save_setting($pdo, 'booking_phone_min_length', (string) $phoneMin);
-            save_setting($pdo, 'booking_phone_max_length', (string) $phoneMax);
-        }
-
-        if (empty($errors)) {
-            if ($isAjax) {
-                json_response(['success' => true, 'message' => 'Booking settings saved.']);
-            }
-
-            flash('success', 'Booking settings saved.');
-            header('Location: settings.php');
-            exit;
-        }
-    }
-
-    // If we reach here with errors and it's an AJAX call, return JSON
-    if ($isAjax) {
-        json_response(['success' => false, 'errors' => $errors]);
-    }
-
-    // Non-AJAX: render with errors below
-}
-
-// Load current values
-$siteName = get_setting($pdo, 'site_name', APP_NAME);
-$orgEmail = get_setting($pdo, 'org_email', 'hello@example.com');
-$currentDateFormat = get_setting($pdo, 'date_format', 'd/m/Y H:i');
-
-// Use server time as baseline for client-side preview (milliseconds)
-$serverTimestampMs = (int) (strtotime(get_time()) * 1000);
-// Server timezone for client-side preview (IANA name)
-$serverTimeZone = date_default_timezone_get();
-
-$booking = [];
-$keys = [
-    'booking_firstname_display','booking_firstname_required','booking_firstname_letters_only','booking_firstname_min_length','booking_firstname_max_length',
-    'booking_lastname_display','booking_lastname_required','booking_lastname_letters_only','booking_lastname_min_length','booking_lastname_max_length',
-    'booking_middlename_display','booking_middlename_required','booking_middlename_letters_only','booking_middlename_min_length','booking_middlename_max_length',
-    'booking_email_display','booking_email_required','booking_email_allowed_domains',
-    'booking_phone_display','booking_phone_required','booking_phone_numbers_symbols_only','booking_phone_min_length','booking_phone_max_length'
-];
-
-foreach ($keys as $k) {
-    $booking[$k] = get_setting($pdo, $k, '');
-}
-
-function e(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 'UTF-8'); }
-
+// Authentication settings
+$password_min_length = (int) get_setting('password_min_length', '8');
+$password_max_length = (int) get_setting('password_max_length', '128');
+$password_require_lowercase = (int) get_setting('password_require_lowercase', '1');
+$password_require_uppercase = (int) get_setting('password_require_uppercase', '1');
+$password_require_number = (int) get_setting('password_require_number', '1');
+$password_require_symbol = (int) get_setting('password_require_symbol', '1');
+$email_whitelist_enabled = (int) get_setting('email_whitelist_enabled', '0');
+$email_domain_whitelist = get_setting('email_domain_whitelist', '');
+$email_domain_blacklist = get_setting('email_domain_blacklist', '');
 ?>
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Settings · <?php echo e(APP_NAME); ?></title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
-    <link rel="stylesheet" href="assets/css/app.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Settings - <?php echo htmlspecialchars(APP_NAME); ?></title>
+  <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@1.*/css/pico.min.css">
+  <style>
+    .tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap: wrap; }
+    .tab { cursor:pointer; padding: 8px 12px; }
+    .tab.active { font-weight:700; text-decoration: underline; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .field-group { margin-bottom: 20px; border: 1px solid #ccc; padding: 12px; border-radius: 4px; }
+    .field-group legend { font-weight: bold; font-size: 1.1em; margin-bottom: 10px; }
+    .field-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .success-msg { color: green; margin-top: 8px; }
+    .error-msg { color: red; margin-top: 8px; }
+  </style>
 </head>
 <body>
-    <nav class="container auth-topbar">
-        <ul>
-            <li><strong><?php echo e(APP_NAME); ?></strong></li>
-        </ul>
-        <ul>
-            <li><span><?php echo e((string) ($_SESSION['user_email'] ?? '')); ?></span></li>
-            <li><a href="logout.php" role="button" class="secondary outline">Logout</a></li>
-        </ul>
-    </nav>
+<main class="container">
+  <header>
+    <h1>Settings</h1>
+    <p>Signed in as <?php echo htmlspecialchars($user['full_name'] ?? $user['email']); ?></p>
+  </header>
 
-    <main class="container settings-shell">
-        <article>
-            <header>
-                <p class="eyebrow">Admin dashboard</p>
-                <h1>Application settings</h1>
-                <p>Update the site name, booking fields and validation rules.</p>
-            </header>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="general" role="tab">General</button>
+    <button class="tab" data-tab="booking" role="tab">Booking</button>
+    <button class="tab" data-tab="authentication" role="tab">Authentication</button>
+    <button class="tab" data-tab="phpmailer" role="tab">PHPMailer</button>
+  </nav>
 
-            <nav role="tablist" aria-label="Settings tabs">
-                <button role="tab" aria-selected="true" data-tab-target="general">General</button>
-                <button role="tab" aria-selected="false" data-tab-target="booking">Booking</button>
-            </nav>
+  <!-- GENERAL TAB -->
+  <section id="tab-general" class="tab-panel active">
+    <form id="generalForm" data-api action="settings_api.php?action=save" method="post">
+      <label for="site_name">Website Name</label>
+      <input id="site_name" name="site_name" type="text" value="<?php echo htmlspecialchars($site_name); ?>" required>
 
-            <section id="general" role="tabpanel">
-                <form id="general-form">
-                    <input type="hidden" name="tab" value="general">
+      <label for="organization_email">Organisation Email</label>
+      <input id="organization_email" name="organization_email" type="email" value="<?php echo htmlspecialchars($org_email); ?>" required>
 
-                    <label>
-                        Website name
-                        <input type="text" name="site_name" required value="<?php echo e($siteName); ?>">
-                    </label>
+      <label for="date_format">Time Format</label>
+      <select id="date_format" name="date_format">
+        <option value="d/m/Y H:i" <?php echo $date_format === 'd/m/Y H:i' ? 'selected' : ''; ?>>DD/MM/YYYY HH:MM</option>
+        <option value="Y/m/d H:i" <?php echo $date_format === 'Y/m/d H:i' ? 'selected' : ''; ?>>YYYY/MM/DD HH:MM</option>
+        <option value="m/d/Y H:i" <?php echo $date_format === 'm/d/Y H:i' ? 'selected' : ''; ?>>MM/DD/YYYY HH:MM</option>
+      </select>
 
-                    <label>
-                        Organisation email
-                        <input type="email" name="org_email" required value="<?php echo e($orgEmail); ?>">
-                    </label>
+      <p><strong>Current date and time:</strong> <span data-server-time-format="<?php echo htmlspecialchars($date_format); ?>"></span></p>
 
-                    <label>
-                        Time format
-                        <select name="date_format" id="date_format_select">
-                            <?php foreach ($allowedDateFormats as $fmt => $label): ?>
-                                <option value="<?php echo e($fmt); ?>" <?php echo $currentDateFormat === $fmt ? 'selected' : ''; ?>><?php echo e($label); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </label>
+      <input type="hidden" name="tab" value="general">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <button type="submit">Save General</button>
+      <div id="generalMsg"></div>
+    </form>
+  </section>
 
-                    <p>Current date and time: <strong id="current-date-preview"></strong></p>
+  <!-- BOOKING TAB -->
+  <section id="tab-booking" class="tab-panel">
+    <form id="bookingForm" data-api action="settings_api.php?action=save" method="post">
+      <fieldset class="field-group">
+        <legend>First Name</legend>
+        <div class="field-controls">
+          <label><input type="checkbox" name="booking_firstname_display" value="1" <?php echo $firstname_display ? 'checked' : ''; ?>> Display</label>
+          <label><input type="checkbox" name="booking_firstname_required" value="1" <?php echo $firstname_required ? 'checked' : ''; ?> id="fname_required"> Required</label>
+          <label><input type="checkbox" name="booking_firstname_letters_only" value="1" <?php echo $firstname_letters_only ? 'checked' : ''; ?>> Letters only</label>
+          <div></div>
+          <label>Min length <input type="number" name="booking_firstname_min" min="1" value="<?php echo $firstname_min; ?>"></label>
+          <label>Max length <input type="number" name="booking_firstname_max" min="1" value="<?php echo $firstname_max; ?>"></label>
+        </div>
+      </fieldset>
 
-                    <footer>
-                        <button type="button" id="save-general">Save General</button>
-                        <span id="general-status" role="status"></span>
-                    </footer>
-                </form>
-            </section>
+      <fieldset class="field-group">
+        <legend>Last Name</legend>
+        <div class="field-controls">
+          <label><input type="checkbox" name="booking_lastname_display" value="1" <?php echo $lastname_display ? 'checked' : ''; ?>> Display</label>
+          <label><input type="checkbox" name="booking_lastname_required" value="1" <?php echo $lastname_required ? 'checked' : ''; ?> id="lname_required"> Required</label>
+          <label><input type="checkbox" name="booking_lastname_letters_only" value="1" <?php echo $lastname_letters_only ? 'checked' : ''; ?>> Letters only</label>
+          <div></div>
+          <label>Min length <input type="number" name="booking_lastname_min" min="1" value="<?php echo $lastname_min; ?>"></label>
+          <label>Max length <input type="number" name="booking_lastname_max" min="1" value="<?php echo $lastname_max; ?>"></label>
+        </div>
+      </fieldset>
 
-            <section id="booking" role="tabpanel" hidden>
-                <form id="booking-form">
-                    <input type="hidden" name="tab" value="booking">
+      <fieldset class="field-group">
+        <legend>Middle Name</legend>
+        <div class="field-controls">
+          <label><input type="checkbox" name="booking_middlename_display" value="1" <?php echo $middlename_display ? 'checked' : ''; ?>> Display</label>
+          <label><input type="checkbox" name="booking_middlename_required" value="1" <?php echo $middlename_required ? 'checked' : ''; ?> id="mname_required"> Required</label>
+          <label><input type="checkbox" name="booking_middlename_letters_only" value="1" <?php echo $middlename_letters_only ? 'checked' : ''; ?>> Letters only</label>
+          <div></div>
+          <label>Min length <input type="number" name="booking_middlename_min" min="1" value="<?php echo $middlename_min; ?>"></label>
+          <label>Max length <input type="number" name="booking_middlename_max" min="1" value="<?php echo $middlename_max; ?>"></label>
+        </div>
+      </fieldset>
 
-                    <fieldset>
-                        <legend>First Name</legend>
-                        <label><input type="checkbox" name="firstname_display" id="firstname_display" <?php echo $booking['booking_firstname_display'] === '1' ? 'checked' : ''; ?>> Display</label>
-                        <label><input type="checkbox" name="firstname_required" id="firstname_required" <?php echo $booking['booking_firstname_required'] === '1' ? 'checked' : ''; ?>> Required</label>
-                        <label><input type="checkbox" name="firstname_letters_only" <?php echo $booking['booking_firstname_letters_only'] === '1' ? 'checked' : ''; ?>> Letters only</label>
-                        <label>Min length <input type="number" name="firstname_min_length" min="1" value="<?php echo e((string) $booking['booking_firstname_min_length'] ?: '1'); ?>"></label>
-                        <label>Max length <input type="number" name="firstname_max_length" min="1" value="<?php echo e((string) $booking['booking_firstname_max_length'] ?: '100'); ?>"></label>
-                    </fieldset>
+      <fieldset class="field-group">
+        <legend>Email</legend>
+        <div class="field-controls">
+          <label><input type="checkbox" name="booking_email_display" value="1" <?php echo $email_display ? 'checked' : ''; ?>> Display</label>
+          <label><input type="checkbox" name="booking_email_required" value="1" <?php echo $email_required ? 'checked' : ''; ?> id="email_required"> Required</label>
+        </div>
+        <label for="booking_email_allowed_domains">Allowed domains (one per line, leave empty for all)</label>
+        <textarea id="booking_email_allowed_domains" name="booking_email_allowed_domains" rows="4"><?php echo htmlspecialchars($email_allowed_domains); ?></textarea>
+      </fieldset>
 
-                    <fieldset>
-                        <legend>Last Name</legend>
-                        <label><input type="checkbox" name="lastname_display" id="lastname_display" <?php echo $booking['booking_lastname_display'] === '1' ? 'checked' : ''; ?>> Display</label>
-                        <label><input type="checkbox" name="lastname_required" id="lastname_required" <?php echo $booking['booking_lastname_required'] === '1' ? 'checked' : ''; ?>> Required</label>
-                        <label><input type="checkbox" name="lastname_letters_only" <?php echo $booking['booking_lastname_letters_only'] === '1' ? 'checked' : ''; ?>> Letters only</label>
-                        <label>Min length <input type="number" name="lastname_min_length" min="1" value="<?php echo e((string) $booking['booking_lastname_min_length'] ?: '1'); ?>"></label>
-                        <label>Max length <input type="number" name="lastname_max_length" min="1" value="<?php echo e((string) $booking['booking_lastname_max_length'] ?: '100'); ?>"></label>
-                    </fieldset>
+      <fieldset class="field-group">
+        <legend>Phone Number</legend>
+        <div class="field-controls">
+          <label><input type="checkbox" name="booking_phone_display" value="1" <?php echo $phone_display ? 'checked' : ''; ?>> Display</label>
+          <label><input type="checkbox" name="booking_phone_required" value="1" <?php echo $phone_required ? 'checked' : ''; ?> id="phone_required"> Required</label>
+          <label><input type="checkbox" name="booking_phone_numbers_only" value="1" <?php echo $phone_numbers_only ? 'checked' : ''; ?>> Numbers and symbols only</label>
+          <div></div>
+          <label>Min length <input type="number" name="booking_phone_min" min="1" value="<?php echo $phone_min; ?>"></label>
+          <label>Max length <input type="number" name="booking_phone_max" min="1" value="<?php echo $phone_max; ?>"></label>
+        </div>
+      </fieldset>
 
-                    <fieldset>
-                        <legend>Middle Name</legend>
-                        <label><input type="checkbox" name="middlename_display" id="middlename_display" <?php echo $booking['booking_middlename_display'] === '1' ? 'checked' : ''; ?>> Display</label>
-                        <label><input type="checkbox" name="middlename_required" id="middlename_required" <?php echo $booking['booking_middlename_required'] === '1' ? 'checked' : ''; ?>> Required</label>
-                        <label><input type="checkbox" name="middlename_letters_only" <?php echo $booking['booking_middlename_letters_only'] === '1' ? 'checked' : ''; ?>> Letters only</label>
-                        <label>Min length <input type="number" name="middlename_min_length" min="1" value="<?php echo e((string) $booking['booking_middlename_min_length'] ?: '1'); ?>"></label>
-                        <label>Max length <input type="number" name="middlename_max_length" min="1" value="<?php echo e((string) $booking['booking_middlename_max_length'] ?: '100'); ?>"></label>
-                    </fieldset>
+      <input type="hidden" name="tab" value="booking">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <button type="submit">Save Booking</button>
+      <div id="bookingMsg"></div>
+    </form>
+  </section>
 
-                    <fieldset>
-                        <legend>Email</legend>
-                        <label><input type="checkbox" name="email_display" id="email_display" <?php echo $booking['booking_email_display'] === '1' ? 'checked' : ''; ?>> Display</label>
-                        <label><input type="checkbox" name="email_required" id="email_required" <?php echo $booking['booking_email_required'] === '1' ? 'checked' : ''; ?>> Required</label>
-                        <label>Allowed domains (one per line)
-                            <textarea name="email_allowed_domains" rows="4"><?php echo e((string) $booking['booking_email_allowed_domains']); ?></textarea>
-                        </label>
-                    </fieldset>
+  <!-- AUTHENTICATION TAB -->
+  <section id="tab-authentication" class="tab-panel">
+    <form id="authenticationForm" data-api action="settings_api.php?action=save" method="post">
+      <fieldset class="field-group">
+        <legend>Email Validation</legend>
+        <label><input type="checkbox" name="email_whitelist_enabled" value="1" <?php echo $email_whitelist_enabled ? 'checked' : ''; ?>> Enable email domain whitelist</label>
+        
+        <label for="email_domain_whitelist">Allowed domains (one per line)</label>
+        <textarea id="email_domain_whitelist" name="email_domain_whitelist" rows="4" placeholder="gmail.com&#10;outlook.com&#10;example.com"><?php echo htmlspecialchars($email_domain_whitelist); ?></textarea>
+        
+        <label for="email_domain_blacklist">Blocked domains (one per line)</label>
+        <textarea id="email_domain_blacklist" name="email_domain_blacklist" rows="4" placeholder="tempmail.com&#10;throwaway.com"><?php echo htmlspecialchars($email_domain_blacklist); ?></textarea>
+      </fieldset>
 
-                    <fieldset>
-                        <legend>Phone Number</legend>
-                        <label><input type="checkbox" name="phone_display" id="phone_display" <?php echo $booking['booking_phone_display'] === '1' ? 'checked' : ''; ?>> Display</label>
-                        <label><input type="checkbox" name="phone_required" id="phone_required" <?php echo $booking['booking_phone_required'] === '1' ? 'checked' : ''; ?>> Required</label>
-                        <label><input type="checkbox" name="phone_numbers_symbols_only" <?php echo $booking['booking_phone_numbers_symbols_only'] === '1' ? 'checked' : ''; ?>> Numbers and symbols only</label>
-                        <label>Min length <input type="number" name="phone_min_length" min="1" value="<?php echo e((string) $booking['booking_phone_min_length'] ?: '1'); ?>"></label>
-                        <label>Max length <input type="number" name="phone_max_length" min="1" value="<?php echo e((string) $booking['booking_phone_max_length'] ?: '100'); ?>"></label>
-                    </fieldset>
+      <fieldset class="field-group">
+        <legend>Password Requirements</legend>
+        <div class="field-controls">
+          <label>Min length <input type="number" name="password_min_length" min="1" max="128" value="<?php echo $password_min_length; ?>"></label>
+          <label>Max length <input type="number" name="password_max_length" min="1" max="128" value="<?php echo $password_max_length; ?>"></label>
+        </div>
+        <div style="margin-top: 12px;">
+          <label><input type="checkbox" name="password_require_lowercase" value="1" <?php echo $password_require_lowercase ? 'checked' : ''; ?>> Require lowercase letter (a-z)</label>
+          <label><input type="checkbox" name="password_require_uppercase" value="1" <?php echo $password_require_uppercase ? 'checked' : ''; ?>> Require uppercase letter (A-Z)</label>
+          <label><input type="checkbox" name="password_require_number" value="1" <?php echo $password_require_number ? 'checked' : ''; ?>> Require number (0-9)</label>
+          <label><input type="checkbox" name="password_require_symbol" value="1" <?php echo $password_require_symbol ? 'checked' : ''; ?>> Require symbol (!@#$%...)</label>
+        </div>
+      </fieldset>
 
-                    <footer>
-                        <button type="button" id="save-booking">Save Booking</button>
-                        <span id="booking-status" role="status"></span>
-                    </footer>
-                </form>
-            </section>
-        </article>
-    </main>
+      <input type="hidden" name="tab" value="authentication">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <button type="submit">Save Authentication</button>
+      <div id="authenticationMsg"></div>
+    </form>
+  </section>
 
-    <script>
-    // Tab switching
-    document.querySelectorAll('[role="tab"]').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('[role="tab"]').forEach(b => b.setAttribute('aria-selected','false'));
-            btn.setAttribute('aria-selected','true');
+  <!-- PHPMAILER TAB -->
+  <section id="tab-phpmailer" class="tab-panel">
+    <form id="phpmailerForm" data-api action="settings_api.php?action=save" method="post">
+      <label for="smtp_host">SMTP Host</label>
+      <input id="smtp_host" name="smtp_host" type="text" value="<?php echo htmlspecialchars($smtp_host); ?>" placeholder="smtp.gmail.com" required>
 
-            document.querySelectorAll('[role="tabpanel"]').forEach(panel => panel.hidden = true);
-            const target = document.getElementById(btn.getAttribute('data-tab-target'));
-            if (target) target.hidden = false;
-        });
-    });
+      <label for="smtp_port">SMTP Port</label>
+      <input id="smtp_port" name="smtp_port" type="number" min="1" max="65535" value="<?php echo $smtp_port; ?>" required>
 
-    // Live date preview using server time baseline
-    const serverNowStart = <?php echo json_encode($serverTimestampMs); ?>; // milliseconds since epoch
-    let serverNow = serverNowStart;
-    const dateSelect = document.getElementById('date_format_select');
-    const preview = document.getElementById('current-date-preview');
+      <label for="smtp_encryption">Encryption</label>
+      <select id="smtp_encryption" name="smtp_encryption" required>
+        <option value="tls" <?php echo $smtp_encryption === 'tls' ? 'selected' : ''; ?>>TLS</option>
+        <option value="ssl" <?php echo $smtp_encryption === 'ssl' ? 'selected' : ''; ?>>SSL</option>
+        <option value="none" <?php echo $smtp_encryption === 'none' ? 'selected' : ''; ?>>None</option>
+      </select>
 
-    function formatPreview(fmt) {
-        const now = new Date(serverNow);
-        // Use Intl with server timezone to render server-local time
-        const serverTZ = <?php echo json_encode($serverTimeZone); ?>;
-        const opts = { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: serverTZ };
-        const dtf = new Intl.DateTimeFormat(undefined, opts);
-        const parts = dtf.formatToParts(now).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
-        const Y = parts.year || '';
-        const m = parts.month || '';
-        const d = parts.day || '';
-        const H = parts.hour || '';
-        const i = parts.minute || '';
+      <label for="smtp_username">Username (usually email)</label>
+      <input id="smtp_username" name="smtp_username" type="text" value="<?php echo htmlspecialchars($smtp_username); ?>" placeholder="your-email@gmail.com" required>
 
-        let out = '';
-        if (fmt === 'd/m/Y H:i') {
-            out = `${d}/${m}/${Y} ${H}:${i}`;
-        } else if (fmt === 'm/d/Y H:i') {
-            out = `${m}/${d}/${Y} ${H}:${i}`;
-        } else if (fmt === 'Y/m/d H:i') {
-            out = `${Y}/${m}/${d} ${H}:${i}`;
-        }
+      <label for="smtp_password">Password (use app password for Gmail)</label>
+      <input id="smtp_password" name="smtp_password" type="password" value="<?php echo htmlspecialchars($smtp_password); ?>" placeholder="••••••••">
 
-        preview.textContent = out;
+      <label for="mail_from_address">From Email Address</label>
+      <input id="mail_from_address" name="mail_from_address" type="email" value="<?php echo htmlspecialchars($mail_from_address); ?>" placeholder="noreply@example.com" required>
+
+      <label for="mail_from_name">From Name</label>
+      <input id="mail_from_name" name="mail_from_name" type="text" value="<?php echo htmlspecialchars($mail_from_name); ?>" placeholder="Boomy Appointments" required>
+
+      <input type="hidden" name="tab" value="phpmailer">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <button type="submit">Save PHPMailer</button>
+      <div id="phpmailerMsg"></div>
+    </form>
+  </section>
+
+</main>
+<script src="assets/js/global.js"></script>
+<script>
+// Tab switching
+document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  const t = btn.getAttribute('data-tab');
+  document.getElementById('tab-' + t).classList.add('active');
+}));
+
+// When date format changes, update server time display
+const dateFormatSelect = document.getElementById('date_format');
+if (dateFormatSelect) {
+  dateFormatSelect.addEventListener('change', (e) => {
+    const f = e.target.value;
+    const el = document.querySelector('[data-server-time-format]');
+    if (el) el.setAttribute('data-server-time-format', f);
+    if (window.App && window.App.attachServerTime) window.App.attachServerTime();
+  });
+}
+
+// Handle Display/Required checkbox dependencies
+function setupFieldDependencies(fieldPrefix) {
+  const displayCheckbox = document.querySelector(`input[name="${fieldPrefix}_display"]`);
+  const requiredCheckbox = document.querySelector(`input[name="${fieldPrefix}_required"]`);
+  if (!displayCheckbox || !requiredCheckbox) return;
+
+  const updateRequiredState = () => {
+    if (!displayCheckbox.checked) {
+      requiredCheckbox.checked = false;
+      requiredCheckbox.disabled = true;
+    } else {
+      requiredCheckbox.disabled = false;
     }
+  };
 
-    formatPreview(dateSelect.value);
-    setInterval(() => { serverNow += 1000; formatPreview(dateSelect.value); }, 1000);
-    dateSelect.addEventListener('change', () => formatPreview(dateSelect.value));
+  displayCheckbox.addEventListener('change', updateRequiredState);
+  updateRequiredState();
+}
 
-    // Booking form interactivity: disable required when display unchecked
-    function tieDisplayRequired(displayId, requiredId, minInputs=[]) {
-        const d = document.getElementById(displayId);
-        const r = document.getElementById(requiredId);
-        function update() {
-            if (!d.checked) {
-                r.checked = false;
-                r.disabled = true;
-                minInputs.forEach(i => i.disabled = true);
-            } else {
-                r.disabled = false;
-                minInputs.forEach(i => i.disabled = false);
-            }
+setupFieldDependencies('booking_firstname');
+setupFieldDependencies('booking_lastname');
+setupFieldDependencies('booking_middlename');
+setupFieldDependencies('booking_email');
+setupFieldDependencies('booking_phone');
+
+// Form submission handlers for inline messages
+['generalForm', 'bookingForm', 'authenticationForm', 'phpmailerForm'].forEach(formId => {
+  const form = document.getElementById(formId);
+  if (form) {
+    form.addEventListener('submit', function(e) {
+      const msgDiv = document.getElementById(formId.replace('Form', 'Msg'));
+      if (!msgDiv) return;
+
+      // Listen to API response
+      window.addEventListener('api:success', (evt) => {
+        if (evt.detail.form === form) {
+          msgDiv.innerHTML = '<p class="success-msg">✓ Saved successfully</p>';
+          setTimeout(() => msgDiv.innerHTML = '', 3000);
         }
-        d.addEventListener('change', update);
-        update();
-    }
+      });
 
-    tieDisplayRequired('firstname_display','firstname_required',[document.querySelector('input[name="firstname_min_length"]'), document.querySelector('input[name="firstname_max_length"]')]);
-    tieDisplayRequired('lastname_display','lastname_required',[document.querySelector('input[name="lastname_min_length"]'), document.querySelector('input[name="lastname_max_length"]')]);
-    tieDisplayRequired('middlename_display','middlename_required',[document.querySelector('input[name="middlename_min_length"]'), document.querySelector('input[name="middlename_max_length"]')]);
-    tieDisplayRequired('email_display','email_required',[]);
-    tieDisplayRequired('phone_display','phone_required',[document.querySelector('input[name="phone_min_length"]'), document.querySelector('input[name="phone_max_length"]')]);
-
-    // AJAX save handlers
-    async function submitForm(formElem, statusElem) {
-        const formData = new FormData(formElem);
-        statusElem.textContent = 'Saving...';
-        try {
-            const res = await fetch('settings.php', {method:'POST', headers: {'X-Requested-With':'XMLHttpRequest'}, body: formData});
-            const json = await res.json();
-            if (json.success) {
-                statusElem.textContent = json.message || 'Saved.';
-            } else {
-                statusElem.textContent = (json.errors || ['Error saving']).join('; ');
-            }
-        } catch (e) {
-            statusElem.textContent = 'Network error';
+      window.addEventListener('api:error', (evt) => {
+        if (evt.detail.form === form) {
+          msgDiv.innerHTML = '<p class="error-msg">✗ ' + (evt.detail.json.error || 'Error saving') + '</p>';
         }
-        setTimeout(() => statusElem.textContent = '', 4000);
-    }
-
-    document.getElementById('save-general').addEventListener('click', () => {
-        submitForm(document.getElementById('general-form'), document.getElementById('general-status'));
+      });
     });
+  }
+});
 
-    document.getElementById('save-booking').addEventListener('click', () => {
-        // client-side validation for min/max
-        const checks = [];
-        function checkPair(minSel, maxSel, label) {
-            const min = parseInt(document.querySelector(minSel).value || '0',10);
-            const max = parseInt(document.querySelector(maxSel).value || '0',10);
-            if (max < min) checks.push(label + ': max < min');
-        }
-
-        checkPair('input[name="firstname_min_length"]','input[name="firstname_max_length"]','First name');
-        checkPair('input[name="lastname_min_length"]','input[name="lastname_max_length"]','Last name');
-        checkPair('input[name="middlename_min_length"]','input[name="middlename_max_length"]','Middle name');
-        checkPair('input[name="phone_min_length"]','input[name="phone_max_length"]','Phone');
-
-        if (checks.length) {
-            document.getElementById('booking-status').textContent = checks.join('; ');
-            setTimeout(() => document.getElementById('booking-status').textContent = '', 4000);
-            return;
-        }
-
-        submitForm(document.getElementById('booking-form'), document.getElementById('booking-status'));
-    });
-    </script>
+</script>
 </body>
 </html>
