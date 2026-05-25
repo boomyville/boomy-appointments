@@ -66,6 +66,7 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Settings - <?php echo htmlspecialchars(APP_NAME); ?></title>
   <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@1.*/css/pico.min.css">
+  <link rel="stylesheet" href="assets/css/theme.css">
   <style>
     .tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap: wrap; }
     .tab { cursor:pointer; padding: 8px 12px; }
@@ -77,7 +78,89 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
     .field-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .success-msg { color: green; margin-top: 8px; }
     .error-msg { color: red; margin-top: 8px; }
+
+    .diagnostics-box {
+      margin-top: 12px;
+      border-left: 4px solid;
+      border-radius: 6px;
+      padding: 12px;
+      background: var(--card-background-color);
+      color: var(--color);
+    }
+
+    .diagnostics-box h4 {
+      margin: 0 0 8px;
+      font-size: 0.95rem;
+    }
+
+    .diagnostics-box pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.9em;
+      line-height: 1.4;
+      background: var(--code-background-color);
+      color: var(--code-color);
+      border-radius: 4px;
+      padding: 10px;
+    }
+
+    .diagnostics-box--success {
+      border-left-color: #2f9e44;
+    }
+
+    .diagnostics-box--error {
+      border-left-color: #d6336c;
+    }
   </style>
+  <script>
+    (function () {
+      const STORAGE_KEY = 'boomy_theme_mode';
+
+      function systemPrefersDark() {
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+
+      function getTheme() {
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if (saved === 'dark' || saved === 'light') {
+            return saved;
+          }
+        } catch (err) {
+          // ignore storage errors
+        }
+
+        return systemPrefersDark() ? 'dark' : 'light';
+      }
+
+      function applyTheme(mode) {
+        const theme = mode === 'dark' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.style.colorScheme = theme;
+        document.body.classList.toggle('theme-dark', theme === 'dark');
+
+        try {
+          localStorage.setItem(STORAGE_KEY, theme);
+        } catch (err) {
+          // ignore storage errors
+        }
+
+        const checkbox = document.getElementById('darkModeToggle');
+        if (checkbox) {
+          checkbox.checked = theme === 'dark';
+        }
+      }
+
+      window.toggleSettingsTheme = function (checked) {
+        applyTheme(checked ? 'dark' : 'light');
+      };
+
+      window.addEventListener('DOMContentLoaded', function () {
+        applyTheme(getTheme());
+      });
+    })();
+  </script>
 </head>
 <body>
 <main class="container">
@@ -104,7 +187,7 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
 
   <!-- GENERAL TAB -->
   <section id="tab-general" class="tab-panel active">
-    <form id="generalForm" data-api action="settings_api.php?action=save" method="post">
+    <form id="generalForm" data-api data-no-reload="true" action="settings_api.php?action=save" method="post">
       <label for="site_name">Website Name</label>
       <input id="site_name" name="site_name" type="text" value="<?php echo htmlspecialchars($site_name); ?>" required>
 
@@ -124,6 +207,12 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
 
       <p><strong>Current date and time:</strong> <span data-server-time-format="<?php echo htmlspecialchars($date_format); ?>"><?php echo date($date_format); ?></span></p>
 
+      <label for="darkModeToggle" style="display:flex; align-items:center; gap:10px; margin-top: 16px;">
+        <input id="darkModeToggle" type="checkbox" value="1" onchange="window.toggleSettingsTheme(this.checked)">
+        Enable dark mode
+      </label>
+      <small>Saved in this browser and applied immediately.</small>
+
       <input type="hidden" name="tab" value="general">
       <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <button type="submit">Save General</button>
@@ -133,7 +222,7 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
 
   <!-- BOOKING TAB -->
   <section id="tab-booking" class="tab-panel">
-    <form id="bookingForm" data-api action="settings_api.php?action=save" method="post">
+    <form id="bookingForm" data-api data-no-reload="true" action="settings_api.php?action=save" method="post">
       <fieldset class="field-group">
         <legend>First Name</legend>
         <div class="field-controls">
@@ -200,7 +289,7 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
 
   <!-- AUTHENTICATION TAB -->
   <section id="tab-authentication" class="tab-panel">
-    <form id="authenticationForm" data-api action="settings_api.php?action=save" method="post">
+    <form id="authenticationForm" data-api data-no-reload="true" action="settings_api.php?action=save" method="post">
       <fieldset class="field-group">
         <legend>Email Validation</legend>
         <label><input type="checkbox" name="email_whitelist_enabled" value="1" <?php echo $email_whitelist_enabled ? 'checked' : ''; ?>> Enable email domain whitelist</label>
@@ -235,7 +324,7 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
 
   <!-- PHPMAILER TAB -->
   <section id="tab-phpmailer" class="tab-panel">
-    <form id="phpmailerForm" data-api action="settings_api.php?action=save" method="post">
+    <form id="phpmailerForm" data-api data-no-reload="true" action="settings_api.php?action=save" method="post">
       <label for="smtp_host">SMTP Host</label>
       <input id="smtp_host" name="smtp_host" type="text" value="<?php echo htmlspecialchars($smtp_host); ?>" placeholder="smtp.gmail.com" required>
 
@@ -289,7 +378,7 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
   </section>
 
 </main>
-<script src="assets/js/global.js"></script>
+<script src="assets/js/global.js?v=20260526"></script>
 <script>
 // Tab switching
 document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => {
@@ -348,7 +437,10 @@ setupFieldDependencies('booking_phone');
       window.addEventListener('api:success', (evt) => {
         if (evt.detail.form === form) {
           msgDiv.innerHTML = '<p class="success-msg">✓ Saved successfully</p>';
-          setTimeout(() => msgDiv.innerHTML = '', 3000);
+          setTimeout(() => {
+            msgDiv.innerHTML = '';
+            window.location.reload();
+          }, 3000);
         }
       });
 
@@ -383,9 +475,9 @@ async function testEmailConfiguration(e) {
       msgDiv.innerHTML = '<p class="success-msg">✓ Test email sent successfully to ' + (data.sent_to || 'admin') + '</p>';
       // If diagnostics were returned, show them under the success message
       if (data.debug && Array.isArray(data.debug)) {
-        let debugHtml = '<div style="background: #f0fff4; border-left: 4px solid #28a745; padding: 12px; margin-top: 12px; border-radius: 4px;">';
-        debugHtml += '<p style="color: #155724; margin: 0 0 8px 0; font-weight: bold;">Diagnostics:</p>';
-        debugHtml += '<pre style="margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 0.9em; color: #0b3a23;">';
+        let debugHtml = '<div class="diagnostics-box diagnostics-box--success">';
+        debugHtml += '<h4>Diagnostics:</h4>';
+        debugHtml += '<pre>';
         data.debug.forEach(line => {
           debugHtml += htmlspecialchars(line) + '\n';
         });
@@ -395,9 +487,9 @@ async function testEmailConfiguration(e) {
       setTimeout(() => msgDiv.innerHTML = '', 10000);
     } else if (data.debug && Array.isArray(data.debug)) {
       // Show debug messages
-      let debugHtml = '<div style="background: #f5f5f5; border-left: 4px solid #dc3545; padding: 12px; margin-top: 12px; border-radius: 4px;">';
-      debugHtml += '<p style="color: #dc3545; margin: 0 0 8px 0; font-weight: bold;">Debug Information:</p>';
-      debugHtml += '<pre style="margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 0.9em; color: #333;">';
+      let debugHtml = '<div class="diagnostics-box diagnostics-box--error">';
+      debugHtml += '<h4>Debug Information:</h4>';
+      debugHtml += '<pre>';
       data.debug.forEach(line => {
         debugHtml += htmlspecialchars(line) + '\n';
       });

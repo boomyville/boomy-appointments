@@ -9,11 +9,18 @@ init_session();
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Login - <?php echo htmlspecialchars(APP_NAME); ?></title>
   <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@1.*/css/pico.min.css">
+  <link rel="stylesheet" href="assets/css/theme.css">
 </head>
 <body>
 <main class="container">
   <article>
-    <h1>Sign in</h1>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+      <h1 style="margin:0;">Sign in</h1>
+      <label for="darkModeToggle" style="display:flex; align-items:center; gap:8px; margin:0; white-space:nowrap; font-size:0.95rem;">
+        <input id="darkModeToggle" type="checkbox" aria-label="Toggle dark mode">
+        Dark mode
+      </label>
+    </div>
     <?php if (can_register_admin()): ?>
       <p><a href="register.php">Create an admin account</a></p>
     <?php endif; ?>
@@ -113,6 +120,35 @@ if (forgotForm) {
       }
     });
   });
+}
+
+const darkModeToggle = document.getElementById('darkModeToggle');
+if (darkModeToggle) {
+  function applyLoginTheme(mode) {
+    const theme = mode === 'dark' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+    document.documentElement.style.colorScheme = theme;
+    document.body.classList.toggle('theme-dark', theme === 'dark');
+
+    try {
+      localStorage.setItem('boomy_theme_mode', theme);
+    } catch (err) {
+      // ignore storage failures
+    }
+  }
+
+  const syncDarkMode = () => {
+    if (window.App && window.App.applyTheme) {
+      window.App.applyTheme(darkModeToggle.checked ? 'dark' : 'light');
+      return;
+    }
+
+    applyLoginTheme(darkModeToggle.checked ? 'dark' : 'light');
+  };
+
+  darkModeToggle.addEventListener('change', syncDarkMode);
+  darkModeToggle.addEventListener('input', syncDarkMode);
+  darkModeToggle.addEventListener('click', syncDarkMode);
 }
 </script>
 </body>
