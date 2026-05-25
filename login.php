@@ -64,21 +64,43 @@ function closeForgotPasswordModal() {
 // Handle forgot password form submission
 const forgotForm = document.getElementById('forgotPasswordForm');
 if (forgotForm) {
-  forgotForm.addEventListener('submit', function(e) {
+  let forgotErrorTimer = null;
+
+  function showForgotMessage(html, type, keepVisibleMs) {
     const msgDiv = document.getElementById('forgotPasswordMsg');
-    
+    if (!msgDiv) return;
+
+    if (forgotErrorTimer) {
+      clearTimeout(forgotErrorTimer);
+      forgotErrorTimer = null;
+    }
+
+    msgDiv.innerHTML = '<p style="margin-top: 8px; color: ' + type + ';">' + html + '</p>';
+
+    if (keepVisibleMs && keepVisibleMs > 0) {
+      forgotErrorTimer = setTimeout(() => {
+        msgDiv.innerHTML = '';
+        forgotErrorTimer = null;
+      }, keepVisibleMs);
+    }
+  }
+
+  forgotForm.addEventListener('submit', function(e) {
     window.addEventListener('api:success', (evt) => {
       if (evt.detail.form === forgotForm) {
         const json = evt.detail.json || {};
         if (json.bypass && json.reset_link) {
-          msgDiv.innerHTML = '<p style="color: orange; margin-top: 8px;">⚠️ Email not configured — use this link to reset your password:</p>' +
-            '<p><a href="' + json.reset_link + '" target="_blank">Open reset link</a></p>';
+          alert('Email is not configured. Use the link below to reset your password.');
+          showForgotMessage(
+            '⚠️ Email not configured — use this link to reset your password:<br><a href="' + json.reset_link + '" target="_blank">Open reset link</a>',
+            '#b26a00',
+            0
+          );
         } else {
-          msgDiv.innerHTML = '<p style="color: green; margin-top: 8px;">✓ Check your email for the reset link</p>';
+          showForgotMessage('✓ Check your email for the reset link', 'green', 3000);
           setTimeout(() => {
             closeForgotPasswordModal();
             document.getElementById('forgotEmail').value = '';
-            msgDiv.innerHTML = '';
           }, 3000);
         }
       }
@@ -86,7 +108,8 @@ if (forgotForm) {
 
     window.addEventListener('api:error', (evt) => {
       if (evt.detail.form === forgotForm) {
-        msgDiv.innerHTML = '<p style="color: red; margin-top: 8px;">✗ ' + (evt.detail.json.error || 'Error sending reset link') + '</p>';
+        const errorMessage = evt.detail.json?.error || evt.detail.json?.message || 'Error sending reset link';
+        showForgotMessage('✗ ' + errorMessage, 'red', 8000);
       }
     });
   });

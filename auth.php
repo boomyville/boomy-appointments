@@ -200,6 +200,13 @@ try {
             exit;
         }
 
+        // If email isn't configured, stop here so the UI shows the same setup error for any address.
+        if (!email_is_configured()) {
+            http_response_code(422);
+            echo json_encode(['error' => 'Email is not configured. Set up SMTP and the from address in Settings, then try again.']);
+            exit;
+        }
+
         // Check if user exists
         $user = get_user_by_email($email);
         if (!$user) {
@@ -212,14 +219,6 @@ try {
         if (($user['role'] ?? '') !== 'admin') {
             // For security, return the same generic message but do not create a token
             echo json_encode(['ok' => true, 'message' => 'If an account exists with this email, a password reset link will be sent']);
-            exit;
-        }
-
-        // If email not configured, create token and return a bypass link for immediate reset
-        if (!email_is_configured()) {
-            $code = create_verification_token((int)$user['id'], 'password_reset');
-            $reset_link = build_app_url('reset_password.php', ['code' => $code]);
-            echo json_encode(['ok' => true, 'bypass' => true, 'reset_link' => $reset_link]);
             exit;
         }
 
