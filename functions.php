@@ -54,8 +54,18 @@ function create_user(string $email, string $password, string $full_name, string 
 {
     $db = get_db();
     $hash = password_hash($password, PASSWORD_DEFAULT);
-    $stmt = $db->prepare('INSERT INTO users (email, password_hash, full_name, first_name, last_name, phone, role) VALUES (?, ?, ?, ?, ?, ?, ?)');
-    $stmt->execute([$email, $hash, $full_name, $first_name, $last_name, $phone, $role]);
+    $stmt = $db->prepare('INSERT INTO users (email, password_hash, full_name, first_name, last_name, phone, role, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt->execute([$email, $hash, $full_name, $first_name, $last_name, $phone, $role, 1]);
+    return (int)$db->lastInsertId();
+}
+
+// Create user with explicit is_active flag
+function create_user_with_active(string $email, string $password, string $full_name, string $role = 'admin', int $is_active = 1, ?string $first_name = null, ?string $last_name = null, ?string $phone = null): int
+{
+    $db = get_db();
+    $hash = password_hash($password, PASSWORD_DEFAULT);
+    $stmt = $db->prepare('INSERT INTO users (email, password_hash, full_name, first_name, last_name, phone, role, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt->execute([$email, $hash, $full_name, $first_name, $last_name, $phone, $role, $is_active]);
     return (int)$db->lastInsertId();
 }
 
@@ -112,6 +122,21 @@ function require_login(): void
         header('Location: login.php');
         exit;
     }
+}
+
+// Clear session and cookies to log the user out
+function logout_user(): void
+{
+    init_session();
+    // Clear session array
+    $_SESSION = [];
+    // Remove session cookie if used
+    if (ini_get('session.use_cookies')) {
+        $params = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'] ?? false, $params['httponly'] ?? true);
+    }
+    // Destroy session
+    @session_destroy();
 }
 
 // CSRF helpers
@@ -181,6 +206,45 @@ function get_time(?string $format = null): string
     return $dt->format(DateTime::ATOM);
 }
 
+function get_app_root_url(): string
+{
+    $configured = trim((string) get_setting('root_url', ''));
+    if ($configured !== '') {
+        return rtrim($configured, '/');
+    }
+
+    $scheme = 'http';
+    $forwarded_proto = strtolower((string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''));
+    if ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || $forwarded_proto === 'https') {
+        $scheme = 'https';
+    }
+
+    $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''), '/');
+    if ($host === '') {
+        $host = 'localhost';
+    }
+
+    $script_dir = str_replace('\\', '/', dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '')));
+    $script_dir = trim($script_dir, '/');
+
+    $root_url = $scheme . '://' . $host;
+    if ($script_dir !== '' && $script_dir !== '.') {
+        $root_url .= '/' . $script_dir;
+    }
+
+    return rtrim($root_url, '/');
+}
+
+function build_app_url(string $path, array $query = []): string
+{
+    $url = get_app_root_url() . '/' . ltrim($path, '/');
+    if (!empty($query)) {
+        $url .= '?' . http_build_query($query);
+    }
+
+    return $url;
+}
+
 // Email validation
 function validate_email_format(string $email): bool
 {
@@ -193,6 +257,43 @@ function get_email_domain_whitelist(): array
     $setting = get_setting('email_domain_whitelist', '');
     if (!$setting) return [];
     return array_filter(array_map('trim', explode("\n", $setting)));
+}
+
+// Get the client's IP address (tries common proxy headers)
+function get_client_ip(): string
+{
+    $ip = '';
+    if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
+        $ip = $_SERVER['HTTP_CLIENT_IP'];
+    } elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+        // may contain comma-separated list of IPs; take the first public one
+        $list = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
+        $list = array_map('trim', $list);
+        // return the last (closest to client) or first? use first non-private
+        foreach ($list as $candidate) {
+            if (filter_var($candidate, FILTER_VALIDATE_IP)) {
+                $ip = $candidate;
+                break;
+            }
+        }
+    } elseif (!empty($_SERVER['REMOTE_ADDR'])) {
+        $ip = $_SERVER['REMOTE_ADDR'];
+    }
+    return (string)$ip;
+}
+
+// Insert a login attempt record
+function insert_login_attempt(?string $username, bool $success): void
+{
+    try {
+        $db = get_db();
+        $stmt = $db->prepare('INSERT INTO login_attempts (ip_address, username, success, user_agent) VALUES (?, ?, ?, ?)');
+        $ip = get_client_ip();
+        $ua = $_SERVER['HTTP_USER_AGENT'] ?? null;
+        $stmt->execute([$ip ?: null, $username ?: null, $success ? 1 : 0, $ua]);
+    } catch (Throwable $e) {
+        // swallow errors; logging should not break auth
+    }
 }
 
 function get_email_domain_blacklist(): array
@@ -374,7 +475,7 @@ function send_password_reset_email(string $email, string $code): bool
     if (!$user) return false;
     
     $app_name = APP_NAME ?? 'Boomy Appointments';
-    $reset_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off' ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . '/reset_password.php?code=' . urlencode($code);
+    $reset_url = build_app_url('reset_password.php', ['code' => $code]);
     
     $subject = "Password Reset - $app_name";
     $body_html = "
@@ -407,8 +508,44 @@ $app_name
     return send_email($email, $subject, $body_html, $body_plain);
 }
 
+function send_account_confirmation_email(string $email, string $code): bool
+{
+    $user = get_user_by_email($email);
+    if (!$user) return false;
+    $app_name = APP_NAME ?? 'Boomy Appointments';
+    $confirm_url = build_app_url('confirm_account.php', ['code' => $code]);
+    $subject = "Confirm your account - $app_name";
+    $body_html = "
+        <h2>Confirm Your Account</h2>
+        <p>Hi {$user['full_name']},</p>
+        <p>Please confirm your account by clicking the button below:</p>
+        <p><a href=\"{$confirm_url}\" style=\"background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;\">Confirm Account</a></p>
+        <p>Or copy this link: {$confirm_url}</p>
+        <p>If you didn't sign up, ignore this email.</p>
+        <p>Best regards,<br>$app_name</p>
+    ";
+    $body_plain = "Confirm Your Account\n\nHi {$user['full_name']},\n\nPlease confirm your account by visiting this link: {$confirm_url}\n\nIf you didn't sign up, ignore this email.\n\nBest regards,\n$app_name";
+    return send_email($email, $subject, $body_html, $body_plain);
+}
+
+// Return whether SMTP / PHPMailer configuration appears complete (basic check)
+function email_is_configured(): bool
+{
+    $smtp_host = get_setting('smtp_host');
+    $smtp_username = get_setting('smtp_username');
+    $smtp_password = get_setting('smtp_password');
+    $mail_from = get_setting('mail_from_address');
+
+    if (!$smtp_host || !$smtp_username || !$smtp_password || !$mail_from) return false;
+    return true;
+}
+
 function send_email(string $to_email, string $subject, string $body_html, string $body_plain = ''): array|bool
 {
+    // If basic email configuration isn't present, silently skip sending
+    if (!email_is_configured()) {
+        return false;
+    }
     // Get SMTP settings from database
     $smtp_host = get_setting('smtp_host');
     $smtp_port = (int) get_setting('smtp_port', '587');

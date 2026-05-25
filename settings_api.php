@@ -5,18 +5,19 @@ require_once __DIR__ . '/functions.php';
 init_session();
 header('Content-Type: application/json; charset=utf-8');
 
+// Allow initial PHPMailer setup from the login page before any admin exists.
+$action = $_GET['action'] ?? 'get';
+
 if (empty($_SESSION['user'])) {
     http_response_code(401);
     echo json_encode(['error' => 'unauthenticated']);
     exit;
 }
 
-$action = $_GET['action'] ?? 'get';
-
 try {
     if ($action === 'get') {
         $keys = [
-            'site_name', 'organization_email', 'date_format', 'booking_deadline_hours',
+            'site_name', 'root_url', 'organization_email', 'date_format', 'booking_deadline_hours',
             'booking_firstname_display', 'booking_firstname_required', 'booking_firstname_letters_only', 'booking_firstname_min', 'booking_firstname_max',
             'booking_lastname_display', 'booking_lastname_required', 'booking_lastname_letters_only', 'booking_lastname_min', 'booking_lastname_max',
             'booking_middlename_display', 'booking_middlename_required', 'booking_middlename_letters_only', 'booking_middlename_min', 'booking_middlename_max',
@@ -51,7 +52,7 @@ try {
 
         // Allowed fields per tab
         $allowed = [
-            'general' => ['site_name', 'organization_email', 'date_format'],
+            'general' => ['site_name', 'root_url', 'organization_email', 'date_format'],
             'booking' => [
                 'booking_firstname_display', 'booking_firstname_required', 'booking_firstname_letters_only', 'booking_firstname_min', 'booking_firstname_max',
                 'booking_lastname_display', 'booking_lastname_required', 'booking_lastname_letters_only', 'booking_lastname_min', 'booking_lastname_max',
@@ -167,6 +168,62 @@ try {
             $diag = email_diagnostics($to_email, $subject);
             echo json_encode(['error' => 'Unknown error sending email', 'debug' => $diag]);
         }
+        exit;
+    }
+
+    if ($action === 'login_attempts') {
+        // only admin
+        if (empty($_SESSION['user']['role']) || $_SESSION['user']['role'] !== 'admin') {
+            http_response_code(403);
+            echo json_encode(['error' => 'forbidden']);
+            exit;
+        }
+
+        // GET: list attempts with pagination
+        if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+            $page = max(1, (int)($_GET['page'] ?? 1));
+            $per = 50;
+            $offset = ($page - 1) * $per;
+            $db = get_db();
+            $stmt = $db->prepare('SELECT COUNT(*) AS c FROM login_attempts');
+            $stmt->execute();
+            $total = (int)$stmt->fetchColumn();
+            $stmt = $db->prepare('SELECT id, attempted_at, ip_address, username, success, user_agent FROM login_attempts ORDER BY attempted_at DESC LIMIT ? OFFSET ?');
+            $stmt->bindValue(1, $per, PDO::PARAM_INT);
+            $stmt->bindValue(2, $offset, PDO::PARAM_INT);
+            $stmt->execute();
+            $rows = $stmt->fetchAll();
+            $total_pages = (int) ceil($total / $per);
+            echo json_encode(['ok' => true, 'attempts' => $rows, 'total' => $total, 'page' => $page, 'total_pages' => $total_pages]);
+            exit;
+        }
+
+        // POST: perform delete commands
+        $raw = file_get_contents('php://input');
+        $data = $raw ? json_decode($raw, true) : $_POST;
+        $token = $data['csrf_token'] ?? null;
+        if (!verify_csrf_token($token)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'csrf']);
+            exit;
+        }
+
+        $cmd = $data['command'] ?? '';
+        $db = get_db();
+        if ($cmd === 'delete_all') {
+            $db->exec('TRUNCATE TABLE login_attempts');
+            echo json_encode(['ok' => true]);
+            exit;
+        }
+        if ($cmd === 'delete_older_7_days') {
+            $stmt = $db->prepare('DELETE FROM login_attempts WHERE attempted_at < (NOW() - INTERVAL 7 DAY)');
+            $stmt->execute();
+            echo json_encode(['ok' => true, 'deleted' => $stmt->rowCount()]);
+            exit;
+        }
+
+        http_response_code(400);
+        echo json_encode(['error' => 'unknown command']);
         exit;
     }
 

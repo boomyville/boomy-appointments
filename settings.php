@@ -6,6 +6,7 @@ $user = $_SESSION['user'];
 
 // Load existing settings
 $site_name = get_setting('site_name', APP_NAME ?? 'Boomy Appointments');
+$root_url = get_setting('root_url', '');
 $org_email = get_setting('organization_email', '');
 $date_format = get_setting('date_format', 'd/m/Y H:i');
 $booking_deadline = get_setting('booking_deadline_hours', '24');
@@ -80,9 +81,17 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
 </head>
 <body>
 <main class="container">
-  <header>
-    <h1>Settings</h1>
-    <p>Signed in as <?php echo htmlspecialchars($user['full_name'] ?? $user['email']); ?></p>
+  <header style="display:flex; align-items:center; justify-content:space-between; gap:16px;">
+    <div>
+      <h1>Settings</h1>
+      <p>Signed in as <?php echo htmlspecialchars($user['full_name'] ?? $user['email']); ?></p>
+    </div>
+    <div>
+      <form id="logoutForm" data-api action="auth.php?action=logout" method="post" style="margin:0;">
+        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+        <button type="submit">Logout</button>
+      </form>
+    </div>
   </header>
 
   <nav class="tabs" role="tablist">
@@ -90,6 +99,7 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
     <button class="tab" data-tab="booking" role="tab">Booking</button>
     <button class="tab" data-tab="authentication" role="tab">Authentication</button>
     <button class="tab" data-tab="phpmailer" role="tab">PHPMailer</button>
+    <button class="tab" data-tab="login_attempts" role="tab">Login Attempts</button>
   </nav>
 
   <!-- GENERAL TAB -->
@@ -97,6 +107,10 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
     <form id="generalForm" data-api action="settings_api.php?action=save" method="post">
       <label for="site_name">Website Name</label>
       <input id="site_name" name="site_name" type="text" value="<?php echo htmlspecialchars($site_name); ?>" required>
+
+      <label for="root_url">Root URL</label>
+      <input id="root_url" name="root_url" type="url" value="<?php echo htmlspecialchars($root_url); ?>" placeholder="https://example.com/appointments">
+      <small>Used for links in emails. Leave blank to use the current request URL automatically.</small>
 
       <label for="organization_email">Organisation Email</label>
       <input id="organization_email" name="organization_email" type="email" value="<?php echo htmlspecialchars($org_email); ?>" required>
@@ -260,6 +274,20 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
     </form>
   </section>
 
+  <!-- LOGIN ATTEMPTS TAB -->
+  <section id="tab-login_attempts" class="tab-panel">
+    <h2>Login Attempts</h2>
+    <p>Shows recent login attempts (IP, username, success).</p>
+    <div style="margin-bottom:12px; display:flex; gap:8px; align-items:center;">
+      <button id="refreshAttemptsBtn">Refresh</button>
+      <button id="deleteAllAttemptsBtn">Delete All</button>
+      <button id="deleteOldAttemptsBtn">Delete Older Than 7 Days</button>
+      <div id="attemptsMsg" style="margin-left:12px;"></div>
+    </div>
+    <div id="attemptsTable"></div>
+    <div id="attemptsPagination" style="margin-top:12px;"></div>
+  </section>
+
 </main>
 <script src="assets/js/global.js"></script>
 <script>
@@ -385,6 +413,98 @@ async function testEmailConfiguration(e) {
     btn.textContent = 'Send Test Email';
   }
 }
+
+// Login attempts UI
+async function loadLoginAttempts(page = 1) {
+  const container = document.getElementById('attemptsTable');
+  const pagDiv = document.getElementById('attemptsPagination');
+  const msgDiv = document.getElementById('attemptsMsg');
+  container.innerHTML = 'Loading...';
+  pagDiv.innerHTML = '';
+  try {
+    const res = await fetch('settings_api.php?action=login_attempts&page=' + encodeURIComponent(page), { credentials: 'include' });
+    const data = await res.json();
+    if (!data.ok) {
+      container.innerHTML = '<p class="error-msg">' + (data.error || 'Failed to load') + '</p>';
+      return;
+    }
+    const rows = data.attempts || [];
+    if (!rows.length) {
+      container.innerHTML = '<p>No login attempts recorded.</p>';
+    } else {
+      let html = '<table><thead><tr><th>Time</th><th>IP</th><th>Username</th><th>Success</th><th>User Agent</th></tr></thead><tbody>';
+      rows.forEach(r => {
+        html += '<tr>' +
+          '<td>' + (r.attempted_at || '') + '</td>' +
+          '<td>' + (r.ip_address || '') + '</td>' +
+          '<td>' + (r.username || '') + '</td>' +
+          '<td>' + (r.success == 1 ? '<span style="color:green;">✓</span>' : '<span style="color:red;">✗</span>') + '</td>' +
+          '<td>' + (r.user_agent ? htmlspecialchars(r.user_agent) : '') + '</td>' +
+          '</tr>';
+      });
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    // pagination
+    const total = data.total || 0;
+    const totalPages = data.total_pages || 1;
+    const current = data.page || 1;
+    // build pages array: first 5, ellipsis, last 5 (if large)
+    const pages = [];
+    if (totalPages <= 11) {
+      for (let i=1;i<=totalPages;i++) pages.push(i);
+    } else {
+      for (let i=1;i<=5;i++) pages.push(i);
+      pages.push('...');
+      const start = Math.max(6, totalPages - 4);
+      for (let i=start;i<=totalPages;i++) pages.push(i);
+    }
+    let pagHtml = '';
+    pages.forEach(p => {
+      if (p === '...') {
+        pagHtml += '<span style="margin:0 6px;">...</span>';
+      } else {
+        pagHtml += '<button class="pageBtn" data-page="' + p + '"' + (p===current? ' disabled' : '') + '>' + p + '</button>';
+      }
+    });
+    pagDiv.innerHTML = pagHtml;
+    Array.from(pagDiv.querySelectorAll('.pageBtn')).forEach(b => b.addEventListener('click', (ev) => {
+      const p = parseInt(ev.target.getAttribute('data-page'), 10);
+      loadLoginAttempts(p);
+    }));
+
+  } catch (err) {
+    container.innerHTML = '<p class="error-msg">Error loading login attempts</p>';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const refreshBtn = document.getElementById('refreshAttemptsBtn');
+  const deleteAllBtn = document.getElementById('deleteAllAttemptsBtn');
+  const deleteOldBtn = document.getElementById('deleteOldAttemptsBtn');
+  if (refreshBtn) refreshBtn.addEventListener('click', () => loadLoginAttempts(1));
+  if (deleteAllBtn) deleteAllBtn.addEventListener('click', async () => {
+    if (!confirm('Delete all login attempts? This cannot be undone.')) return;
+    const res = await fetch('settings_api.php?action=login_attempts', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ csrf_token: document.querySelector('input[name="csrf_token"]').value, command: 'delete_all' }) });
+    const j = await res.json();
+    if (j.ok) { document.getElementById('attemptsMsg').innerHTML = '<span style="color:green;">Deleted all login attempts</span>'; loadLoginAttempts(1); } else { document.getElementById('attemptsMsg').innerHTML = '<span style="color:red;">Failed to delete</span>'; }
+  });
+  if (deleteOldBtn) deleteOldBtn.addEventListener('click', async () => {
+    if (!confirm('Delete login attempts older than 7 days?')) return;
+    const res = await fetch('settings_api.php?action=login_attempts', { method: 'POST', credentials: 'include', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ csrf_token: document.querySelector('input[name="csrf_token"]').value, command: 'delete_older_7_days' }) });
+    const j = await res.json();
+    if (j.ok) { document.getElementById('attemptsMsg').innerHTML = '<span style="color:green;">Deleted older attempts</span>'; loadLoginAttempts(1); } else { document.getElementById('attemptsMsg').innerHTML = '<span style="color:red;">Failed to delete</span>'; }
+  });
+  // if tab is present and active, load
+  if (document.getElementById('tab-login_attempts') && document.querySelector('.tab.active').getAttribute('data-tab') === 'login_attempts') {
+    loadLoginAttempts(1);
+  }
+  // when switching tabs, if login_attempts tab activated, load
+  document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => {
+    if (btn.getAttribute('data-tab') === 'login_attempts') loadLoginAttempts(1);
+  }));
+});
 
 function htmlspecialchars(str) {
   const map = {

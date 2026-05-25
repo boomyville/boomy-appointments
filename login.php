@@ -37,7 +37,7 @@ init_session();
   <article>
     <h2>Reset Password</h2>
     <p>Enter your email address and we'll send you a link to reset your password.</p>
-    <form id="forgotPasswordForm" action="auth.php?action=forgot_password" method="post" data-api>
+    <form id="forgotPasswordForm" action="auth.php?action=forgot_password" method="post" data-api data-no-reload="true">
       <label for="forgotEmail">Email</label>
       <input type="email" id="forgotEmail" name="email" required>
       
@@ -69,12 +69,18 @@ if (forgotForm) {
     
     window.addEventListener('api:success', (evt) => {
       if (evt.detail.form === forgotForm) {
-        msgDiv.innerHTML = '<p style="color: green; margin-top: 8px;">✓ Check your email for the reset link</p>';
-        setTimeout(() => {
-          closeForgotPasswordModal();
-          document.getElementById('forgotEmail').value = '';
-          msgDiv.innerHTML = '';
-        }, 3000);
+        const json = evt.detail.json || {};
+        if (json.bypass && json.reset_link) {
+          msgDiv.innerHTML = '<p style="color: orange; margin-top: 8px;">⚠️ Email not configured — use this link to reset your password:</p>' +
+            '<p><a href="' + json.reset_link + '" target="_blank">Open reset link</a></p>';
+        } else {
+          msgDiv.innerHTML = '<p style="color: green; margin-top: 8px;">✓ Check your email for the reset link</p>';
+          setTimeout(() => {
+            closeForgotPasswordModal();
+            document.getElementById('forgotEmail').value = '';
+            msgDiv.innerHTML = '';
+          }, 3000);
+        }
       }
     });
 

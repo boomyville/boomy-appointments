@@ -37,8 +37,10 @@
               window.location.href = json.redirect;
               return;
             }
-            // default: reload
-            window.location.reload();
+            if (form.dataset.noReload !== 'true') {
+              // default: reload
+              window.location.reload();
+            }
           } else {
             window.dispatchEvent(new CustomEvent('api:error', { detail: { form, json } }));
             alert(json.error || json.message || 'Request failed');

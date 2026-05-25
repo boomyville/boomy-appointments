@@ -54,6 +54,18 @@ CREATE TABLE `verification` (
   CONSTRAINT `fk_verification_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 2C. LOGIN ATTEMPTS
+CREATE TABLE `login_attempts` (
+  `id` INT UNSIGNED AUTO_INCREMENT,
+  `attempted_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `ip_address` VARCHAR(45) NULL,
+  `username` VARCHAR(191) NULL,
+  `success` TINYINT(1) NOT NULL DEFAULT 0,
+  `user_agent` VARCHAR(1024) NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_login_attempts_time` (`attempted_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 3. APPOINTMENT TYPES
 CREATE TABLE `appointment_types` (
   `id` INT UNSIGNED AUTO_INCREMENT,
@@ -119,6 +131,7 @@ CREATE TABLE `unavailabilities` (
 -- Seed settings
 INSERT INTO `settings` (`setting_key`,`setting_value`) VALUES
 ('site_name','Boomy Appointments'),
+('root_url',''),
 ('organization_email','appointments@example.com'),
 ('date_format','d/m/Y H:i'),
 ('booking_deadline_hours','24'),

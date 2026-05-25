@@ -5,14 +5,21 @@ init_session();
 $code = trim($_GET['code'] ?? '');
 $valid = false;
 $user_id = null;
+$user_email = '';
 
 if ($code) {
-    $user_id = validate_verification_token($code, 'password_reset');
-    $valid = $user_id !== null;
+  $user_id = validate_verification_token($code, 'password_reset');
+  if ($user_id !== null) {
+    $user = get_user_by_verification_code($code);
+    if ($user && isset($user['email'])) {
+      $user_email = $user['email'];
+      $valid = true;
+    }
+  }
 }
 
 if (!$valid) {
-    http_response_code(404);
+  http_response_code(404);
 }
 ?>
 <!doctype html>
@@ -33,9 +40,12 @@ if (!$valid) {
       <p>The password reset link has expired or is invalid. Please request a new one:</p>
       <p><a href="login.php">Back to login</a></p>
     <?php else: ?>
-      <p>Enter your new password below.</p>
+      <p>Enter your email and new password below.</p>
       
-      <form id="resetForm" action="auth.php?action=reset_password" method="post" data-api>
+      <form id="resetForm" action="<?php echo htmlspecialchars(build_app_url('auth.php', ['action' => 'reset_password'])); ?>" method="post" data-api>
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required value="<?php echo htmlspecialchars($user_email); ?>">
+
         <label for="password">New Password</label>
         <input type="password" id="password" name="password" minlength="8" required>
         
@@ -49,6 +59,7 @@ if (!$valid) {
         <div id="resetMsg"></div>
       </form>
     <?php endif; ?>
+    <p><a href="<?php echo htmlspecialchars(build_app_url('login.php')); ?>">Back to login</a></p>
   </article>
 </main>
 <script src="assets/js/global.js"></script>

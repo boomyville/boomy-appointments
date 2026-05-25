@@ -72,7 +72,8 @@ try {
             exit;
         }
 
-        $id = create_user($email, $password, $full_name, 'admin', $first_name ?: null, $last_name ?: null, $phone ?: null);
+        // Admin registration does not require email verification.
+        $id = create_user_with_active($email, $password, $full_name, 'admin', 1, $first_name ?: null, $last_name ?: null, $phone ?: null);
         $user = get_user_by_email($email);
         session_regenerate_id(true);
         $_SESSION['user'] = $user;
@@ -117,7 +118,8 @@ try {
             exit;
         }
 
-        $id = create_user($email, $password, $full_name, 'admin', $first_name ?: null, $last_name ?: null, $phone ?: null);
+        // Admin registration does not require email verification.
+        $id = create_user_with_active($email, $password, $full_name, 'admin', 1, $first_name ?: null, $last_name ?: null, $phone ?: null);
         $user = get_user_by_email($email);
         session_regenerate_id(true);
         $_SESSION['user'] = $user;
@@ -139,6 +141,7 @@ try {
 
         $emailValidation = validate_email($email);
         if ($emailValidation !== true) {
+            insert_login_attempt($email, false);
             http_response_code(422);
             echo json_encode(['error' => $emailValidation]);
             exit;
@@ -146,11 +149,14 @@ try {
 
         $user = verify_user_credentials($email, $password);
         if (!$user) {
+            insert_login_attempt($email, false);
             http_response_code(401);
             echo json_encode(['error' => 'Invalid credentials']);
             exit;
         }
 
+        // success
+        insert_login_attempt($email, true);
         session_regenerate_id(true);
         $_SESSION['user'] = [
             'id' => (int)$user['id'],
@@ -170,14 +176,8 @@ try {
             echo json_encode(['error' => 'csrf']);
             exit;
         }
-
-        // Clear session
-        $_SESSION = [];
-        if (ini_get('session.use_cookies')) {
-            $params = session_get_cookie_params();
-            setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
-        }
-        session_destroy();
+        // Centralized logout logic
+        logout_user();
         echo json_encode(['ok' => true, 'redirect' => 'login.php']);
         exit;
     }
@@ -208,6 +208,21 @@ try {
             exit;
         }
 
+        // Only allow password resets for admin accounts
+        if (($user['role'] ?? '') !== 'admin') {
+            // For security, return the same generic message but do not create a token
+            echo json_encode(['ok' => true, 'message' => 'If an account exists with this email, a password reset link will be sent']);
+            exit;
+        }
+
+        // If email not configured, create token and return a bypass link for immediate reset
+        if (!email_is_configured()) {
+            $code = create_verification_token((int)$user['id'], 'password_reset');
+            $reset_link = build_app_url('reset_password.php', ['code' => $code]);
+            echo json_encode(['ok' => true, 'bypass' => true, 'reset_link' => $reset_link]);
+            exit;
+        }
+
         // Create verification token and send email
         $code = create_verification_token((int)$user['id'], 'password_reset');
         $email_sent = send_password_reset_email($email, $code);
@@ -224,6 +239,7 @@ try {
     if ($action === 'reset_password') {
         $data = input_data();
         $code = trim((string)($data['code'] ?? ''));
+        $email = trim((string)($data['email'] ?? ''));
         $password = (string)($data['password'] ?? '');
         $password_confirm = (string)($data['password_confirm'] ?? '');
         $token = $data['csrf_token'] ?? null;
@@ -240,6 +256,20 @@ try {
             http_response_code(422);
             echo json_encode(['error' => 'Invalid or expired reset link']);
             exit;
+        }
+
+        // Ensure provided email matches the token's user
+        if ($email) {
+            $db = get_db();
+            $stmt = $db->prepare('SELECT email FROM users WHERE id = ? LIMIT 1');
+            $stmt->execute([$user_id]);
+            $row = $stmt->fetch();
+            $expected = $row['email'] ?? '';
+            if (strcasecmp(trim($expected), trim($email)) !== 0) {
+                http_response_code(422);
+                echo json_encode(['error' => 'Email does not match the reset request']);
+                exit;
+            }
         }
 
         // Verify passwords match
