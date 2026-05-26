@@ -29,7 +29,6 @@ if (!$valid) {
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Reset Password - <?php echo htmlspecialchars(APP_NAME); ?></title>
   <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@1.*/css/pico.min.css">
-  <link rel="stylesheet" href="assets/css/theme.css">
 </head>
 <body>
 <main class="container">
@@ -39,16 +38,16 @@ if (!$valid) {
     <?php if (!$valid): ?>
       <p style="color: #dc3545;"><strong>Invalid or expired reset link.</strong></p>
       <p>The password reset link has expired or is invalid. Please request a new one:</p>
-      <p><a href="login.php">Back to login</a></p>
     <?php else: ?>
       <p>Enter your email and new password below.</p>
       
-      <form id="resetForm" action="<?php echo htmlspecialchars(build_app_url('auth.php', ['action' => 'reset_password'])); ?>" method="post" data-api>
+      <form id="resetForm" action="<?php echo htmlspecialchars(build_app_url('auth.php', ['action' => 'reset_password'])); ?>" method="post" data-api data-no-reload="true">
         <label for="email">Email</label>
         <input type="email" id="email" name="email" required value="<?php echo htmlspecialchars($user_email); ?>">
 
         <label for="password">New Password</label>
         <input type="password" id="password" name="password" minlength="8" required>
+        <div id="resetPasswordHints" style="margin-top:8px;"></div>
         
         <label for="password_confirm">Confirm Password</label>
         <input type="password" id="password_confirm" name="password_confirm" minlength="8" required>
@@ -65,6 +64,16 @@ if (!$valid) {
 </main>
 <script src="assets/js/global.js"></script>
 <script>
+// Initialize password hints for reset form
+document.addEventListener('DOMContentLoaded', function() {
+  if (!window.App || !window.App.attachPasswordHints) return;
+  const pwReq = <?php echo json_encode(get_password_requirements()); ?>;
+  const resetForm = document.getElementById('resetForm');
+  if (resetForm) {
+    App.attachPasswordHints(resetForm, '#password', '#password_confirm', '#resetPasswordHints', pwReq);
+  }
+});
+
 const resetForm = document.getElementById('resetForm');
 if (resetForm) {
   resetForm.addEventListener('submit', function(e) {

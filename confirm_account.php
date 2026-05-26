@@ -25,7 +25,6 @@ if ($valid) {
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Confirm Account - <?php echo htmlspecialchars(APP_NAME); ?></title>
   <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@1.*/css/pico.min.css">
-  <link rel="stylesheet" href="assets/css/theme.css">
 </head>
 <body>
 <main class="container">

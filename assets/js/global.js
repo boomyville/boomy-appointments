@@ -34,18 +34,23 @@
           const res = await apiPost(url, payload);
           const json = await res.json();
           if (res.ok) {
+            // Dispatch success first so pages can show messages
             window.dispatchEvent(new CustomEvent('api:success', { detail: { form, json } }));
-            if (json.redirect) {
+            // If the server provided a redirect, follow it unless the form opts out
+            if (json.redirect && form.dataset.noReload !== 'true') {
               window.location.href = json.redirect;
               return;
             }
+            // If form explicitly opted out of auto-reload/redirect, leave handling to page
             if (form.dataset.noReload !== 'true') {
-              // default: reload
+              // default: reload when no redirect provided
               window.location.reload();
             }
           } else {
             window.dispatchEvent(new CustomEvent('api:error', { detail: { form, json } }));
-            alert(json.error || json.message || 'Request failed');
+            if (form.dataset.noReload !== 'true') {
+              alert(json.error || json.message || 'Request failed');
+            }
           }
         } catch (err) {
           console.error(err);
@@ -91,6 +96,77 @@
 
     update();
     setInterval(update, 30000);
+  }
+
+  // Attach live password requirement hints to a form
+  // formOrElement: HTMLElement or form element
+  // pwdSelector / confirmSelector: selector strings for password and confirm inputs
+  // containerSelector: selector or element where hints will be rendered
+  // requirements: object matching get_password_requirements() keys
+  function attachPasswordHints(formOrElement, pwdSelector, confirmSelector, containerSelector, requirements) {
+    const form = (typeof formOrElement === 'string') ? document.querySelector(formOrElement) : formOrElement;
+    if (!form) return;
+    const pwd = form.querySelector(pwdSelector) || document.querySelector(pwdSelector);
+    const conf = form.querySelector(confirmSelector) || document.querySelector(confirmSelector);
+    let container = (typeof containerSelector === 'string') ? document.querySelector(containerSelector) : containerSelector;
+    if (!container) {
+      container = document.createElement('div');
+      if (form.firstElementChild) form.insertBefore(container, form.firstElementChild);
+      else form.appendChild(container);
+    }
+
+    const req = Object.assign({
+      min_length: 8,
+      max_length: 128,
+      require_lowercase: true,
+      require_uppercase: true,
+      require_number: true,
+      require_symbol: true
+    }, requirements || {});
+
+    // build UI
+    container.classList.add('pw-hints');
+    container.innerHTML = '';
+    const ul = document.createElement('ul');
+    ul.style.listStyle = 'none';
+    ul.style.padding = '0';
+    ul.style.margin = '8px 0 0 0';
+
+    const items = [];
+    items.push({ key: 'min_length', text: `At least ${req.min_length} characters`, check: (v) => v.length >= req.min_length });
+    items.push({ key: 'max_length', text: `No more than ${req.max_length} characters`, check: (v) => v.length <= req.max_length });
+    if (req.require_lowercase) items.push({ key: 'lower', text: 'Contains a lowercase letter (a-z)', check: (v) => /[a-z]/.test(v) });
+    if (req.require_uppercase) items.push({ key: 'upper', text: 'Contains an uppercase letter (A-Z)', check: (v) => /[A-Z]/.test(v) });
+    if (req.require_number) items.push({ key: 'number', text: 'Contains a number (0-9)', check: (v) => /[0-9]/.test(v) });
+    if (req.require_symbol) items.push({ key: 'symbol', text: 'Contains a symbol (e.g. !@#$%)', check: (v) => /[!@#$%^&*()_+\-=[\]{};:'",.<>?\/\\|`~]/.test(v) });
+    items.push({ key: 'match', text: 'Passwords match', check: (v) => conf ? (v === (conf.value || '')) : true });
+
+    items.forEach(it => {
+      const li = document.createElement('li');
+      li.style.margin = '4px 0';
+      li.dataset.key = it.key;
+      li.textContent = '\u2022 ' + it.text;
+      li.style.color = '#b00020';
+      ul.appendChild(li);
+    });
+
+    container.appendChild(ul);
+
+    function update() {
+      const v = pwd ? pwd.value || '' : '';
+      items.forEach(it => {
+        const li = ul.querySelector('li[data-key="' + it.key + '"]');
+        if (!li) return;
+        const ok = it.check(v);
+        li.style.color = ok ? '#0b6623' : '#b00020';
+        li.style.fontWeight = ok ? '600' : '400';
+      });
+    }
+
+    if (pwd) pwd.addEventListener('input', update);
+    if (conf) conf.addEventListener('input', update);
+    // initial
+    update();
   }
 
   document.addEventListener('DOMContentLoaded', () => attachServerTime());
@@ -235,6 +311,7 @@
     ,applyTheme
     ,attachThemeToggle
     ,attachDarkModeCheckbox
+    ,attachPasswordHints
   });
 
 })(window);

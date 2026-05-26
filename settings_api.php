@@ -109,17 +109,28 @@ try {
             if (isset($data[$k])) {
                 $value = $data[$k];
                 // Handle checkboxes (they're only present if checked)
-                if (strpos($k, '_display') !== false || strpos($k, '_required') !== false || strpos($k, '_letters_only') !== false || strpos($k, '_numbers_only') !== false) {
+                if (strpos($k, '_display') !== false || strpos($k, '_required') !== false || strpos($k, '_require') !== false || strpos($k, '_enabled') !== false || strpos($k, '_letters_only') !== false || strpos($k, '_numbers_only') !== false) {
                     $value = $value === '1' ? '1' : '0';
                 }
                 set_setting($k, $value);
-            } elseif (strpos($k, '_display') !== false || strpos($k, '_required') !== false || strpos($k, '_letters_only') !== false || strpos($k, '_numbers_only') !== false) {
+            } elseif (strpos($k, '_display') !== false || strpos($k, '_required') !== false || strpos($k, '_require') !== false || strpos($k, '_enabled') !== false || strpos($k, '_letters_only') !== false || strpos($k, '_numbers_only') !== false) {
                 // Checkbox not present means it was unchecked
                 set_setting($k, '0');
             }
         }
 
-        echo json_encode(['ok' => true]);
+        $message = 'Settings saved successfully';
+        if ($tab === 'authentication') {
+            $message = 'Authentication settings saved successfully';
+        } elseif ($tab === 'booking') {
+            $message = 'Booking settings saved successfully';
+        } elseif ($tab === 'phpmailer') {
+            $message = 'PHPMailer settings saved successfully';
+        } elseif ($tab === 'general') {
+            $message = 'General settings saved successfully';
+        }
+
+        echo json_encode(['ok' => true, 'message' => $message]);
         exit;
     }
 
@@ -224,6 +235,64 @@ try {
 
         http_response_code(400);
         echo json_encode(['error' => 'unknown command']);
+        exit;
+    }
+
+    if ($action === 'change_password') {
+        // Change password for the current logged-in user (requires current password)
+        $raw = file_get_contents('php://input');
+        $data = $raw ? json_decode($raw, true) : $_POST;
+        $token = $data['csrf_token'] ?? null;
+        if (!verify_csrf_token($token)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'csrf']);
+            exit;
+        }
+
+        $current = (string)($data['current_password'] ?? '');
+        $new = (string)($data['new_password'] ?? '');
+        $confirm = (string)($data['new_password_confirm'] ?? '');
+
+        if ($new !== $confirm) {
+            http_response_code(422);
+            echo json_encode(['error' => 'Passwords do not match']);
+            exit;
+        }
+
+        $email = $_SESSION['user']['email'] ?? null;
+        if (!$email) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Unable to determine current user']);
+            exit;
+        }
+
+        // Verify current password
+        $user = verify_user_credentials($email, $current);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Current password is incorrect']);
+            exit;
+        }
+
+        // Validate new password using centralized rules
+        $pass_err = validate_password($new);
+        if ($pass_err !== true) {
+            http_response_code(422);
+            echo json_encode(['error' => $pass_err]);
+            exit;
+        }
+
+        // Update password
+        $hash = password_hash($new, PASSWORD_DEFAULT);
+        $db = get_db();
+        $stmt = $db->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+        if (!$stmt->execute([$hash, $user['id']])) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Failed to update password']);
+            exit;
+        }
+
+        echo json_encode(['ok' => true, 'message' => 'Password changed successfully']);
         exit;
     }
 
