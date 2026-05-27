@@ -23,6 +23,8 @@ try {
             'booking_middlename_display', 'booking_middlename_required', 'booking_middlename_letters_only', 'booking_middlename_min', 'booking_middlename_max',
             'booking_email_display', 'booking_email_required',
             'booking_phone_display', 'booking_phone_required', 'booking_phone_numbers_only', 'booking_phone_min', 'booking_phone_max',
+            'booking_show_monday', 'booking_show_tuesday', 'booking_show_wednesday', 'booking_show_thursday', 'booking_show_friday', 'booking_show_saturday', 'booking_show_sunday',
+            'booking_start_time', 'booking_end_time', 'booking_show_now_indicator',
             'password_min_length', 'password_max_length', 'password_require_lowercase', 'password_require_uppercase', 'password_require_number', 'password_require_symbol',
             'email_whitelist_enabled', 'email_domain_whitelist', 'email_domain_blacklist',
             'smtp_host', 'smtp_port', 'smtp_encryption', 'smtp_username', 'smtp_password', 'mail_from_address', 'mail_from_name'
@@ -53,12 +55,16 @@ try {
         // Allowed fields per tab
         $allowed = [
             'general' => ['site_name', 'root_url', 'organization_email', 'date_format'],
-            'booking' => [
+            'customer_registration' => [
                 'booking_firstname_display', 'booking_firstname_required', 'booking_firstname_letters_only', 'booking_firstname_min', 'booking_firstname_max',
                 'booking_lastname_display', 'booking_lastname_required', 'booking_lastname_letters_only', 'booking_lastname_min', 'booking_lastname_max',
                 'booking_middlename_display', 'booking_middlename_required', 'booking_middlename_letters_only', 'booking_middlename_min', 'booking_middlename_max',
                 'booking_email_display', 'booking_email_required',
                 'booking_phone_display', 'booking_phone_required', 'booking_phone_numbers_only', 'booking_phone_min', 'booking_phone_max'
+            ],
+            'booking' => [
+                'booking_show_monday', 'booking_show_tuesday', 'booking_show_wednesday', 'booking_show_thursday', 'booking_show_friday', 'booking_show_saturday', 'booking_show_sunday',
+                'booking_start_time', 'booking_end_time', 'booking_show_now_indicator'
             ],
             'authentication' => [
                 'password_min_length', 'password_max_length', 'password_require_lowercase', 'password_require_uppercase', 'password_require_number', 'password_require_symbol',
@@ -71,7 +77,7 @@ try {
         $fields_to_save = $allowed[$tab] ?? $allowed['general'];
 
         // Validate lengths and dependencies
-        if ($tab === 'booking') {
+        if ($tab === 'customer_registration') {
             foreach (['firstname', 'lastname', 'middlename', 'phone'] as $field) {
                 $min_key = "booking_{$field}_min";
                 $max_key = "booking_{$field}_max";
@@ -82,6 +88,129 @@ try {
                     echo json_encode(['error' => "{$field} max length must be >= min length"]);
                     exit;
                 }
+            }
+        }
+
+        if ($tab === 'booking') {
+            $start_time = trim((string) ($data['booking_start_time'] ?? '09:00'));
+            $end_time = trim((string) ($data['booking_end_time'] ?? '17:00'));
+
+            if (!preg_match('/^\d{2}:\d{2}(?::\d{2})?$/', $start_time) || !preg_match('/^\d{2}:\d{2}(?::\d{2})?$/', $end_time)) {
+                http_response_code(422);
+                echo json_encode(['error' => 'Booking times must be valid HH:MM values']);
+                exit;
+            }
+
+            if (strlen($start_time) === 5) {
+                $start_time .= ':00';
+            }
+            if (strlen($end_time) === 5) {
+                $end_time .= ':00';
+            }
+
+            if ($end_time <= $start_time) {
+                http_response_code(422);
+                echo json_encode(['error' => 'Booking end time must be after start time']);
+                exit;
+            }
+
+            $days_enabled = false;
+            foreach (['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as $day) {
+                if (!empty($data['booking_show_' . $day])) {
+                    $days_enabled = true;
+                    break;
+                }
+            }
+
+            if (!$days_enabled) {
+                http_response_code(422);
+                echo json_encode(['error' => 'Select at least one booking day']);
+                exit;
+            }
+
+            $data['booking_start_time'] = substr($start_time, 0, 5);
+            $data['booking_end_time'] = substr($end_time, 0, 5);
+
+            $db = get_db();
+            $existingTypes = [];
+            try {
+                $stmt = $db->query('SELECT id, name, duration_minutes, color_hex, is_active FROM appointment_types ORDER BY id ASC');
+                $existingTypes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (Throwable $e) {
+                $existingTypes = [];
+            }
+
+            try {
+                $db->beginTransaction();
+
+                foreach ($existingTypes as $typeRow) {
+                    $typeId = (int) $typeRow['id'];
+                    $typePrefix = 'appt_type_' . $typeId . '_';
+                    $deleteRequested = !empty($data[$typePrefix . 'delete']);
+
+                    if ($deleteRequested) {
+                        $stmt = $db->prepare('SELECT COUNT(*) FROM appointments WHERE appointment_type_id = ?');
+                        $stmt->execute([$typeId]);
+                        $appointmentCount = (int) $stmt->fetchColumn();
+
+                        $stmt = $db->prepare('SELECT COUNT(*) FROM provider_appointment_types WHERE appointment_type_id = ?');
+                        $stmt->execute([$typeId]);
+                        $providerTypeCount = (int) $stmt->fetchColumn();
+
+                        if ($appointmentCount > 0 || $providerTypeCount > 0) {
+                            throw new RuntimeException('Cannot delete an appointment type that is already in use. Unassign it first or set it inactive.');
+                        }
+
+                        $stmt = $db->prepare('DELETE FROM appointment_types WHERE id = ?');
+                        $stmt->execute([$typeId]);
+                        continue;
+                    }
+
+                    $name = trim((string) ($data[$typePrefix . 'name'] ?? ''));
+                    if ($name === '') {
+                        throw new RuntimeException('Appointment type name cannot be empty.');
+                    }
+
+                    $durationMinutes = (int) ($data[$typePrefix . 'duration_minutes'] ?? 30);
+                    if ($durationMinutes < 1) {
+                        throw new RuntimeException('Appointment type duration must be at least 1 minute.');
+                    }
+
+                    $colorHex = trim((string) ($data[$typePrefix . 'color_hex'] ?? '#2457ff'));
+                    if (!preg_match('/^#[0-9A-Fa-f]{6}$/', $colorHex)) {
+                        throw new RuntimeException('Appointment type colour must be a valid hex value.');
+                    }
+
+                    $isActive = !empty($data[$typePrefix . 'is_active']) ? 1 : 0;
+                    $stmt = $db->prepare('UPDATE appointment_types SET name = ?, duration_minutes = ?, color_hex = ?, is_active = ? WHERE id = ?');
+                    $stmt->execute([$name, $durationMinutes, $colorHex, $isActive, $typeId]);
+                }
+
+                $newName = trim((string) ($data['new_appt_type_name'] ?? ''));
+                if ($newName !== '') {
+                    $newDuration = (int) ($data['new_appt_type_duration_minutes'] ?? 30);
+                    if ($newDuration < 1) {
+                        throw new RuntimeException('New appointment type duration must be at least 1 minute.');
+                    }
+
+                    $newColor = trim((string) ($data['new_appt_type_color_hex'] ?? '#2457ff'));
+                    if (!preg_match('/^#[0-9A-Fa-f]{6}$/', $newColor)) {
+                        throw new RuntimeException('New appointment type colour must be a valid hex value.');
+                    }
+
+                    $newActive = !empty($data['new_appt_type_is_active']) ? 1 : 0;
+                    $stmt = $db->prepare('INSERT INTO appointment_types (name, duration_minutes, color_hex, is_active) VALUES (?, ?, ?, ?)');
+                    $stmt->execute([$newName, $newDuration, $newColor, $newActive]);
+                }
+
+                $db->commit();
+            } catch (Throwable $e) {
+                if ($db->inTransaction()) {
+                    $db->rollBack();
+                }
+                http_response_code(422);
+                echo json_encode(['error' => $e->getMessage()]);
+                exit;
             }
         }
         
@@ -109,11 +238,11 @@ try {
             if (isset($data[$k])) {
                 $value = $data[$k];
                 // Handle checkboxes (they're only present if checked)
-                if (strpos($k, '_display') !== false || strpos($k, '_required') !== false || strpos($k, '_require') !== false || strpos($k, '_enabled') !== false || strpos($k, '_letters_only') !== false || strpos($k, '_numbers_only') !== false) {
+                if (strpos($k, '_display') !== false || strpos($k, '_required') !== false || strpos($k, '_require') !== false || strpos($k, '_enabled') !== false || strpos($k, '_letters_only') !== false || strpos($k, '_numbers_only') !== false || strpos($k, '_show_') !== false) {
                     $value = $value === '1' ? '1' : '0';
                 }
                 set_setting($k, $value);
-            } elseif (strpos($k, '_display') !== false || strpos($k, '_required') !== false || strpos($k, '_require') !== false || strpos($k, '_enabled') !== false || strpos($k, '_letters_only') !== false || strpos($k, '_numbers_only') !== false) {
+            } elseif (strpos($k, '_display') !== false || strpos($k, '_required') !== false || strpos($k, '_require') !== false || strpos($k, '_enabled') !== false || strpos($k, '_letters_only') !== false || strpos($k, '_numbers_only') !== false || strpos($k, '_show_') !== false) {
                 // Checkbox not present means it was unchecked
                 set_setting($k, '0');
             }
@@ -122,8 +251,10 @@ try {
         $message = 'Settings saved successfully';
         if ($tab === 'authentication') {
             $message = 'Authentication settings saved successfully';
+        } elseif ($tab === 'customer_registration') {
+            $message = 'Customer registration settings saved successfully';
         } elseif ($tab === 'booking') {
-            $message = 'Booking settings saved successfully';
+            $message = 'Booking settings and appointment types saved successfully';
         } elseif ($tab === 'phpmailer') {
             $message = 'PHPMailer settings saved successfully';
         } elseif ($tab === 'general') {

@@ -206,6 +206,24 @@ function get_time(?string $format = null): string
     return $dt->format(DateTime::ATOM);
 }
 
+function get_app_timezone_name(): string
+{
+    $timezone = @date_default_timezone_get();
+    if ($timezone) {
+        return $timezone;
+    }
+
+    if (defined('TZ') && TZ) {
+        return TZ;
+    }
+
+    if (defined('APP_TIMEZONE') && APP_TIMEZONE) {
+        return APP_TIMEZONE;
+    }
+
+    return 'UTC';
+}
+
 function get_app_root_url(): string
 {
     $configured = trim((string) get_setting('root_url', ''));
@@ -309,11 +327,15 @@ function is_email_whitelist_enabled(): bool
     return (bool) (int) $setting;
 }
 
-function validate_email(string $email): string|bool
+function validate_email(string $email, bool $enforce_domain_rules = true): string|bool
 {
     $email = trim($email);
     if (!validate_email_format($email)) {
         return 'Invalid email format';
+    }
+
+    if (!$enforce_domain_rules) {
+        return true;
     }
 
     list($local, $domain) = explode('@', $email);
@@ -663,6 +685,235 @@ function send_email(string $to_email, string $subject, string $body_html, string
     } catch (\Exception $e) {
         $debug[] = "❌ EXCEPTION: " . $e->getMessage();
         return $debug;
+    }
+}
+
+// Customer settings and validation helpers
+function get_customer_field_settings(): array
+{
+    return [
+        'first_name' => [
+            'display' => (bool) (int) get_setting('booking_firstname_display', '1'),
+            'required' => (bool) (int) get_setting('booking_firstname_required', '1'),
+            'letters_only' => (bool) (int) get_setting('booking_firstname_letters_only', '0'),
+            'min_length' => (int) get_setting('booking_firstname_min', '2'),
+            'max_length' => (int) get_setting('booking_firstname_max', '50'),
+        ],
+        'last_name' => [
+            'display' => (bool) (int) get_setting('booking_lastname_display', '1'),
+            'required' => (bool) (int) get_setting('booking_lastname_required', '1'),
+            'letters_only' => (bool) (int) get_setting('booking_lastname_letters_only', '0'),
+            'min_length' => (int) get_setting('booking_lastname_min', '2'),
+            'max_length' => (int) get_setting('booking_lastname_max', '50'),
+        ],
+        'middle_name' => [
+            'display' => (bool) (int) get_setting('booking_middlename_display', '0'),
+            'required' => (bool) (int) get_setting('booking_middlename_required', '0'),
+            'letters_only' => (bool) (int) get_setting('booking_middlename_letters_only', '0'),
+            'min_length' => (int) get_setting('booking_middlename_min', '2'),
+            'max_length' => (int) get_setting('booking_middlename_max', '50'),
+        ],
+        'email' => [
+            'display' => (bool) (int) get_setting('booking_email_display', '1'),
+            'required' => (bool) (int) get_setting('booking_email_required', '1'),
+        ],
+        'mobile' => [
+            'display' => (bool) (int) get_setting('booking_phone_display', '1'),
+            'required' => (bool) (int) get_setting('booking_phone_required', '0'),
+            'numbers_only' => (bool) (int) get_setting('booking_phone_numbers_only', '1'),
+            'min_length' => (int) get_setting('booking_phone_min', '10'),
+            'max_length' => (int) get_setting('booking_phone_max', '20'),
+        ],
+    ];
+}
+
+function get_booking_calendar_settings(): array
+{
+    return [
+        'show_monday' => (bool) (int) get_setting('booking_show_monday', '1'),
+        'show_tuesday' => (bool) (int) get_setting('booking_show_tuesday', '1'),
+        'show_wednesday' => (bool) (int) get_setting('booking_show_wednesday', '1'),
+        'show_thursday' => (bool) (int) get_setting('booking_show_thursday', '1'),
+        'show_friday' => (bool) (int) get_setting('booking_show_friday', '1'),
+        'show_saturday' => (bool) (int) get_setting('booking_show_saturday', '0'),
+        'show_sunday' => (bool) (int) get_setting('booking_show_sunday', '0'),
+        'start_time' => (string) get_setting('booking_start_time', '09:00'),
+        'end_time' => (string) get_setting('booking_end_time', '17:00'),
+        'show_now_indicator' => (bool) (int) get_setting('booking_show_now_indicator', '1'),
+    ];
+}
+
+function get_appointment_types(bool $activeOnly = false): array
+{
+    try {
+        $db = get_db();
+        $sql = 'SELECT id, name, duration_minutes, color_hex, is_active FROM appointment_types';
+        if ($activeOnly) {
+            $sql .= ' WHERE is_active = 1';
+        }
+        $sql .= ' ORDER BY id ASC';
+
+        $stmt = $db->query($sql);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function validate_customer_field(string $fieldName, ?string $value): ?string
+{
+    $settings = get_customer_field_settings();
+    if (!isset($settings[$fieldName])) {
+        return 'Unknown field: ' . $fieldName;
+    }
+
+    $cfg = $settings[$fieldName];
+    $value = trim((string) ($value ?? ''));
+
+    if (empty($value) && $cfg['required']) {
+        return ucwords(str_replace('_', ' ', $fieldName)) . ' is required';
+    }
+
+    if (empty($value)) {
+        return null;
+    }
+
+    if (in_array($fieldName, ['first_name', 'last_name', 'middle_name'], true)) {
+        if ($cfg['letters_only'] && !preg_match('/^[a-zA-Z\s-\']+$/', $value)) {
+            return ucwords(str_replace('_', ' ', $fieldName)) . ' must contain only letters, spaces, hyphens, and apostrophes';
+        }
+        if (strlen($value) < $cfg['min_length']) {
+            return ucwords(str_replace('_', ' ', $fieldName)) . ' must be at least ' . $cfg['min_length'] . ' characters';
+        }
+        if (strlen($value) > $cfg['max_length']) {
+            return ucwords(str_replace('_', ' ', $fieldName)) . ' must not exceed ' . $cfg['max_length'] . ' characters';
+        }
+    }
+
+    if ($fieldName === 'email') {
+        if (!filter_var($value, FILTER_VALIDATE_EMAIL)) {
+            return 'Email address is invalid';
+        }
+    }
+
+    if ($fieldName === 'mobile') {
+        if ($cfg['numbers_only'] && !preg_match('/^[0-9\s\-\+\(\)]+$/', $value)) {
+            return 'Phone number can only contain numbers, spaces, hyphens, plus sign, and parentheses';
+        }
+        if (strlen($value) < $cfg['min_length']) {
+            return 'Phone number must be at least ' . $cfg['min_length'] . ' characters';
+        }
+        if (strlen($value) > $cfg['max_length']) {
+            return 'Phone number must not exceed ' . $cfg['max_length'] . ' characters';
+        }
+    }
+
+    return null;
+}
+
+function get_customer_missing_required_fields(array $data): array
+{
+    $settings = get_customer_field_settings();
+    $missing = [];
+
+    foreach ($settings as $fieldName => $cfg) {
+        if ($cfg['required'] && $cfg['display']) {
+            $value = trim((string) ($data[$fieldName] ?? ''));
+            if (empty($value)) {
+                $missing[] = $fieldName;
+            }
+        }
+    }
+
+    return $missing;
+}
+
+
+function create_customer(string $fullName, ?string $email, ?string $mobile): ?int
+{
+    try {
+        $db = get_db();
+        $stmt = $db->prepare('INSERT INTO customers (full_name, email, mobile) VALUES (?, ?, ?)');
+        $stmt->execute([$fullName, $email ?: '', $mobile ?: '']);
+        return (int) $db->lastInsertId();
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function get_customer_by_email(string $email): ?array
+{
+    try {
+        $db = get_db();
+        $stmt = $db->prepare('SELECT id, email, mobile, full_name FROM customers WHERE email = ? LIMIT 1');
+        $stmt->execute([$email]);
+        return $stmt->fetch() ?: null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function get_customer_by_id(int $id): ?array
+{
+    try {
+        $db = get_db();
+        $stmt = $db->prepare('SELECT id, email, mobile, full_name FROM customers WHERE id = ? LIMIT 1');
+        $stmt->execute([$id]);
+        return $stmt->fetch() ?: null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+// User search helpers
+function search_users(string $query = '', int $limit = 50, int $offset = 0): array
+{
+    try {
+        $db = get_db();
+
+        $query = trim($query);
+
+        if (empty($query)) {
+            $stmt = $db->prepare('SELECT id, email, full_name, first_name, last_name, phone, role, is_active, created_at FROM users ORDER BY full_name ASC, created_at DESC LIMIT ? OFFSET ?');
+            $stmt->execute([$limit, $offset]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+        $searchPattern = '%' . $query . '%';
+        $stmt = $db->prepare("
+            SELECT id, email, full_name, first_name, last_name, phone, role, is_active, created_at
+            FROM users
+            WHERE full_name LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ?
+            ORDER BY full_name ASC, created_at DESC
+            LIMIT ? OFFSET ?
+        ");
+        $stmt->execute([$searchPattern, $searchPattern, $searchPattern, $searchPattern, $searchPattern, $limit, $offset]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function count_users(string $query = ''): int
+{
+    try {
+        $db = get_db();
+        $query = trim($query);
+
+        if (empty($query)) {
+            $stmt = $db->query('SELECT COUNT(*) as cnt FROM users');
+            return (int) ($stmt->fetch()['cnt'] ?? 0);
+        }
+
+        $searchPattern = '%' . $query . '%';
+        $stmt = $db->prepare("
+            SELECT COUNT(*) as cnt FROM users
+            WHERE full_name LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ?
+        ");
+        $stmt->execute([$searchPattern, $searchPattern, $searchPattern, $searchPattern, $searchPattern]);
+        return (int) ($stmt->fetch()['cnt'] ?? 0);
+    } catch (Throwable $e) {
+        return 0;
     }
 }
 

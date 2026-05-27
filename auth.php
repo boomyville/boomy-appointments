@@ -139,7 +139,7 @@ try {
             exit;
         }
 
-        $emailValidation = validate_email($email);
+        $emailValidation = validate_email($email, false);
         if ($emailValidation !== true) {
             insert_login_attempt($email, false);
             http_response_code(422);

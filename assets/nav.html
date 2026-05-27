@@ -1,0 +1,21 @@
+<nav class="admin-nav">
+  <a href="admin.php" class="admin-nav-brand">📊 <?php echo htmlspecialchars(APP_NAME); ?></a>
+  
+  <div class="admin-nav-links">
+    <!-- Navigation links -->
+    <a href="admin.php" class="admin-nav-link<?php echo ($current_page === 'admin.php') ? ' active' : ''; ?>">📊 Dashboard</a>
+    <a href="users.php" class="admin-nav-link<?php echo ($current_page === 'users.php') ? ' active' : ''; ?>">👥 Users</a>
+    <a href="customers.php" class="admin-nav-link<?php echo ($current_page === 'customers.php') ? ' active' : ''; ?>">👤 Customers</a>
+    <a href="calendar.php" class="admin-nav-link<?php echo ($current_page === 'calendar.php') ? ' active' : ''; ?>">📅 Calendar</a>
+    <a href="settings.php" class="admin-nav-link<?php echo ($current_page === 'settings.php') ? ' active' : ''; ?>">⚙️ Settings</a>
+    
+    <!-- Theme toggle -->
+    <button type="button" id="themeToggleBtn" class="theme-toggle-btn">🌙 Dark mode</button>
+    
+    <!-- Logout -->
+    <form id="logoutForm" action="auth.php?action=logout" method="post" data-api style="margin:0; display:inline;">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <button type="submit" class="logout-btn">🚪 Sign Out</button>
+    </form>
+  </div>
+</nav>

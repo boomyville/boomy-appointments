@@ -218,19 +218,26 @@
       return;
     }
 
-    if (document.getElementById('themeToggleBtn')) return;
+    // Check if button already exists in DOM (e.g., in sidebar)
+    let button = document.getElementById('themeToggleBtn');
+    
+    // If button doesn't exist, create and append one to the body
+    if (!button) {
+      button = document.createElement('button');
+      button.id = 'themeToggleBtn';
+      button.className = 'theme-toggle-button';
+      button.type = 'button';
+      document.body.appendChild(button);
+    }
 
-    const button = document.createElement('button');
-    button.id = 'themeToggleBtn';
-    button.className = 'theme-toggle-button';
-    button.type = 'button';
-    button.addEventListener('click', () => {
-      const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
-      applyTheme(current === 'dark' ? 'light' : 'dark');
-    });
-
-    document.body.appendChild(button);
-    applyTheme(initial);
+    // Attach click listener (works whether button already existed or was just created)
+    if (button && !button.__themeToggleAttached) {
+      button.__themeToggleAttached = true;
+      button.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+        applyTheme(current === 'dark' ? 'light' : 'dark');
+      });
+    }
   }
 
   function attachDarkModeCheckbox() {

@@ -39,6 +39,18 @@ $phone_numbers_only = (int) get_setting('booking_phone_numbers_only', '1');
 $phone_min = (int) get_setting('booking_phone_min', '10');
 $phone_max = (int) get_setting('booking_phone_max', '20');
 
+$booking_show_monday = (int) get_setting('booking_show_monday', '1');
+$booking_show_tuesday = (int) get_setting('booking_show_tuesday', '1');
+$booking_show_wednesday = (int) get_setting('booking_show_wednesday', '1');
+$booking_show_thursday = (int) get_setting('booking_show_thursday', '1');
+$booking_show_friday = (int) get_setting('booking_show_friday', '1');
+$booking_show_saturday = (int) get_setting('booking_show_saturday', '0');
+$booking_show_sunday = (int) get_setting('booking_show_sunday', '0');
+$booking_start_time = get_setting('booking_start_time', '09:00');
+$booking_end_time = get_setting('booking_end_time', '17:00');
+$booking_show_now_indicator = (int) get_setting('booking_show_now_indicator', '1');
+$appointmentTypes = get_appointment_types();
+
 // PHPMailer/Gmail settings
 $smtp_host = get_setting('smtp_host', 'smtp.gmail.com');
 $smtp_port = (int) get_setting('smtp_port', '587');
@@ -66,6 +78,8 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Settings - <?php echo htmlspecialchars(APP_NAME); ?></title>
   <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@1.*/css/pico.min.css">
+  <link rel="stylesheet" href="assets/css/theme.css">
+  <link rel="stylesheet" href="assets/css/admin-shared.css">
   <style>
     .tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap: wrap; }
     .tab { cursor:pointer; padding: 8px 12px; }
@@ -77,25 +91,24 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
     .field-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .success-msg { color: green; margin-top: 8px; }
     .error-msg { color: red; margin-top: 8px; }
+    .appointment-types-table td, .appointment-types-table th { vertical-align: middle; }
+    .appointment-types-table input[type="text"],
+    .appointment-types-table input[type="number"] { width: 100%; }
+    .appointment-types-table input[type="color"] { width: 100%; min-width: 72px; height: 40px; padding: 2px; }
   </style>
 </head>
 <body>
-<main class="container">
-  <header style="display:flex; align-items:center; justify-content:space-between; gap:16px;">
-    <div>
-      <h1>Settings</h1>
-      <p>Signed in as <?php echo htmlspecialchars($user['full_name'] ?? $user['email']); ?></p>
-    </div>
-    <div>
-      <form id="logoutForm" data-api action="auth.php?action=logout" method="post" style="margin:0;">
-        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-        <button type="submit">Logout</button>
-      </form>
-    </div>
+  <?php $current_page = 'settings.php'; include __DIR__ . '/assets/nav.html'; ?>
+
+  <main class="container">
+  <header style="margin-bottom: 24px;">
+    <h1>Settings</h1>
+    <p>Signed in as <?php echo htmlspecialchars($user['full_name'] ?? $user['email']); ?></p>
   </header>
 
   <nav class="tabs" role="tablist">
     <button class="tab active" data-tab="general" role="tab">General</button>
+    <button class="tab" data-tab="customer_registration" role="tab">Customer Registration</button>
     <button class="tab" data-tab="booking" role="tab">Booking</button>
     <button class="tab" data-tab="authentication" role="tab">Authentication</button>
     <button class="tab" data-tab="phpmailer" role="tab">PHPMailer</button>
@@ -131,9 +144,9 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
     </form>
   </section>
 
-  <!-- BOOKING TAB -->
-  <section id="tab-booking" class="tab-panel">
-    <form id="bookingForm" data-api data-no-reload="true" action="settings_api.php?action=save" method="post">
+  <!-- CUSTOMER REGISTRATION TAB -->
+  <section id="tab-customer_registration" class="tab-panel">
+    <form id="customerRegistrationForm" data-api data-no-reload="true" action="settings_api.php?action=save" method="post">
       <fieldset class="field-group">
         <legend>First Name</legend>
         <div class="field-controls">
@@ -191,9 +204,110 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
         </div>
       </fieldset>
 
+      <input type="hidden" name="tab" value="customer_registration">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <button type="submit">Save Customer Registration</button>
+      <div id="customerRegistrationMsg"></div>
+    </form>
+  </section>
+
+  <!-- BOOKING TAB -->
+  <section id="tab-booking" class="tab-panel">
+    <form id="bookingForm" data-api data-no-reload="true" action="settings_api.php?action=save" method="post">
+      <fieldset class="field-group">
+        <legend>Days to Show</legend>
+        <div class="field-controls">
+          <label><input type="checkbox" name="booking_show_monday" value="1" <?php echo $booking_show_monday ? 'checked' : ''; ?>> Monday</label>
+          <label><input type="checkbox" name="booking_show_tuesday" value="1" <?php echo $booking_show_tuesday ? 'checked' : ''; ?>> Tuesday</label>
+          <label><input type="checkbox" name="booking_show_wednesday" value="1" <?php echo $booking_show_wednesday ? 'checked' : ''; ?>> Wednesday</label>
+          <label><input type="checkbox" name="booking_show_thursday" value="1" <?php echo $booking_show_thursday ? 'checked' : ''; ?>> Thursday</label>
+          <label><input type="checkbox" name="booking_show_friday" value="1" <?php echo $booking_show_friday ? 'checked' : ''; ?>> Friday</label>
+          <label><input type="checkbox" name="booking_show_saturday" value="1" <?php echo $booking_show_saturday ? 'checked' : ''; ?>> Saturday</label>
+          <label><input type="checkbox" name="booking_show_sunday" value="1" <?php echo $booking_show_sunday ? 'checked' : ''; ?>> Sunday</label>
+        </div>
+      </fieldset>
+
+      <fieldset class="field-group">
+        <legend>Visible Time Range</legend>
+        <div class="field-controls">
+          <label>Default start time <input type="time" name="booking_start_time" value="<?php echo htmlspecialchars($booking_start_time); ?>"></label>
+          <label>Default end time <input type="time" name="booking_end_time" value="<?php echo htmlspecialchars($booking_end_time); ?>"></label>
+        </div>
+        <p style="font-size: 0.9em; color: #666;">The calendar will only render this time range in day and week views.</p>
+      </fieldset>
+
+      <fieldset class="field-group">
+        <legend>Live Time Marker</legend>
+        <label><input type="checkbox" name="booking_show_now_indicator" value="1" <?php echo $booking_show_now_indicator ? 'checked' : ''; ?>> Show red line for the current time</label>
+      </fieldset>
+
+      <fieldset class="field-group">
+        <legend>Appointment Types</legend>
+        <p style="font-size: 0.9em; color: #666; margin-bottom: 12px;">Manage the types used by the calendar. New types default to 30 minutes unless you change the duration.</p>
+        <div style="overflow-x:auto;">
+          <table class="admin-table appointment-types-table" style="min-width: 760px; margin-top: 0;">
+            <thead>
+              <tr>
+                <th style="width: 88px;">Delete</th>
+                <th>Appointment type name</th>
+                <th style="width: 180px;">Default duration</th>
+                <th style="width: 180px;">Appointment colour</th>
+                <th style="width: 88px;">Active</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($appointmentTypes as $appointmentType): ?>
+                <?php $typeId = (int) $appointmentType['id']; ?>
+                <tr>
+                  <td>
+                    <label style="display:inline-flex; align-items:center; gap:6px; font-weight:600; margin:0; color: var(--muted);">
+                      <input type="checkbox" name="appt_type_<?php echo $typeId; ?>_delete" value="1">
+                      Delete
+                    </label>
+                  </td>
+                  <td>
+                    <input type="text" name="appt_type_<?php echo $typeId; ?>_name" value="<?php echo htmlspecialchars($appointmentType['name']); ?>" required>
+                  </td>
+                  <td>
+                    <input type="number" name="appt_type_<?php echo $typeId; ?>_duration_minutes" min="1" step="1" value="<?php echo (int) $appointmentType['duration_minutes']; ?>" required>
+                  </td>
+                  <td>
+                    <input type="color" name="appt_type_<?php echo $typeId; ?>_color_hex" value="<?php echo htmlspecialchars($appointmentType['color_hex'] ?: '#2457ff'); ?>">
+                  </td>
+                  <td>
+                    <label style="display:inline-flex; align-items:center; gap:6px; font-weight:600; margin:0; color: var(--muted);">
+                      <input type="checkbox" name="appt_type_<?php echo $typeId; ?>_is_active" value="1" <?php echo !empty($appointmentType['is_active']) ? 'checked' : ''; ?>>
+                      Active
+                    </label>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+              <tr>
+                <td></td>
+                <td>
+                  <input type="text" name="new_appt_type_name" value="" placeholder="New appointment type name">
+                </td>
+                <td>
+                  <input type="number" name="new_appt_type_duration_minutes" min="1" step="1" value="30">
+                </td>
+                <td>
+                  <input type="color" name="new_appt_type_color_hex" value="#2457ff">
+                </td>
+                <td>
+                  <label style="display:inline-flex; align-items:center; gap:6px; font-weight:600; margin:0; color: var(--muted);">
+                    <input type="checkbox" name="new_appt_type_is_active" value="1" checked>
+                    Active
+                  </label>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </fieldset>
+
       <input type="hidden" name="tab" value="booking">
       <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
-      <button type="submit">Save Booking</button>
+      <button type="submit">Save Booking &amp; Types</button>
       <div id="bookingMsg"></div>
     </form>
   </section>
@@ -210,6 +324,7 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
         
         <label for="email_domain_blacklist">Blocked domains (one per line)</label>
         <textarea id="email_domain_blacklist" name="email_domain_blacklist" rows="4" placeholder="tempmail.com&#10;throwaway.com"><?php echo htmlspecialchars($email_domain_blacklist); ?></textarea>
+        <p style="font-size: 0.9em; color: #666;"><em>These rules apply to registration and password recovery flows, not login.</em></p>
       </fieldset>
 
       <fieldset class="field-group">
@@ -369,7 +484,7 @@ setupFieldDependencies('booking_email');
 setupFieldDependencies('booking_phone');
 
 // Form submission handlers for inline messages
-['generalForm', 'bookingForm', 'authenticationForm', 'phpmailerForm', 'changePasswordForm'].forEach(formId => {
+['generalForm', 'customerRegistrationForm', 'bookingForm', 'authenticationForm', 'phpmailerForm', 'changePasswordForm'].forEach(formId => {
   const form = document.getElementById(formId);
   const msgDiv = document.getElementById(formId.replace('Form', 'Msg'));
   if (!form || !msgDiv || form.__inlineStatusAttached) return;
@@ -560,5 +675,6 @@ function htmlspecialchars(str) {
 }
 
 </script>
+<script src="assets/js/global.js"></script>
 </body>
 </html>

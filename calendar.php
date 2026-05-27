@@ -1,0 +1,1136 @@
+<?php
+declare(strict_types=1);
+
+require_once __DIR__ . '/functions.php';
+init_session();
+require_login();
+
+$user = $_SESSION['user'] ?? [];
+$role = (string) ($user['role'] ?? '');
+$isStaff = in_array($role, ['admin', 'provider'], true);
+$providerId = $isStaff && isset($user['id']) ? (int) $user['id'] : null;
+
+$providers = [];
+$appointmentTypes = [];
+
+try {
+  $db = get_db();
+
+  try {
+    $stmt = $db->query("SELECT id, full_name, email, role FROM users WHERE role IS NOT NULL AND role <> '' AND role <> 'customer' ORDER BY full_name ASC, id ASC");
+    $providers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+  } catch (Throwable $e) {
+    $providers = [];
+  }
+
+  try {
+    $stmt = $db->query('SELECT id, name, duration_minutes, color_hex FROM appointment_types WHERE is_active = 1 ORDER BY id ASC');
+    $appointmentTypes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+  } catch (Throwable $e) {
+    $appointmentTypes = [];
+  }
+} catch (Throwable $e) {
+  $providers = [];
+  $appointmentTypes = [];
+}
+
+$defaultProviderId = !empty($providers) ? (int) $providers[0]['id'] : null;
+$defaultAppointmentTypeId = !empty($appointmentTypes) ? (int) $appointmentTypes[0]['id'] : null;
+$bookingCalendarSettings = get_booking_calendar_settings();
+$serverTimezoneName = get_app_timezone_name();
+$serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneName)))->format(DateTimeInterface::ATOM);
+?>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Calendar - <?php echo htmlspecialchars(APP_NAME); ?></title>
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/css/theme.css">
+  <link rel="stylesheet" href="assets/css/admin-shared.css">
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --panel: rgba(255, 255, 255, 0.88);
+      --panel-border: rgba(15, 23, 42, 0.08);
+      --text: #0f172a;
+      --muted: #5b6477;
+      --accent: #2457ff;
+      --accent-2: #10b981;
+      --shadow: 0 24px 70px rgba(15, 23, 42, 0.12);
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(36, 87, 255, 0.14), transparent 35%),
+        radial-gradient(circle at top right, rgba(16, 185, 129, 0.12), transparent 28%),
+        linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+    }
+
+    .page-shell {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 28px 18px 42px;
+    }
+
+    .hero {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(2rem, 3vw, 3rem);
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+    }
+
+    .hero p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      max-width: 62ch;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    .toolbar a,
+    .toolbar button {
+      border: 1px solid var(--panel-border);
+      background: rgba(255, 255, 255, 0.8);
+      color: var(--text);
+      text-decoration: none;
+      border-radius: 999px;
+      padding: 10px 14px;
+      font: inherit;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 18px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 18px 20px 0;
+    }
+
+    .panel-header-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .panel-header-row h2 {
+      margin: 0;
+    }
+
+    .server-clock {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border: 1px solid var(--panel-border);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.55);
+      color: var(--muted);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    html[data-theme="dark"] .server-clock {
+      background: rgba(15, 23, 42, 0.45);
+    }
+
+    .server-clock strong {
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .panel-header small {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    #calendar {
+      padding: 18px;
+    }
+
+    .fc {
+      --fc-border-color: rgba(15, 23, 42, 0.08);
+      --fc-page-bg-color: transparent;
+      --fc-neutral-bg-color: #fff;
+      --fc-today-bg-color: rgba(36, 87, 255, 0.06);
+      --fc-event-text-color: #fff;
+      --fc-button-bg-color: #f8fafc;
+      --fc-button-border-color: rgba(15, 23, 42, 0.10);
+      --fc-button-hover-bg-color: #e2e8f0;
+      --fc-button-hover-border-color: rgba(15, 23, 42, 0.14);
+      --fc-button-active-bg-color: #2457ff;
+      --fc-button-active-border-color: #2457ff;
+      --fc-button-text-color: #0f172a;
+      --fc-event-border-color: transparent;
+      --fc-list-event-hover-bg-color: rgba(36, 87, 255, 0.06);
+      font-size: 0.95rem;
+    }
+
+    .fc .fc-daygrid-day.fc-day-today,
+    .fc .fc-timegrid-col.fc-day-today {
+      background: rgba(36, 87, 255, 0.10) !important;
+    }
+
+    .fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 1.6rem;
+      min-height: 1.6rem;
+      padding: 0 0.4rem;
+      border-radius: 999px;
+      background: #2457ff;
+      color: #fff;
+      font-weight: 800;
+    }
+
+    .fc .fc-timegrid-now-indicator-container {
+      z-index: 6;
+      pointer-events: none;
+    }
+
+    .fc .fc-timegrid-now-indicator-line {
+      border-top: 3px solid #ef4444 !important;
+      height: 0 !important;
+      opacity: 1 !important;
+      box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.12);
+    }
+
+    .fc .fc-timegrid-now-indicator-arrow {
+      border-top-color: #ef4444 !important;
+      border-bottom-color: #ef4444 !important;
+      color: #ef4444 !important;
+    }
+
+    .fc .server-today {
+      background: rgba(36, 87, 255, 0.12) !important;
+    }
+
+    .fc .server-today .fc-col-header-cell-cushion,
+    .fc .server-today .fc-daygrid-day-number {
+      background: rgba(36, 87, 255, 0.18);
+      border-radius: 999px;
+      color: var(--text);
+      font-weight: 800;
+      padding: 0.15rem 0.55rem;
+    }
+
+    .fc .fc-toolbar-title {
+      font-size: clamp(1.3rem, 2vw, 1.8rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .fc .fc-button {
+      border-radius: 999px !important;
+      padding: 0.55rem 0.9rem;
+      box-shadow: none;
+    }
+
+    .booking-modal {
+      width: min(760px, calc(100vw - 24px));
+      border: 0;
+      padding: 0;
+      border-radius: 28px;
+      box-shadow: 0 28px 80px rgba(15, 23, 42, 0.18);
+      background: transparent;
+    }
+
+    .booking-modal::backdrop {
+      background: rgba(15, 23, 42, 0.5);
+      backdrop-filter: blur(4px);
+    }
+
+    .booking-card {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      color: var(--text);
+      border-radius: 28px;
+      overflow: hidden;
+    }
+
+    .booking-card__head {
+      padding: 20px 22px;
+      background: transparent;
+      color: var(--text);
+      border-bottom: 1px solid var(--panel-border);
+    }
+
+    .booking-card__head h2 {
+      margin: 0;
+      font-size: 1.4rem;
+      letter-spacing: -0.02em;
+    }
+
+    .booking-card__head p {
+      margin: 8px 0 0;
+      color: var(--muted);
+    }
+
+    .booking-card__body {
+      padding: 22px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .booking-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .booking-grid .span-2 {
+      grid-column: span 2;
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.92rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: #22304a;
+    }
+
+    .field input,
+    .field select,
+    .field textarea {
+      width: 100%;
+      border: 1px solid rgba(15, 23, 42, 0.15);
+      border-radius: 16px;
+      padding: 13px 14px;
+      font: inherit;
+      color: var(--text);
+      background: #fff;
+      box-sizing: border-box;
+    }
+
+    .field input:focus,
+    .field select:focus,
+    .field textarea:focus {
+      outline: 3px solid rgba(36, 87, 255, 0.14);
+      border-color: rgba(36, 87, 255, 0.5);
+    }
+
+    .booking-note {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .booking-meta {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      padding: 16px 18px;
+      border: 1px dashed var(--panel-border);
+      border-radius: 20px;
+      background: var(--panel);
+    }
+
+    .meta-item {
+      display: grid;
+      gap: 4px;
+    }
+
+    .meta-item span {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .meta-item strong {
+      font-size: 0.98rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .booking-card__footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 0 22px 22px;
+    }
+
+    .booking-card__footer .secondary {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .booking-card__footer button {
+      border: 1px solid var(--panel-border);
+      border-radius: 999px;
+      padding: 10px 16px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    html[data-theme="dark"] .booking-card__footer button {
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .booking-card__footer button:hover {
+      background: rgba(36, 87, 255, 0.08);
+    }
+
+    .booking-mode-toggle,
+    .booking-mode-toggle-secondary {
+      border: 1px solid var(--panel-border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    html[data-theme="dark"] .booking-mode-toggle,
+    html[data-theme="dark"] .booking-mode-toggle-secondary {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .booking-mode-toggle.is-active,
+    .booking-mode-toggle-secondary.is-active {
+      background: rgba(36, 87, 255, 0.10);
+    }
+
+    .booking-time-summary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      margin-top: 12px;
+      border: 1px solid var(--panel-border);
+      border-radius: 999px;
+      color: var(--text);
+      background: rgba(36, 87, 255, 0.06);
+      font-weight: 700;
+      width: fit-content;
+    }
+
+    .booking-time-summary strong {
+      font-weight: 800;
+    }
+
+    .booking-modal[data-mode="appointment"] .booking-draft-only {
+      display: none;
+    }
+
+    .booking-modal[data-mode="appointment"] .booking-card__footer .secondary {
+      display: none;
+    }
+
+    .booking-modal[data-mode="appointment"] .booking-card__footer {
+      justify-content: flex-end;
+    }
+
+    @media (max-width: 760px) {
+      .booking-grid,
+      .booking-meta {
+        grid-template-columns: 1fr;
+      }
+
+      .booking-grid .span-2 {
+        grid-column: auto;
+      }
+
+      .booking-card__footer {
+        flex-direction: column-reverse;
+        align-items: stretch;
+      }
+
+      .booking-card__footer button {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <?php
+    $current_page = 'calendar.php';
+    $navAssets = __DIR__ . '/assets/nav.html';
+    $navIncludes = __DIR__ . '/includes/nav.html';
+
+    if (is_file($navAssets)) {
+        include $navAssets;
+    } elseif (is_file($navIncludes)) {
+        include $navIncludes;
+    }
+  ?>
+  
+  <div class="admin-container">
+    <div class="admin-header">
+      <div>
+        <h1>Appointments Calendar</h1>
+        <p>Click a time slot to start a booking draft. Provider and appointment type options are loaded from the database.</p>
+      </div>
+    </div>
+
+    <div class="admin-panel">
+      <div class="panel-header-row">
+        <h2>Schedule Board</h2>
+        <div class="server-clock" aria-live="polite">
+          <span>Server time</span>
+          <strong id="serverClockValue"></strong>
+        </div>
+      </div>
+      <div id="calendar"></div>
+    </div>
+  </div>
+
+  <dialog id="bookingModal" class="booking-modal">
+    <div class="booking-card">
+      <div class="booking-card__head">
+        <h2 id="bookingModalTitle">New booking draft</h2>
+        <p id="bookingModalDescription">Select or create a customer, choose provider and appointment type.</p>
+      </div>
+      <div class="booking-card__body">
+        <div class="booking-meta">
+          <div class="meta-item">
+            <span>Start</span>
+            <strong id="selectedStartLabel">-</strong>
+          </div>
+          <div class="meta-item">
+            <span>End</span>
+            <strong id="selectedEndLabel">-</strong>
+          </div>
+        </div>
+
+        <div id="bookingTimeSummary" class="booking-time-summary" hidden>
+          <span>Appointment time</span>
+          <strong id="bookingTimeSummaryText">-</strong>
+        </div>
+
+        <div class="booking-grid booking-draft-only">
+          <div class="field span-2">
+            <label>Who do I want to book?</label>
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+              <button type="button" id="toggleCreateMode" class="booking-mode-toggle is-active">+ Create new customer</button>
+              <button type="button" id="toggleSelectMode" class="booking-mode-toggle-secondary" style="display:none;">or Select existing</button>
+            </div>
+
+            <div id="createCustomerSection">
+              <div class="field">
+                <label for="newCustomerName" style="font-size: 0.85rem; margin-bottom: 4px;">Customer Name</label>
+                <input id="newCustomerName" name="new_customer_name" type="text" placeholder="Full name">
+              </div>
+              <div class="field">
+                <label for="newCustomerEmail" style="font-size: 0.85rem; margin-bottom: 4px;">Email (optional)</label>
+                <input id="newCustomerEmail" name="new_customer_email" type="email" placeholder="customer@example.com">
+              </div>
+              <div class="field">
+                <label for="newCustomerMobile" style="font-size: 0.85rem; margin-bottom: 4px;">Mobile (optional)</label>
+                <input id="newCustomerMobile" name="new_customer_mobile" type="text" placeholder="1234567890">
+              </div>
+            </div>
+
+            <div id="selectCustomerSection" style="display:none;">
+              <select id="existingCustomerSelect" style="width: 100%; border: 1px solid var(--panel-border); border-radius: 16px; padding: 13px 14px; font: inherit; color: var(--text); background: var(--panel); box-sizing: border-box;">
+                <option value="">-- Search and select customer --</option>
+              </select>
+            </div>
+            
+            <input type="hidden" id="selectedCustomerId" value="">
+          </div>
+
+          <div class="field">
+            <label for="providerSelect">Which provider?</label>
+            <select id="providerSelect" name="provider_id">
+              <?php foreach ($providers as $index => $provider): ?>
+                <option value="<?php echo (int) $provider['id']; ?>" <?php echo $index === 0 ? 'selected' : ''; ?>>
+                  <?php echo htmlspecialchars($provider['full_name'] ?: $provider['email']); ?>
+                  <?php if (!empty($provider['role'])): ?>
+                    (<?php echo htmlspecialchars($provider['role']); ?>)
+                  <?php endif; ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="appointmentTypeSelect">Type of appointment</label>
+            <select id="appointmentTypeSelect" name="appointment_type_id">
+              <?php foreach ($appointmentTypes as $index => $appointmentType): ?>
+                <option value="<?php echo (int) $appointmentType['id']; ?>" data-duration="<?php echo (int) $appointmentType['duration_minutes']; ?>" <?php echo $index === 0 ? 'selected' : ''; ?>>
+                  <?php echo htmlspecialchars($appointmentType['name']); ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+
+          <div class="field span-2">
+            <label for="bookingNotes">Notes</label>
+            <textarea id="bookingNotes" name="notes" rows="3" placeholder="Optional notes for the booking draft"></textarea>
+          </div>
+        </div>
+
+        <p class="booking-note booking-draft-only">Customer creation and booking save actions will be implemented next. For now this modal captures draft details.</p>
+
+        <input type="hidden" id="bookingStart" value="">
+        <input type="hidden" id="bookingEnd" value="">
+      </div>
+      <div class="booking-card__footer">
+        <div class="secondary booking-draft-only">Draft mode - no save button yet</div>
+        <button type="button" id="closeBookingModal">Close</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+  <script>
+    const isStaff = <?php echo json_encode($isStaff); ?>;
+    const providerId = <?php echo json_encode($providerId); ?>;
+    const providers = <?php echo json_encode($providers, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+    const appointmentTypes = <?php echo json_encode($appointmentTypes, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+    const defaultProviderId = <?php echo json_encode($defaultProviderId); ?>;
+    const defaultAppointmentTypeId = <?php echo json_encode($defaultAppointmentTypeId); ?>;
+    const bookingCalendarSettings = <?php echo json_encode($bookingCalendarSettings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+    const serverTimezoneName = <?php echo json_encode($serverTimezoneName); ?>;
+    let serverNowIso = <?php echo json_encode($serverNowIso); ?>;
+
+    const calendarEl = document.getElementById('calendar');
+    const serverClockValue = document.getElementById('serverClockValue');
+    const bookingModal = document.getElementById('bookingModal');
+    const closeBookingModal = document.getElementById('closeBookingModal');
+    const selectedStartLabel = document.getElementById('selectedStartLabel');
+    const selectedEndLabel = document.getElementById('selectedEndLabel');
+    const bookingModalTitle = document.getElementById('bookingModalTitle');
+    const bookingModalDescription = document.getElementById('bookingModalDescription');
+    const bookingTimeSummary = document.getElementById('bookingTimeSummary');
+    const bookingTimeSummaryText = document.getElementById('bookingTimeSummaryText');
+    const bookingStart = document.getElementById('bookingStart');
+    const bookingEnd = document.getElementById('bookingEnd');
+    const providerSelect = document.getElementById('providerSelect');
+    const appointmentTypeSelect = document.getElementById('appointmentTypeSelect');
+    let currentBookingStartDate = null;
+    let currentBookingEndDate = null;
+
+    const fallbackDurationMinutes = appointmentTypes.length > 0 ? Number(appointmentTypes[0].duration_minutes || 30) : 30;
+
+    const visibleDaysOfWeek = [];
+    if (bookingCalendarSettings.show_sunday) visibleDaysOfWeek.push(0);
+    if (bookingCalendarSettings.show_monday) visibleDaysOfWeek.push(1);
+    if (bookingCalendarSettings.show_tuesday) visibleDaysOfWeek.push(2);
+    if (bookingCalendarSettings.show_wednesday) visibleDaysOfWeek.push(3);
+    if (bookingCalendarSettings.show_thursday) visibleDaysOfWeek.push(4);
+    if (bookingCalendarSettings.show_friday) visibleDaysOfWeek.push(5);
+    if (bookingCalendarSettings.show_saturday) visibleDaysOfWeek.push(6);
+    if (!visibleDaysOfWeek.length) {
+      visibleDaysOfWeek.push(1, 2, 3, 4, 5);
+    }
+
+    function normalizeTimeValue(value, fallback) {
+      const raw = String(value || fallback || '09:00').trim();
+      if (/^\d{2}:\d{2}$/.test(raw)) {
+        return raw + ':00';
+      }
+      if (/^\d{2}:\d{2}:\d{2}$/.test(raw)) {
+        return raw;
+      }
+      return fallback;
+    }
+
+    const visibleStartTime = normalizeTimeValue(bookingCalendarSettings.start_time, '09:00:00');
+    const visibleEndTime = normalizeTimeValue(bookingCalendarSettings.end_time, '17:00:00');
+    let serverNowBaseMs = Date.parse(serverNowIso);
+    let clientLoadMs = Date.now();
+    const serverNowFormatter = new Intl.DateTimeFormat(undefined, {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZone: serverTimezoneName
+    });
+
+    function getTimeZoneDateParts(date, timeZone) {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23'
+      }).formatToParts(date);
+
+      const values = {};
+      parts.forEach(function(part) {
+        if (part.type !== 'literal') {
+          values[part.type] = part.value;
+        }
+      });
+
+      return {
+        year: Number(values.year),
+        month: Number(values.month),
+        day: Number(values.day),
+        hour: Number(values.hour),
+        minute: Number(values.minute),
+        second: Number(values.second),
+        millisecond: date.getUTCMilliseconds()
+      };
+    }
+
+    function parseDateValue(value) {
+      if (value instanceof Date) {
+        return new Date(value.getTime());
+      }
+
+      const raw = String(value || '').trim();
+      if (!raw) {
+        return new Date(NaN);
+      }
+
+      if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(raw)) {
+        return new Date(raw);
+      }
+
+      const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+      return new Date(normalized + 'Z');
+    }
+
+    function getServerClockParts(date) {
+      return getTimeZoneDateParts(date, serverTimezoneName);
+    }
+
+    function getServerClockDate(date) {
+      const parts = getServerClockParts(date);
+      return new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second, parts.millisecond));
+    }
+
+    function getTimeZoneOffsetMs(date, timeZone) {
+      const parts = getTimeZoneDateParts(date, timeZone);
+      const utcGuess = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second, parts.millisecond);
+      return utcGuess - date.getTime();
+    }
+
+    function serverClockDateToInstant(date) {
+      const utcGuess = Date.UTC(
+        date.getUTCFullYear(),
+        date.getUTCMonth(),
+        date.getUTCDate(),
+        date.getUTCHours(),
+        date.getUTCMinutes(),
+        date.getUTCSeconds(),
+        date.getUTCMilliseconds()
+      );
+
+      let adjusted = new Date(utcGuess - getTimeZoneOffsetMs(new Date(utcGuess), serverTimezoneName));
+      const refinedOffset = getTimeZoneOffsetMs(adjusted, serverTimezoneName);
+      if (refinedOffset !== getTimeZoneOffsetMs(new Date(utcGuess), serverTimezoneName)) {
+        adjusted = new Date(utcGuess - refinedOffset);
+      }
+
+      return adjusted;
+    }
+
+    function toServerClockIso(value) {
+      const instant = parseDateValue(value);
+      if (Number.isNaN(instant.getTime())) {
+        return value;
+      }
+
+      return getServerClockDate(instant).toISOString();
+    }
+
+    function isSameServerCalendarDay(dateA, dateB) {
+      const partsA = getServerClockParts(dateA);
+      const partsB = getServerClockParts(dateB);
+      return partsA.year === partsB.year && partsA.month === partsB.month && partsA.day === partsB.day;
+    }
+
+    function getServerNowDate() {
+      return new Date(serverNowBaseMs + (Date.now() - clientLoadMs));
+    }
+
+    function timeToSeconds(timeValue) {
+      const parts = String(timeValue || '00:00:00').split(':').map(Number);
+      const hours = Number.isFinite(parts[0]) ? parts[0] : 0;
+      const minutes = Number.isFinite(parts[1]) ? parts[1] : 0;
+      const seconds = Number.isFinite(parts[2]) ? parts[2] : 0;
+      return (hours * 3600) + (minutes * 60) + seconds;
+    }
+
+    function secondsToTime(totalSeconds) {
+      const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+      const hours = String(Math.floor(safeSeconds / 3600)).padStart(2, '0');
+      const minutes = String(Math.floor((safeSeconds % 3600) / 60)).padStart(2, '0');
+      const seconds = String(safeSeconds % 60).padStart(2, '0');
+      return hours + ':' + minutes + ':' + seconds;
+    }
+
+    function secondsToHourTime(totalSeconds) {
+      const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+      const hours = String(Math.floor(safeSeconds / 3600)).padStart(2, '0');
+      return hours + ':00:00';
+    }
+
+    function getEffectiveSlotRange() {
+      const nowParts = getServerClockParts(getServerNowDate());
+      const nowSeconds = (nowParts.hour * 3600) + (nowParts.minute * 60) + nowParts.second;
+      const startSeconds = timeToSeconds(visibleStartTime);
+      const endSeconds = timeToSeconds(visibleEndTime);
+      let slotMinTime = visibleStartTime;
+      let slotMaxTime = visibleEndTime;
+
+      if (nowSeconds < startSeconds) {
+        slotMinTime = secondsToHourTime(Math.max(0, nowSeconds - 3600));
+      }
+
+      if (nowSeconds > endSeconds) {
+        slotMaxTime = secondsToHourTime(nowSeconds + 3600);
+      }
+
+      return { slotMinTime, slotMaxTime };
+    }
+
+    function updateServerClock() {
+      if (!serverClockValue) return;
+      serverClockValue.textContent = serverNowFormatter.format(getServerNowDate());
+    }
+
+    async function syncServerClock() {
+      try {
+        const response = await fetch('time.php?format=c', { credentials: 'same-origin' });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!data || !data.ok || !data.iso) return;
+        serverNowIso = data.iso;
+        serverNowBaseMs = Date.parse(serverNowIso);
+        clientLoadMs = Date.now();
+        updateServerClock();
+        if (window.calendarInstance) {
+          window.calendarInstance.setOption('now', getServerClockDate(getServerNowDate()));
+          const effectiveRange = getEffectiveSlotRange();
+          window.calendarInstance.setOption('slotMinTime', effectiveRange.slotMinTime);
+          window.calendarInstance.setOption('slotMaxTime', effectiveRange.slotMaxTime);
+          window.calendarInstance.setOption('scrollTime', effectiveRange.slotMinTime);
+        }
+      } catch (err) {
+        console.warn('Unable to sync server clock', err);
+      }
+    }
+
+    updateServerClock();
+    syncServerClock();
+    setInterval(updateServerClock, 1000);
+    setInterval(syncServerClock, 60000);
+
+    function getSelectedDurationMinutes() {
+      const option = appointmentTypeSelect.options[appointmentTypeSelect.selectedIndex];
+      const parsed = Number(option?.dataset?.duration || fallbackDurationMinutes);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackDurationMinutes;
+    }
+
+    function addMinutes(date, minutes) {
+      return new Date(date.getTime() + minutes * 60000);
+    }
+
+    function formatCalendarDate(calendar, date) {
+      return calendar.formatDate(date, {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      });
+    }
+
+    function formatCompactTime(date) {
+      const parts = getServerClockParts(date);
+      const hours24 = parts.hour;
+      const minutes = String(parts.minute).padStart(2, '0');
+      const isPm = hours24 >= 12;
+      const hours12 = hours24 % 12 || 12;
+      return hours12 + ':' + minutes + (isPm ? 'pm' : 'am');
+    }
+
+    function formatTimeRange(startDate, endDate) {
+      const endLabel = endDate ? formatCompactTime(endDate) : 'TBA';
+      return formatCompactTime(startDate) + ' to ' + endLabel;
+    }
+
+    function syncBookingDraftTimes() {
+      if (!currentBookingStartDate || bookingModal.getAttribute('data-mode') !== 'draft') {
+        return;
+      }
+
+      const calendar = window.calendarInstance;
+      currentBookingEndDate = addMinutes(currentBookingStartDate, getSelectedDurationMinutes());
+      selectedStartLabel.textContent = formatCalendarDate(calendar, currentBookingStartDate);
+      selectedEndLabel.textContent = formatCalendarDate(calendar, currentBookingEndDate);
+      bookingTimeSummaryText.textContent = formatTimeRange(currentBookingStartDate, currentBookingEndDate);
+      bookingStart.value = serverClockDateToInstant(currentBookingStartDate).toISOString();
+      bookingEnd.value = serverClockDateToInstant(currentBookingEndDate).toISOString();
+    }
+
+    function openBookingModal(startDate, endDate, options = {}) {
+      const calendar = window.calendarInstance;
+      const mode = options.mode || 'draft';
+      const derivedEndDate = mode === 'draft'
+        ? addMinutes(startDate, getSelectedDurationMinutes())
+        : (endDate || addMinutes(startDate, getSelectedDurationMinutes()));
+
+      currentBookingStartDate = startDate;
+      currentBookingEndDate = derivedEndDate;
+
+      bookingModal.setAttribute('data-mode', mode);
+      bookingModalTitle.textContent = options.title || (mode === 'appointment' ? 'Appointment details' : 'New booking draft');
+      bookingModalDescription.textContent = options.description || (mode === 'appointment' ? 'Appointment details from the calendar.' : 'Select or create a customer, choose provider and appointment type.');
+      bookingTimeSummary.hidden = mode !== 'appointment';
+
+      if (mode === 'draft') {
+        syncBookingDraftTimes();
+      } else {
+        selectedStartLabel.textContent = formatCalendarDate(calendar, startDate);
+        selectedEndLabel.textContent = formatCalendarDate(calendar, derivedEndDate);
+        bookingTimeSummaryText.textContent = formatTimeRange(startDate, derivedEndDate);
+        bookingStart.value = serverClockDateToInstant(startDate).toISOString();
+        bookingEnd.value = serverClockDateToInstant(derivedEndDate).toISOString();
+      }
+
+      if (defaultProviderId && !providerSelect.value) {
+        providerSelect.value = String(defaultProviderId);
+      } else if (providerId && providerSelect.querySelector(`option[value="${providerId}"]`)) {
+        providerSelect.value = String(providerId);
+      }
+
+      if (defaultAppointmentTypeId && !appointmentTypeSelect.value) {
+        appointmentTypeSelect.value = String(defaultAppointmentTypeId);
+        if (mode === 'draft') {
+          syncBookingDraftTimes();
+        }
+      }
+
+      if (typeof bookingModal.showModal === 'function') {
+        bookingModal.showModal();
+      } else {
+        bookingModal.setAttribute('open', 'open');
+      }
+    }
+
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+      now: getServerClockDate(getServerNowDate()),
+      initialView: isStaff ? 'timeGridWeek' : 'timeGridDay',
+      height: 'auto',
+      expandRows: true,
+      nowIndicator: Boolean(bookingCalendarSettings.show_now_indicator),
+      selectable: true,
+      timeZone: 'UTC',
+      selectMirror: true,
+      hiddenDays: [0, 1, 2, 3, 4, 5, 6].filter(function(day) {
+        return visibleDaysOfWeek.indexOf(day) === -1;
+      }),
+      ...getEffectiveSlotRange(),
+      scrollTime: getEffectiveSlotRange().slotMinTime,
+      eventDataTransform: function(eventData) {
+        return {
+          ...eventData,
+          start: toServerClockIso(eventData.start),
+          end: eventData.end ? toServerClockIso(eventData.end) : eventData.end
+        };
+      },
+      businessHours: {
+        daysOfWeek: visibleDaysOfWeek,
+        startTime: visibleStartTime,
+        endTime: visibleEndTime
+      },
+      dayCellDidMount: function(arg) {
+        const serverNow = getServerNowDate();
+        if (isSameServerCalendarDay(arg.date, serverNow)) {
+          arg.el.classList.add('server-today');
+        }
+      },
+      dayHeaderDidMount: function(arg) {
+        const serverNow = getServerNowDate();
+        if (isSameServerCalendarDay(arg.date, serverNow)) {
+          arg.el.classList.add('server-today');
+        }
+      },
+      selectConstraint: 'businessHours',
+      headerToolbar: {
+        left: 'prev,next today',
+        center: 'title',
+        right: 'dayGridMonth,timeGridWeek,timeGridDay'
+      },
+      events: {
+        url: 'calendar_api.php',
+        method: 'GET',
+        extraParams: function() {
+          const params = {};
+          if (providerId) {
+            params.provider_id = providerId;
+          }
+          return params;
+        },
+        failure: () => alert('Could not load appointments')
+      },
+      dateClick: function(info) {
+        openBookingModal(info.date);
+      },
+      select: function(info) {
+        openBookingModal(info.start);
+      },
+      editable: isStaff,
+      eventClick: function(info) {
+        const startDate = info.event.start;
+        const endDate = info.event.end || addMinutes(startDate, getSelectedDurationMinutes());
+        const status = info.event.extendedProps.status || 'unknown';
+        const detailText = formatTimeRange(startDate, endDate) + ' • Status: ' + status;
+        openBookingModal(startDate, endDate, {
+          mode: 'appointment',
+          title: info.event.title || 'Appointment',
+          description: detailText
+        });
+      },
+      eventDrop: function(info) {
+        alert('Drag & drop is not yet implemented on the server.');
+        info.revert();
+      }
+    });
+
+    window.calendarInstance = calendar;
+    calendar.render();
+
+    // Customer mode toggle
+    const createCustomerSection = document.getElementById('createCustomerSection');
+    const selectCustomerSection = document.getElementById('selectCustomerSection');
+    const toggleCreateMode = document.getElementById('toggleCreateMode');
+    const toggleSelectMode = document.getElementById('toggleSelectMode');
+    const existingCustomerSelect = document.getElementById('existingCustomerSelect');
+    const newCustomerName = document.getElementById('newCustomerName');
+    const newCustomerEmail = document.getElementById('newCustomerEmail');
+    const newCustomerMobile = document.getElementById('newCustomerMobile');
+    const selectedCustomerId = document.getElementById('selectedCustomerId');
+
+    // Sync customer selection
+    existingCustomerSelect.addEventListener('change', function() {
+      selectedCustomerId.value = this.value;
+    });
+
+    function setCreateMode() {
+      createCustomerSection.style.display = 'block';
+      selectCustomerSection.style.display = 'none';
+      toggleCreateMode.classList.add('is-active');
+      toggleSelectMode.classList.remove('is-active');
+      toggleCreateMode.style.display = 'block';
+      toggleSelectMode.style.display = 'none';
+      selectedCustomerId.value = '';
+    }
+
+    function setSelectMode() {
+      createCustomerSection.style.display = 'none';
+      selectCustomerSection.style.display = 'block';
+      toggleCreateMode.style.display = 'none';
+      toggleCreateMode.classList.remove('is-active');
+      toggleSelectMode.classList.add('is-active');
+      toggleSelectMode.style.display = 'block';
+      newCustomerName.value = '';
+      newCustomerEmail.value = '';
+      newCustomerMobile.value = '';
+      loadExistingCustomers();
+    }
+
+    async function loadExistingCustomers() {
+      try {
+        const resp = await fetch('customers_api.php?action=list');
+        if (!resp.ok) throw new Error('Failed to load customers');
+        const json = await resp.json();
+        const customers = json.customers || [];
+
+        existingCustomerSelect.innerHTML = '<option value="">-- Search and select customer --</option>';
+        customers.forEach(customer => {
+          const opt = document.createElement('option');
+          opt.value = customer.id;
+          opt.textContent = customer.full_name + ' (' + (customer.email || 'no email') + ')';
+          existingCustomerSelect.appendChild(opt);
+        });
+      } catch (err) {
+        console.error('Error loading customers:', err);
+      }
+    }
+
+    toggleCreateMode.addEventListener('click', setCreateMode);
+    toggleSelectMode.addEventListener('click', setSelectMode);
+
+    setCreateMode();
+
+    function setDraftMode() {
+      bookingModal.setAttribute('data-mode', 'draft');
+      bookingModalTitle.textContent = 'New booking draft';
+      bookingModalDescription.textContent = 'Select or create a customer, choose provider and appointment type.';
+      bookingTimeSummary.hidden = true;
+      currentBookingStartDate = null;
+      currentBookingEndDate = null;
+    }
+
+    // Close modal
+    closeBookingModal.addEventListener('click', () => {
+      if (typeof bookingModal.close === 'function') {
+        bookingModal.close();
+      } else {
+        bookingModal.removeAttribute('open');
+      }
+      setDraftMode();
+    });
+
+    // Appointment type change updates duration
+    appointmentTypeSelect.addEventListener('change', function() {
+      syncBookingDraftTimes();
+    });
+  </script>
+
+  <script src="assets/js/global.js"></script>
+</body>
+</html>
