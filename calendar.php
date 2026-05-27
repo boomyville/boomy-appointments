@@ -268,12 +268,15 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     }
 
     .booking-modal {
-      width: min(760px, calc(100vw - 24px));
+      width: min(640px, calc(100vw - 24px));
       border: 0;
       padding: 0;
       border-radius: 28px;
       box-shadow: 0 28px 80px rgba(15, 23, 42, 0.18);
       background: transparent;
+      margin: auto;
+      position: fixed;
+      inset: 0;
     }
 
     .booking-modal::backdrop {
@@ -282,6 +285,7 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     }
 
     .booking-card {
+      position: relative;
       background: var(--panel);
       border: 1px solid var(--panel-border);
       color: var(--text);
@@ -290,7 +294,7 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     }
 
     .booking-card__head {
-      padding: 20px 22px;
+      padding: 16px 18px;
       background: transparent;
       color: var(--text);
       border-bottom: 1px solid var(--panel-border);
@@ -298,25 +302,20 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
 
     .booking-card__head h2 {
       margin: 0;
-      font-size: 1.4rem;
+      font-size: 1.15rem;
       letter-spacing: -0.02em;
     }
 
-    .booking-card__head p {
-      margin: 8px 0 0;
-      color: var(--muted);
-    }
-
     .booking-card__body {
-      padding: 22px;
+      padding: 16px 18px 18px;
       display: grid;
-      gap: 18px;
+      gap: 12px;
     }
 
     .booking-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 16px;
+      gap: 12px;
     }
 
     .booking-grid .span-2 {
@@ -325,10 +324,10 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
 
     .field label {
       display: block;
-      font-size: 0.92rem;
+      font-size: 0.8rem;
       font-weight: 700;
-      margin-bottom: 6px;
-      color: #22304a;
+      margin-bottom: 4px;
+      color: var(--label);
     }
 
     .field input,
@@ -336,12 +335,13 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     .field textarea {
       width: 100%;
       border: 1px solid rgba(15, 23, 42, 0.15);
-      border-radius: 16px;
-      padding: 13px 14px;
+      border-radius: 14px;
+      padding: 10px 12px;
       font: inherit;
       color: var(--text);
       background: #fff;
       box-sizing: border-box;
+      font-size: 0.92rem;
     }
 
     .field input:focus,
@@ -360,10 +360,10 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     .booking-meta {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-      padding: 16px 18px;
+      gap: 10px;
+      padding: 12px 14px;
       border: 1px dashed var(--panel-border);
-      border-radius: 20px;
+      border-radius: 18px;
       background: var(--panel);
     }
 
@@ -373,7 +373,7 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     }
 
     .meta-item span {
-      font-size: 0.8rem;
+      font-size: 0.74rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: var(--muted);
@@ -381,7 +381,7 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     }
 
     .meta-item strong {
-      font-size: 0.98rem;
+      font-size: 0.9rem;
       font-weight: 700;
       color: var(--text);
     }
@@ -391,7 +391,7 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       justify-content: space-between;
       align-items: center;
       gap: 16px;
-      padding: 0 22px 22px;
+      padding: 0 18px 18px;
     }
 
     .booking-card__footer .secondary {
@@ -402,12 +402,36 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     .booking-card__footer button {
       border: 1px solid var(--panel-border);
       border-radius: 999px;
-      padding: 10px 16px;
+      padding: 9px 14px;
       background: rgba(255, 255, 255, 0.06);
       color: var(--text);
       font: inherit;
       font-weight: 700;
       cursor: pointer;
+    }
+
+    .booking-card__close {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      width: 34px;
+      height: 34px;
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      border-radius: 999px;
+      background: rgba(239, 68, 68, 0.12);
+      color: #dc2626;
+      font-size: 1.2rem;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      z-index: 2;
+    }
+
+    .booking-card__close:hover {
+      background: rgba(239, 68, 68, 0.18);
+      border-color: rgba(239, 68, 68, 0.4);
     }
 
     html[data-theme="dark"] .booking-card__footer button {
@@ -441,21 +465,7 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     }
 
     .booking-time-summary {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 12px;
-      margin-top: 12px;
-      border: 1px solid var(--panel-border);
-      border-radius: 999px;
-      color: var(--text);
-      background: rgba(36, 87, 255, 0.06);
-      font-weight: 700;
-      width: fit-content;
-    }
-
-    .booking-time-summary strong {
-      font-weight: 800;
+      display: none;
     }
 
     .booking-modal[data-mode="appointment"] .booking-draft-only {
@@ -487,6 +497,11 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
 
       .booking-card__footer button {
         width: 100%;
+      }
+
+      .booking-card__close {
+        top: 12px;
+        right: 12px;
       }
     }
   </style>
@@ -526,9 +541,9 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
 
   <dialog id="bookingModal" class="booking-modal">
     <div class="booking-card">
+      <button type="button" id="closeBookingModalTop" class="booking-card__close" aria-label="Close booking modal">&times;</button>
       <div class="booking-card__head">
         <h2 id="bookingModalTitle">New booking draft</h2>
-        <p id="bookingModalDescription">Select or create a customer, choose provider and appointment type.</p>
       </div>
       <div class="booking-card__body">
         <div class="booking-meta">
@@ -542,11 +557,6 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
           </div>
         </div>
 
-        <div id="bookingTimeSummary" class="booking-time-summary" hidden>
-          <span>Appointment time</span>
-          <strong id="bookingTimeSummaryText">-</strong>
-        </div>
-
         <div class="booking-grid booking-draft-only">
           <div class="field span-2">
             <label>Who do I want to book?</label>
@@ -557,15 +567,15 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
 
             <div id="createCustomerSection">
               <div class="field">
-                <label for="newCustomerName" style="font-size: 0.85rem; margin-bottom: 4px;">Customer Name</label>
+                <label for="newCustomerName">Customer Name</label>
                 <input id="newCustomerName" name="new_customer_name" type="text" placeholder="Full name">
               </div>
               <div class="field">
-                <label for="newCustomerEmail" style="font-size: 0.85rem; margin-bottom: 4px;">Email (optional)</label>
+                <label for="newCustomerEmail">Email (optional)</label>
                 <input id="newCustomerEmail" name="new_customer_email" type="email" placeholder="customer@example.com">
               </div>
               <div class="field">
-                <label for="newCustomerMobile" style="font-size: 0.85rem; margin-bottom: 4px;">Mobile (optional)</label>
+                <label for="newCustomerMobile">Mobile (optional)</label>
                 <input id="newCustomerMobile" name="new_customer_mobile" type="text" placeholder="1234567890">
               </div>
             </div>
@@ -610,8 +620,6 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
           </div>
         </div>
 
-        <p class="booking-note booking-draft-only">Customer creation and booking save actions will be implemented next. For now this modal captures draft details.</p>
-
         <input type="hidden" id="bookingStart" value="">
         <input type="hidden" id="bookingEnd" value="">
       </div>
@@ -646,6 +654,7 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     const bookingTimeSummaryText = document.getElementById('bookingTimeSummaryText');
     const bookingStart = document.getElementById('bookingStart');
     const bookingEnd = document.getElementById('bookingEnd');
+    const closeBookingModalTop = document.getElementById('closeBookingModalTop');
     const providerSelect = document.getElementById('providerSelect');
     const appointmentTypeSelect = document.getElementById('appointmentTypeSelect');
     let currentBookingStartDate = null;
@@ -910,7 +919,6 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       currentBookingEndDate = addMinutes(currentBookingStartDate, getSelectedDurationMinutes());
       selectedStartLabel.textContent = formatCalendarDate(calendar, currentBookingStartDate);
       selectedEndLabel.textContent = formatCalendarDate(calendar, currentBookingEndDate);
-      bookingTimeSummaryText.textContent = formatTimeRange(currentBookingStartDate, currentBookingEndDate);
       bookingStart.value = serverClockDateToInstant(currentBookingStartDate).toISOString();
       bookingEnd.value = serverClockDateToInstant(currentBookingEndDate).toISOString();
     }
@@ -927,15 +935,12 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
 
       bookingModal.setAttribute('data-mode', mode);
       bookingModalTitle.textContent = options.title || (mode === 'appointment' ? 'Appointment details' : 'New booking draft');
-      bookingModalDescription.textContent = options.description || (mode === 'appointment' ? 'Appointment details from the calendar.' : 'Select or create a customer, choose provider and appointment type.');
-      bookingTimeSummary.hidden = mode !== 'appointment';
 
       if (mode === 'draft') {
         syncBookingDraftTimes();
       } else {
         selectedStartLabel.textContent = formatCalendarDate(calendar, startDate);
         selectedEndLabel.textContent = formatCalendarDate(calendar, derivedEndDate);
-        bookingTimeSummaryText.textContent = formatTimeRange(startDate, derivedEndDate);
         bookingStart.value = serverClockDateToInstant(startDate).toISOString();
         bookingEnd.value = serverClockDateToInstant(derivedEndDate).toISOString();
       }
@@ -1109,13 +1114,22 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     function setDraftMode() {
       bookingModal.setAttribute('data-mode', 'draft');
       bookingModalTitle.textContent = 'New booking draft';
-      bookingModalDescription.textContent = 'Select or create a customer, choose provider and appointment type.';
-      bookingTimeSummary.hidden = true;
       currentBookingStartDate = null;
       currentBookingEndDate = null;
     }
 
     // Close modal
+    if (closeBookingModalTop) {
+      closeBookingModalTop.addEventListener('click', () => {
+        if (typeof bookingModal.close === 'function') {
+          bookingModal.close();
+        } else {
+          bookingModal.removeAttribute('open');
+        }
+        setDraftMode();
+      });
+    }
+
     closeBookingModal.addEventListener('click', () => {
       if (typeof bookingModal.close === 'function') {
         bookingModal.close();

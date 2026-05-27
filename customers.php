@@ -126,12 +126,15 @@ $settings = get_customer_field_settings();
     }
 
     .modal-dialog {
-      width: min(600px, calc(100vw - 24px));
+      width: min(640px, calc(100vw - 24px));
       border: 0;
       padding: 0;
       border-radius: 28px;
-      box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+      box-shadow: 0 28px 80px rgba(15, 23, 42, 0.22);
       background: transparent;
+      margin: auto;
+      position: fixed;
+      inset: 0;
     }
 
     .modal-dialog::backdrop {
@@ -140,47 +143,53 @@ $settings = get_customer_field_settings();
     }
 
     .modal-card {
-      background: #ffffff;
+      position: relative;
+      width: 100%;
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      color: var(--text);
       border-radius: 28px;
       overflow: hidden;
     }
 
     .modal-card__head {
-      padding: 20px 22px;
-      background: linear-gradient(135deg, #2457ff 0%, #4f7cff 55%, #10b981 120%);
-      color: #fff;
+      padding: 16px 18px;
+      background: transparent;
+      color: var(--text);
+      border-bottom: 1px solid var(--panel-border);
     }
 
     .modal-card__head h2 {
       margin: 0;
-      font-size: 1.3rem;
+      font-size: 1.15rem;
       letter-spacing: -0.02em;
     }
 
     .modal-card__body {
-      padding: 22px;
+      padding: 16px 18px 18px;
       display: grid;
-      gap: 14px;
+      gap: 12px;
     }
 
     .field label {
       display: block;
-      font-size: 0.92rem;
+      font-size: 0.8rem;
       font-weight: 700;
-      margin-bottom: 6px;
-      color: #22304a;
+      margin-bottom: 4px;
+      color: var(--label);
     }
 
     .field input,
     .field textarea {
       width: 100%;
       border: 1px solid rgba(15, 23, 42, 0.15);
-      border-radius: 16px;
-      padding: 13px 14px;
+      border-radius: 14px;
+      padding: 10px 12px;
       font: inherit;
       color: var(--text);
-      background: #fff;
+      background: var(--panel);
       box-sizing: border-box;
+      font-size: 0.92rem;
     }
 
     .field input:focus,
@@ -193,15 +202,15 @@ $settings = get_customer_field_settings();
       display: flex;
       justify-content: flex-end;
       gap: 12px;
-      padding: 0 22px 22px;
+      padding: 0 18px 18px;
     }
 
     .modal-card__footer button {
       border: 0;
       border-radius: 999px;
-      padding: 10px 16px;
-      background: #e2e8f0;
-      color: #0f172a;
+      padding: 9px 14px;
+      background: rgba(226, 232, 240, 0.9);
+      color: var(--text);
       font: inherit;
       font-weight: 700;
       cursor: pointer;
@@ -264,13 +273,38 @@ $settings = get_customer_field_settings();
     }
 
     .override-note {
-      background: rgba(245, 158, 11, 0.08);
-      border-left: 3px solid rgba(245, 158, 11, 0.5);
-      padding: 10px 12px;
-      border-radius: 8px;
-      margin: 12px 0;
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      border-left: 3px solid rgba(245, 158, 11, 0.6);
+      padding: 12px 14px;
+      border-radius: 16px;
+      margin: 10px 0;
       font-size: 0.9rem;
       color: var(--text);
+    }
+
+    html[data-theme="dark"] .modal-dialog {
+      box-shadow: 0 28px 80px rgba(0, 0, 0, 0.32);
+    }
+
+    html[data-theme="dark"] .modal-card__footer button {
+      background: rgba(30, 50, 80, 0.6);
+      color: var(--text);
+    }
+
+    html[data-theme="dark"] .modal-card__footer button.primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    html[data-theme="dark"] .override-note {
+      background: rgba(20, 40, 70, 0.45);
+    }
+
+    html[data-theme="dark"] .field input,
+    html[data-theme="dark"] .field textarea {
+      background: rgba(15, 23, 42, 0.5);
+      border-color: rgba(226, 232, 240, 0.12);
     }
   </style>
 </head>
