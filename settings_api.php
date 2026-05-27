@@ -23,6 +23,7 @@ try {
             'booking_middlename_display', 'booking_middlename_required', 'booking_middlename_letters_only', 'booking_middlename_min', 'booking_middlename_max',
             'booking_email_display', 'booking_email_required',
             'booking_phone_display', 'booking_phone_required', 'booking_phone_numbers_only', 'booking_phone_min', 'booking_phone_max',
+            'booking_dob_display', 'booking_dob_required',
             'booking_show_monday', 'booking_show_tuesday', 'booking_show_wednesday', 'booking_show_thursday', 'booking_show_friday', 'booking_show_saturday', 'booking_show_sunday',
             'booking_start_time', 'booking_end_time', 'booking_show_now_indicator',
             'password_min_length', 'password_max_length', 'password_require_lowercase', 'password_require_uppercase', 'password_require_number', 'password_require_symbol',
@@ -60,7 +61,8 @@ try {
                 'booking_lastname_display', 'booking_lastname_required', 'booking_lastname_letters_only', 'booking_lastname_min', 'booking_lastname_max',
                 'booking_middlename_display', 'booking_middlename_required', 'booking_middlename_letters_only', 'booking_middlename_min', 'booking_middlename_max',
                 'booking_email_display', 'booking_email_required',
-                'booking_phone_display', 'booking_phone_required', 'booking_phone_numbers_only', 'booking_phone_min', 'booking_phone_max'
+                'booking_phone_display', 'booking_phone_required', 'booking_phone_numbers_only', 'booking_phone_min', 'booking_phone_max',
+                'booking_dob_display', 'booking_dob_required'
             ],
             'booking' => [
                 'booking_show_monday', 'booking_show_tuesday', 'booking_show_wednesday', 'booking_show_thursday', 'booking_show_friday', 'booking_show_saturday', 'booking_show_sunday',
@@ -93,7 +95,7 @@ try {
 
         if ($tab === 'booking') {
             $start_time = trim((string) ($data['booking_start_time'] ?? '09:00'));
-            $end_time = trim((string) ($data['booking_end_time'] ?? '17:00'));
+            $end_time = trim((string) ($data['booking_end_time'] ?? '21:00'));
 
             if (!preg_match('/^\d{2}:\d{2}(?::\d{2})?$/', $start_time) || !preg_match('/^\d{2}:\d{2}(?::\d{2})?$/', $end_time)) {
                 http_response_code(422);

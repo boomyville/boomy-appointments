@@ -37,6 +37,7 @@ try {
 $defaultProviderId = !empty($providers) ? (int) $providers[0]['id'] : null;
 $defaultAppointmentTypeId = !empty($appointmentTypes) ? (int) $appointmentTypes[0]['id'] : null;
 $bookingCalendarSettings = get_booking_calendar_settings();
+$customerFieldSettings = get_customer_field_settings();
 $serverTimezoneName = get_app_timezone_name();
 $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneName)))->format(DateTimeInterface::ATOM);
 ?>
@@ -242,6 +243,23 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       color: #ef4444 !important;
     }
 
+    .booking-event {
+      display: grid;
+      gap: 2px;
+      line-height: 1.15;
+      font-size: 0.76rem;
+      font-weight: 700;
+      text-wrap: balance;
+    }
+
+    .booking-event__status {
+      font-size: 0.68rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      opacity: 0.86;
+    }
+
     .fc .server-today {
       background: rgba(36, 87, 255, 0.12) !important;
     }
@@ -312,6 +330,36 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       gap: 12px;
     }
 
+    .booking-modal-alert {
+      display: none;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--panel-border);
+      background: rgba(36, 87, 255, 0.06);
+      color: var(--text);
+      font-size: 0.88rem;
+      line-height: 1.45;
+    }
+
+    .booking-modal-alert.is-visible {
+      display: block;
+    }
+
+    .booking-modal-alert.is-error {
+      background: rgba(239, 68, 68, 0.08);
+      border-color: rgba(239, 68, 68, 0.18);
+      color: #7f1d1d;
+    }
+
+    html[data-theme="dark"] .booking-modal-alert {
+      background: rgba(30, 50, 80, 0.45);
+    }
+
+    html[data-theme="dark"] .booking-modal-alert.is-error {
+      background: rgba(127, 29, 29, 0.24);
+      color: #fecaca;
+    }
+
     .booking-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -342,6 +390,15 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       background: #fff;
       box-sizing: border-box;
       font-size: 0.92rem;
+    }
+
+    html[data-theme="dark"] .field input,
+    html[data-theme="dark"] .field select,
+    html[data-theme="dark"] .field textarea,
+    html[data-theme="dark"] #existingCustomerSelect {
+      background: rgba(15, 23, 42, 0.5) !important;
+      border-color: rgba(226, 232, 240, 0.12) !important;
+      color: var(--text) !important;
     }
 
     .field input:focus,
@@ -410,6 +467,16 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       cursor: pointer;
     }
 
+    .booking-card__footer .primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .booking-card__footer .primary:hover {
+      opacity: 0.95;
+    }
+
     .booking-card__close {
       position: absolute;
       top: 14px;
@@ -434,8 +501,87 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       border-color: rgba(239, 68, 68, 0.4);
     }
 
+    .booking-warning-modal {
+      width: min(520px, calc(100vw - 24px));
+      border: 0;
+      padding: 0;
+      border-radius: 28px;
+      box-shadow: 0 28px 80px rgba(15, 23, 42, 0.22);
+      background: transparent;
+      margin: auto;
+      position: fixed;
+      inset: 0;
+    }
+
+    .booking-warning-modal::backdrop {
+      background: rgba(15, 23, 42, 0.5);
+      backdrop-filter: blur(4px);
+    }
+
+    .booking-warning-card {
+      background: var(--panel);
+      border: 1px solid var(--panel-border);
+      color: var(--text);
+      border-radius: 28px;
+      overflow: hidden;
+    }
+
+    .booking-warning-card__head {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--panel-border);
+    }
+
+    .booking-warning-card__head h2 {
+      margin: 0;
+      font-size: 1.15rem;
+      letter-spacing: -0.02em;
+    }
+
+    .booking-warning-card__body {
+      padding: 16px 18px 18px;
+    }
+
+    .booking-warning-card__body p {
+      margin: 0;
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .booking-warning-card__footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      padding: 0 18px 18px;
+    }
+
+    .booking-warning-card__footer button {
+      border: 1px solid var(--panel-border);
+      border-radius: 999px;
+      padding: 9px 14px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .booking-warning-card__footer .primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
     html[data-theme="dark"] .booking-card__footer button {
       background: rgba(255, 255, 255, 0.04);
+    }
+
+    html[data-theme="dark"] .booking-warning-card__footer button {
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    html[data-theme="dark"] .booking-warning-card__footer .primary {
+      background: var(--accent);
+      color: #fff;
     }
 
     .booking-card__footer button:hover {
@@ -469,6 +615,10 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     }
 
     .booking-modal[data-mode="appointment"] .booking-draft-only {
+      display: none;
+    }
+
+    .booking-modal[data-mode="appointment"] .booking-booking-action {
       display: none;
     }
 
@@ -507,6 +657,7 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
   </style>
 </head>
 <body>
+  <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
   <?php
     $current_page = 'calendar.php';
     $navAssets = __DIR__ . '/assets/nav.html';
@@ -546,6 +697,8 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
         <h2 id="bookingModalTitle">New booking draft</h2>
       </div>
       <div class="booking-card__body">
+        <div id="bookingModalAlert" class="booking-modal-alert"></div>
+
         <div class="booking-meta">
           <div class="meta-item">
             <span>Start</span>
@@ -569,6 +722,10 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
               <div class="field">
                 <label for="newCustomerName">Customer Name</label>
                 <input id="newCustomerName" name="new_customer_name" type="text" placeholder="Full name">
+              </div>
+              <div class="field">
+                <label for="newCustomerDob">Date of Birth</label>
+                <input id="newCustomerDob" name="date_of_birth" type="date">
               </div>
               <div class="field">
                 <label for="newCustomerEmail">Email (optional)</label>
@@ -624,8 +781,23 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
         <input type="hidden" id="bookingEnd" value="">
       </div>
       <div class="booking-card__footer">
-        <div class="secondary booking-draft-only">Draft mode - no save button yet</div>
+        <button type="button" id="makeBookingBtn" class="primary booking-booking-action">Make booking</button>
         <button type="button" id="closeBookingModal">Close</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="bookingWarningModal" class="booking-warning-modal">
+    <div class="booking-warning-card">
+      <div class="booking-warning-card__head">
+        <h2>Confirm booking</h2>
+      </div>
+      <div class="booking-warning-card__body">
+        <p id="bookingWarningMessage"></p>
+      </div>
+      <div class="booking-warning-card__footer">
+        <button type="button" id="bookingWarningCancel">No</button>
+        <button type="button" id="bookingWarningConfirm" class="primary">Yes, continue</button>
       </div>
     </div>
   </dialog>
@@ -639,6 +811,7 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     const defaultProviderId = <?php echo json_encode($defaultProviderId); ?>;
     const defaultAppointmentTypeId = <?php echo json_encode($defaultAppointmentTypeId); ?>;
     const bookingCalendarSettings = <?php echo json_encode($bookingCalendarSettings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+    const customerFieldSettings = <?php echo json_encode($customerFieldSettings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
     const serverTimezoneName = <?php echo json_encode($serverTimezoneName); ?>;
     let serverNowIso = <?php echo json_encode($serverNowIso); ?>;
 
@@ -649,12 +822,15 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     const selectedStartLabel = document.getElementById('selectedStartLabel');
     const selectedEndLabel = document.getElementById('selectedEndLabel');
     const bookingModalTitle = document.getElementById('bookingModalTitle');
-    const bookingModalDescription = document.getElementById('bookingModalDescription');
-    const bookingTimeSummary = document.getElementById('bookingTimeSummary');
-    const bookingTimeSummaryText = document.getElementById('bookingTimeSummaryText');
+    const bookingModalAlert = document.getElementById('bookingModalAlert');
+    const bookingWarningModal = document.getElementById('bookingWarningModal');
+    const bookingWarningMessage = document.getElementById('bookingWarningMessage');
+    const bookingWarningCancel = document.getElementById('bookingWarningCancel');
+    const bookingWarningConfirm = document.getElementById('bookingWarningConfirm');
     const bookingStart = document.getElementById('bookingStart');
     const bookingEnd = document.getElementById('bookingEnd');
     const closeBookingModalTop = document.getElementById('closeBookingModalTop');
+    const makeBookingBtn = document.getElementById('makeBookingBtn');
     const providerSelect = document.getElementById('providerSelect');
     const appointmentTypeSelect = document.getElementById('appointmentTypeSelect');
     let currentBookingStartDate = null;
@@ -686,7 +862,7 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     }
 
     const visibleStartTime = normalizeTimeValue(bookingCalendarSettings.start_time, '09:00:00');
-    const visibleEndTime = normalizeTimeValue(bookingCalendarSettings.end_time, '17:00:00');
+    const visibleEndTime = normalizeTimeValue(bookingCalendarSettings.end_time, '21:00:00');
     let serverNowBaseMs = Date.parse(serverNowIso);
     let clientLoadMs = Date.now();
     const serverNowFormatter = new Intl.DateTimeFormat(undefined, {
@@ -783,6 +959,24 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       return adjusted;
     }
 
+    function formatServerClockDateTime(date) {
+      const parts = {
+        year: date.getUTCFullYear(),
+        month: date.getUTCMonth() + 1,
+        day: date.getUTCDate(),
+        hour: date.getUTCHours(),
+        minute: date.getUTCMinutes(),
+        second: date.getUTCSeconds()
+      };
+      const year = String(parts.year).padStart(4, '0');
+      const month = String(parts.month).padStart(2, '0');
+      const day = String(parts.day).padStart(2, '0');
+      const hour = String(parts.hour).padStart(2, '0');
+      const minute = String(parts.minute).padStart(2, '0');
+      const second = String(parts.second).padStart(2, '0');
+      return year + '-' + month + '-' + day + ' ' + hour + ':' + minute + ':' + second;
+    }
+
     function toServerClockIso(value) {
       const instant = parseDateValue(value);
       if (Number.isNaN(instant.getTime())) {
@@ -830,7 +1024,7 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       const startSeconds = timeToSeconds(visibleStartTime);
       const endSeconds = timeToSeconds(visibleEndTime);
       let slotMinTime = visibleStartTime;
-      let slotMaxTime = visibleEndTime;
+      let slotMaxTime = secondsToHourTime(endSeconds + 3600);
 
       if (nowSeconds < startSeconds) {
         slotMinTime = secondsToHourTime(Math.max(0, nowSeconds - 3600));
@@ -897,7 +1091,10 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     }
 
     function formatCompactTime(date) {
-      const parts = getServerClockParts(date);
+      const parts = {
+        hour: date.getUTCHours(),
+        minute: date.getUTCMinutes()
+      };
       const hours24 = parts.hour;
       const minutes = String(parts.minute).padStart(2, '0');
       const isPm = hours24 >= 12;
@@ -919,8 +1116,8 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       currentBookingEndDate = addMinutes(currentBookingStartDate, getSelectedDurationMinutes());
       selectedStartLabel.textContent = formatCalendarDate(calendar, currentBookingStartDate);
       selectedEndLabel.textContent = formatCalendarDate(calendar, currentBookingEndDate);
-      bookingStart.value = serverClockDateToInstant(currentBookingStartDate).toISOString();
-      bookingEnd.value = serverClockDateToInstant(currentBookingEndDate).toISOString();
+      bookingStart.value = formatServerClockDateTime(currentBookingStartDate);
+      bookingEnd.value = formatServerClockDateTime(currentBookingEndDate);
     }
 
     function openBookingModal(startDate, endDate, options = {}) {
@@ -941,8 +1138,8 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       } else {
         selectedStartLabel.textContent = formatCalendarDate(calendar, startDate);
         selectedEndLabel.textContent = formatCalendarDate(calendar, derivedEndDate);
-        bookingStart.value = serverClockDateToInstant(startDate).toISOString();
-        bookingEnd.value = serverClockDateToInstant(derivedEndDate).toISOString();
+        bookingStart.value = formatServerClockDateTime(startDate);
+        bookingEnd.value = formatServerClockDateTime(derivedEndDate);
       }
 
       if (defaultProviderId && !providerSelect.value) {
@@ -979,12 +1176,22 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       }),
       ...getEffectiveSlotRange(),
       scrollTime: getEffectiveSlotRange().slotMinTime,
-      eventDataTransform: function(eventData) {
-        return {
-          ...eventData,
-          start: toServerClockIso(eventData.start),
-          end: eventData.end ? toServerClockIso(eventData.end) : eventData.end
-        };
+      slotEventOverlap: true,
+      eventContent: function(arg) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'booking-event';
+
+        const title = document.createElement('div');
+        title.className = 'booking-event__title';
+        title.textContent = arg.event.extendedProps.customer_name || arg.event.title || 'Appointment';
+
+        const status = document.createElement('div');
+        status.className = 'booking-event__status';
+        status.textContent = String(arg.event.extendedProps.status || 'booked');
+
+        wrapper.appendChild(title);
+        wrapper.appendChild(status);
+        return { domNodes: [wrapper] };
       },
       businessHours: {
         daysOfWeek: visibleDaysOfWeek,
@@ -1035,7 +1242,7 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
         const detailText = formatTimeRange(startDate, endDate) + ' • Status: ' + status;
         openBookingModal(startDate, endDate, {
           mode: 'appointment',
-          title: info.event.title || 'Appointment',
+          title: (info.event.extendedProps.customer_name || info.event.title || 'Appointment') + ' • ' + status,
           description: detailText
         });
       },
@@ -1055,9 +1262,137 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     const toggleSelectMode = document.getElementById('toggleSelectMode');
     const existingCustomerSelect = document.getElementById('existingCustomerSelect');
     const newCustomerName = document.getElementById('newCustomerName');
+    const newCustomerDob = document.getElementById('newCustomerDob');
     const newCustomerEmail = document.getElementById('newCustomerEmail');
     const newCustomerMobile = document.getElementById('newCustomerMobile');
     const selectedCustomerId = document.getElementById('selectedCustomerId');
+
+    function setBookingAlert(message, isError = true) {
+      if (!bookingModalAlert) {
+        return;
+      }
+
+      if (!message) {
+        bookingModalAlert.textContent = '';
+        bookingModalAlert.classList.remove('is-visible', 'is-error');
+        return;
+      }
+
+      bookingModalAlert.textContent = message;
+      bookingModalAlert.classList.add('is-visible');
+      bookingModalAlert.classList.toggle('is-error', Boolean(isError));
+    }
+
+    function getServerTimePartFromDateTime(value) {
+      const raw = String(value || '').trim();
+      if (!raw) {
+        return '';
+      }
+
+      const parts = raw.includes('T') ? raw.split('T') : raw.split(' ');
+      return (parts[1] || '').slice(0, 8);
+    }
+
+    function isBookingOutsideDisplayTime() {
+      const startTimePart = getServerTimePartFromDateTime(bookingStart.value);
+      const endTimePart = getServerTimePartFromDateTime(bookingEnd.value);
+
+      if (!startTimePart || !endTimePart) {
+        return false;
+      }
+
+      const bookingStartSeconds = timeToSeconds(startTimePart);
+      const bookingEndSeconds = timeToSeconds(endTimePart);
+      const displayStartSeconds = timeToSeconds(visibleStartTime);
+      const displayEndSeconds = timeToSeconds(visibleEndTime);
+
+      return bookingStartSeconds < displayStartSeconds || bookingEndSeconds > displayEndSeconds;
+    }
+
+    function getCustomerMissingRequiredFields() {
+      if (selectedCustomerId.value.trim()) {
+        return [];
+      }
+
+      const missing = [];
+      const fullName = newCustomerName.value.trim();
+      const nameParts = fullName.split(/\s+/).filter(Boolean);
+      const emailValue = newCustomerEmail.value.trim();
+      const mobileValue = newCustomerMobile.value.trim();
+      const dobValue = newCustomerDob.value.trim();
+
+      const firstNameRequired = Boolean(customerFieldSettings.first_name && customerFieldSettings.first_name.required);
+      const lastNameRequired = Boolean(customerFieldSettings.last_name && customerFieldSettings.last_name.required);
+      const middleNameRequired = Boolean(customerFieldSettings.middle_name && customerFieldSettings.middle_name.required);
+      const emailRequired = Boolean(customerFieldSettings.email && customerFieldSettings.email.required);
+      const mobileRequired = Boolean(customerFieldSettings.mobile && customerFieldSettings.mobile.required);
+      const dobRequired = Boolean(customerFieldSettings.date_of_birth && customerFieldSettings.date_of_birth.required);
+
+      if (firstNameRequired && nameParts.length < 1) {
+        missing.push('first name');
+      }
+      if (lastNameRequired && nameParts.length < 2) {
+        missing.push('last name');
+      }
+      if (middleNameRequired && nameParts.length < 3) {
+        missing.push('middle name');
+      }
+      if (emailRequired && !emailValue) {
+        missing.push('email');
+      }
+      if (mobileRequired && !mobileValue) {
+        missing.push('mobile number');
+      }
+      if (dobRequired && !dobValue) {
+        missing.push('date of birth');
+      }
+
+      return missing;
+    }
+
+    function showBookingWarning(message) {
+      return new Promise((resolve) => {
+        if (!bookingWarningModal) {
+          resolve(false);
+          return;
+        }
+
+        bookingWarningMessage.textContent = message;
+
+        const handleConfirm = () => {
+          cleanup();
+          resolve(true);
+        };
+
+        const handleCancel = () => {
+          cleanup();
+          resolve(false);
+        };
+
+        const cleanup = () => {
+          bookingWarningConfirm.removeEventListener('click', handleConfirm);
+          bookingWarningCancel.removeEventListener('click', handleCancel);
+          if (typeof bookingWarningModal.close === 'function') {
+            bookingWarningModal.close();
+          } else {
+            bookingWarningModal.removeAttribute('open');
+          }
+        };
+
+        bookingWarningConfirm.addEventListener('click', handleConfirm);
+        bookingWarningCancel.addEventListener('click', handleCancel);
+        bookingWarningModal.addEventListener('cancel', function(event) {
+          event.preventDefault();
+          handleCancel();
+        }, { once: true });
+
+        if (typeof bookingWarningModal.showModal === 'function') {
+          bookingWarningModal.showModal();
+        } else {
+          bookingWarningModal.setAttribute('open', 'open');
+        }
+      });
+    }
 
     // Sync customer selection
     existingCustomerSelect.addEventListener('change', function() {
@@ -1082,9 +1417,95 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       toggleSelectMode.classList.add('is-active');
       toggleSelectMode.style.display = 'block';
       newCustomerName.value = '';
+      newCustomerDob.value = '';
       newCustomerEmail.value = '';
       newCustomerMobile.value = '';
       loadExistingCustomers();
+    }
+
+    async function submitBooking() {
+      const selectedCustomerValue = selectedCustomerId.value.trim();
+      const customerName = newCustomerName.value.trim();
+      const customerDob = newCustomerDob.value.trim();
+      const customerEmail = newCustomerEmail.value.trim();
+      const customerMobile = newCustomerMobile.value.trim();
+      const providerId = providerSelect.value.trim();
+      const appointmentTypeId = appointmentTypeSelect.value.trim();
+      const startTime = bookingStart.value.trim();
+
+      if (!providerId) {
+        setBookingAlert('Choose a provider before making the booking.');
+        return;
+      }
+
+      if (!appointmentTypeId) {
+        setBookingAlert('Choose an appointment type before making the booking.');
+        return;
+      }
+
+      if (!selectedCustomerValue && !customerName) {
+        setBookingAlert('Select an existing customer or enter a new customer name.');
+        return;
+      }
+
+      const warningMessages = [];
+      if (isBookingOutsideDisplayTime()) {
+        warningMessages.push('This booking is outside the configured display time (' + visibleStartTime.slice(0, 5) + ' to ' + visibleEndTime.slice(0, 5) + ').');
+      }
+
+      const missingFields = getCustomerMissingRequiredFields();
+      if (missingFields.length) {
+        warningMessages.push('The new customer is missing ' + missingFields.length + ' required field' + (missingFields.length === 1 ? '' : 's') + ': ' + missingFields.join(', ') + '.');
+      }
+
+      if (warningMessages.length) {
+        const proceed = await showBookingWarning(warningMessages.join(' Do you want to continue? '));
+        if (!proceed) {
+          return;
+        }
+      }
+
+      makeBookingBtn.disabled = true;
+      makeBookingBtn.textContent = 'Saving...';
+      setBookingAlert('');
+
+      try {
+        const resp = await fetch('appointments_api.php?action=create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            csrf_token: document.querySelector('input[name="csrf_token"]').value,
+            selected_customer_id: selectedCustomerValue,
+            customer_name: customerName,
+            customer_email: customerEmail,
+            customer_mobile: customerMobile,
+            date_of_birth: customerDob,
+            provider_id: providerId,
+            appointment_type_id: appointmentTypeId,
+            start_time: startTime
+          })
+        });
+
+        const json = await resp.json();
+        if (!resp.ok) {
+          throw new Error(json.error || 'Failed to create booking');
+        }
+
+        await calendar.refetchEvents();
+        if (typeof bookingModal.close === 'function') {
+          bookingModal.close();
+        } else {
+          bookingModal.removeAttribute('open');
+        }
+        setDraftMode();
+      } catch (err) {
+        setBookingAlert(err.message || 'Failed to create booking.');
+      } finally {
+        makeBookingBtn.disabled = false;
+        makeBookingBtn.textContent = 'Make booking';
+      }
     }
 
     async function loadExistingCustomers() {
@@ -1116,6 +1537,13 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       bookingModalTitle.textContent = 'New booking draft';
       currentBookingStartDate = null;
       currentBookingEndDate = null;
+      setBookingAlert('');
+      selectedCustomerId.value = '';
+      existingCustomerSelect.value = '';
+      newCustomerName.value = '';
+      newCustomerDob.value = '';
+      newCustomerEmail.value = '';
+      newCustomerMobile.value = '';
     }
 
     // Close modal
@@ -1138,6 +1566,10 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       }
       setDraftMode();
     });
+
+    if (makeBookingBtn) {
+      makeBookingBtn.addEventListener('click', submitBooking);
+    }
 
     // Appointment type change updates duration
     appointmentTypeSelect.addEventListener('change', function() {

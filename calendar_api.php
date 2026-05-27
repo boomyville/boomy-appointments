@@ -32,16 +32,19 @@ try {
         exit;
     }
 
-    $db = get_db();
+        $db = get_db();
+        $timezone = new DateTimeZone(get_app_timezone_name());
+        $rangeStart = (new DateTimeImmutable((string) $start))->setTimezone($timezone)->format('Y-m-d H:i:s');
+        $rangeEnd = (new DateTimeImmutable((string) $end))->setTimezone($timezone)->format('Y-m-d H:i:s');
 
     $sql = "SELECT a.id, a.customer_id, a.provider_id, a.appointment_type_id, a.start_time, a.end_time, a.status,
                    c.full_name AS customer_name, t.name AS type_name, t.color_hex
             FROM appointments a
             LEFT JOIN customers c ON c.id = a.customer_id
             LEFT JOIN appointment_types t ON t.id = a.appointment_type_id
-            WHERE a.start_time BETWEEN ? AND ?";
+            WHERE a.start_time < ? AND a.end_time > ?";
 
-    $params = [$start, $end];
+        $params = [$rangeEnd, $rangeStart];
 
     // If requester is a provider, limit to their provider_id unless admin requests a specific provider
     if ($isStaff && $role === 'provider') {
@@ -58,10 +61,7 @@ try {
 
     $events = [];
     foreach ($rows as $r) {
-        $title = 'Booked';
-        if ($isStaff) {
-            $title = $r['customer_name'] ? $r['customer_name'] : 'Appt #' . $r['id'];
-        }
+        $title = $r['customer_name'] ? $r['customer_name'] : 'Appt #' . $r['id'];
         $color = $r['color_hex'] ?: '#3498db';
 
         $events[] = [
@@ -71,6 +71,7 @@ try {
             'end' => $r['end_time'],
             'color' => $color,
             'extendedProps' => [
+                'customer_name' => $r['customer_name'] ?? null,
                 'status' => $r['status'],
                 'provider_id' => (int)$r['provider_id'],
                 'appointment_type' => $r['type_name'] ?? null

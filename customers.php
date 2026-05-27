@@ -339,6 +339,7 @@ $settings = get_customer_field_settings();
         <thead>
           <tr>
             <th>Full Name</th>
+            <th>Date of Birth</th>
             <th>Email</th>
             <th>Mobile</th>
           </tr>
@@ -393,6 +394,16 @@ $settings = get_customer_field_settings();
               <input id="middleName" name="middle_name" type="text" placeholder="Michael" />
             </div>
           <?php endif; ?>
+
+          <div class="field">
+            <label for="dateOfBirth">
+              Date of Birth
+              <?php if (!empty($settings['date_of_birth']['required'])): ?>
+                <span style="color:red;">*</span>
+              <?php endif; ?>
+            </label>
+            <input id="dateOfBirth" name="date_of_birth" type="date" />
+          </div>
 
           <?php if ($settings['email']['display']): ?>
             <div class="field">
@@ -513,7 +524,7 @@ $settings = get_customer_field_settings();
     function populateTable(customers) {
       customersTableBody.innerHTML = '';
       if (customers.length === 0) {
-        customersTableBody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:var(--muted);">No customers yet</td></tr>';
+        customersTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--muted);">No customers yet</td></tr>';
         customersTable.style.display = 'table';
         return;
       }
@@ -522,6 +533,7 @@ $settings = get_customer_field_settings();
         const row = document.createElement('tr');
         row.innerHTML = `
           <td>${escapeHtml(c.full_name)}</td>
+          <td>${escapeHtml(c.date_of_birth || '-')}</td>
           <td>${escapeHtml(c.email || '-')}</td>
           <td>${escapeHtml(c.mobile || '-')}</td>
         `;

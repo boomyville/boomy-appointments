@@ -39,6 +39,9 @@ $phone_numbers_only = (int) get_setting('booking_phone_numbers_only', '1');
 $phone_min = (int) get_setting('booking_phone_min', '10');
 $phone_max = (int) get_setting('booking_phone_max', '20');
 
+$dob_display = (int) get_setting('booking_dob_display', '1');
+$dob_required = (int) get_setting('booking_dob_required', '0');
+
 $booking_show_monday = (int) get_setting('booking_show_monday', '1');
 $booking_show_tuesday = (int) get_setting('booking_show_tuesday', '1');
 $booking_show_wednesday = (int) get_setting('booking_show_wednesday', '1');
@@ -47,7 +50,7 @@ $booking_show_friday = (int) get_setting('booking_show_friday', '1');
 $booking_show_saturday = (int) get_setting('booking_show_saturday', '0');
 $booking_show_sunday = (int) get_setting('booking_show_sunday', '0');
 $booking_start_time = get_setting('booking_start_time', '09:00');
-$booking_end_time = get_setting('booking_end_time', '17:00');
+$booking_end_time = get_setting('booking_end_time', '21:00');
 $booking_show_now_indicator = (int) get_setting('booking_show_now_indicator', '1');
 $appointmentTypes = get_appointment_types();
 
@@ -201,6 +204,14 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
           <div></div>
           <label>Min length <input type="number" name="booking_phone_min" min="1" value="<?php echo $phone_min; ?>"></label>
           <label>Max length <input type="number" name="booking_phone_max" min="1" value="<?php echo $phone_max; ?>"></label>
+        </div>
+      </fieldset>
+
+      <fieldset class="field-group">
+        <legend>Date of Birth</legend>
+        <div class="field-controls">
+          <label><input type="checkbox" name="booking_dob_display" value="1" <?php echo $dob_display ? 'checked' : ''; ?>> Display</label>
+          <label><input type="checkbox" name="booking_dob_required" value="1" <?php echo $dob_required ? 'checked' : ''; ?>> Required</label>
         </div>
       </fieldset>
 

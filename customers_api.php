@@ -32,6 +32,7 @@ try {
         $middleName = trim((string) ($data['middle_name'] ?? ''));
         $email = trim((string) ($data['email'] ?? ''));
         $mobile = trim((string) ($data['mobile'] ?? ''));
+        $dateOfBirth = trim((string) ($data['date_of_birth'] ?? ''));
         $adminOverride = (bool) ($data['admin_override'] ?? false);
 
         $settings = get_customer_field_settings();
@@ -71,6 +72,13 @@ try {
             $err = validate_customer_field('mobile', $mobile);
             if ($err) {
                 $validationErrors['mobile'] = $err;
+            }
+        }
+
+        if ($settings['date_of_birth']['display'] || $settings['date_of_birth']['required'] || $dateOfBirth !== '') {
+            $err = validate_customer_field('date_of_birth', $dateOfBirth);
+            if ($err) {
+                $validationErrors['date_of_birth'] = $err;
             }
         }
 
@@ -131,7 +139,7 @@ try {
         }
 
         // Create customer
-        $customerId = create_customer($fullName, $email ?: null, $mobile ?: null);
+        $customerId = create_customer($fullName, $email ?: null, $mobile ?: null, $dateOfBirth ?: null);
 
         if (!$customerId) {
             http_response_code(500);
@@ -161,7 +169,7 @@ try {
         $limit = max(1, $limit);
 
         if ($query === '') {
-            $stmt = $db->prepare('SELECT id, full_name, email, mobile FROM customers ORDER BY full_name ASC LIMIT ? OFFSET ?');
+            $stmt = $db->prepare('SELECT id, full_name, email, mobile, date_of_birth FROM customers ORDER BY full_name ASC LIMIT ? OFFSET ?');
             $stmt->execute([$limit, $offset]);
             $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -169,7 +177,7 @@ try {
             $totalCount = (int) ($countStmt->fetch()['cnt'] ?? 0);
         } else {
             $searchPattern = '%' . $query . '%';
-            $stmt = $db->prepare('SELECT id, full_name, email, mobile FROM customers WHERE full_name LIKE ? OR email LIKE ? OR mobile LIKE ? ORDER BY full_name ASC LIMIT ? OFFSET ?');
+            $stmt = $db->prepare('SELECT id, full_name, email, mobile, date_of_birth FROM customers WHERE full_name LIKE ? OR email LIKE ? OR mobile LIKE ? ORDER BY full_name ASC LIMIT ? OFFSET ?');
             $stmt->execute([$searchPattern, $searchPattern, $searchPattern, $limit, $offset]);
             $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
 

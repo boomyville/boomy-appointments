@@ -724,6 +724,10 @@ function get_customer_field_settings(): array
             'min_length' => (int) get_setting('booking_phone_min', '10'),
             'max_length' => (int) get_setting('booking_phone_max', '20'),
         ],
+        'date_of_birth' => [
+            'display' => (bool) (int) get_setting('booking_dob_display', '1'),
+            'required' => (bool) (int) get_setting('booking_dob_required', '0'),
+        ],
     ];
 }
 
@@ -738,7 +742,7 @@ function get_booking_calendar_settings(): array
         'show_saturday' => (bool) (int) get_setting('booking_show_saturday', '0'),
         'show_sunday' => (bool) (int) get_setting('booking_show_sunday', '0'),
         'start_time' => (string) get_setting('booking_start_time', '09:00'),
-        'end_time' => (string) get_setting('booking_end_time', '17:00'),
+        'end_time' => (string) get_setting('booking_end_time', '21:00'),
         'show_now_indicator' => (bool) (int) get_setting('booking_show_now_indicator', '1'),
     ];
 }
@@ -808,6 +812,14 @@ function validate_customer_field(string $fieldName, ?string $value): ?string
         }
     }
 
+    if ($fieldName === 'date_of_birth') {
+        $date = DateTimeImmutable::createFromFormat('Y-m-d', $value);
+        $errors = DateTimeImmutable::getLastErrors();
+        if (!$date || ($errors['warning_count'] ?? 0) > 0 || ($errors['error_count'] ?? 0) > 0) {
+            return 'Date of birth must be a valid date';
+        }
+    }
+
     return null;
 }
 
@@ -817,7 +829,7 @@ function get_customer_missing_required_fields(array $data): array
     $missing = [];
 
     foreach ($settings as $fieldName => $cfg) {
-        if ($cfg['required'] && $cfg['display']) {
+        if ($cfg['required']) {
             $value = trim((string) ($data[$fieldName] ?? ''));
             if (empty($value)) {
                 $missing[] = $fieldName;
@@ -828,13 +840,42 @@ function get_customer_missing_required_fields(array $data): array
     return $missing;
 }
 
+function normalize_customer_date_of_birth(?string $value): ?string
+{
+    $raw = trim((string) ($value ?? ''));
+    if ($raw === '') {
+        return null;
+    }
 
-function create_customer(string $fullName, ?string $email, ?string $mobile): ?int
+    $date = DateTimeImmutable::createFromFormat('Y-m-d', $raw);
+    $errors = DateTimeImmutable::getLastErrors();
+    if (!$date || ($errors['warning_count'] ?? 0) > 0 || ($errors['error_count'] ?? 0) > 0) {
+        return null;
+    }
+
+    return $date->format('Y-m-d');
+}
+
+
+function create_customer(string $fullName, ?string $email, ?string $mobile, ?string $dateOfBirth = null): ?int
 {
     try {
         $db = get_db();
-        $stmt = $db->prepare('INSERT INTO customers (full_name, email, mobile) VALUES (?, ?, ?)');
-        $stmt->execute([$fullName, $email ?: '', $mobile ?: '']);
+        $normalizedDateOfBirth = normalize_customer_date_of_birth($dateOfBirth);
+
+        if ($normalizedDateOfBirth !== null) {
+            try {
+                $stmt = $db->prepare('INSERT INTO customers (full_name, email, mobile, date_of_birth) VALUES (?, ?, ?, ?)');
+                $stmt->execute([$fullName, $email ?: '', $mobile ?: '', $normalizedDateOfBirth]);
+            } catch (Throwable $e) {
+                $stmt = $db->prepare('INSERT INTO customers (full_name, email, mobile) VALUES (?, ?, ?)');
+                $stmt->execute([$fullName, $email ?: '', $mobile ?: '']);
+            }
+        } else {
+            $stmt = $db->prepare('INSERT INTO customers (full_name, email, mobile) VALUES (?, ?, ?)');
+            $stmt->execute([$fullName, $email ?: '', $mobile ?: '']);
+        }
+
         return (int) $db->lastInsertId();
     } catch (Throwable $e) {
         return null;
@@ -845,9 +886,15 @@ function get_customer_by_email(string $email): ?array
 {
     try {
         $db = get_db();
-        $stmt = $db->prepare('SELECT id, email, mobile, full_name FROM customers WHERE email = ? LIMIT 1');
-        $stmt->execute([$email]);
-        return $stmt->fetch() ?: null;
+        try {
+            $stmt = $db->prepare('SELECT id, email, mobile, full_name, date_of_birth FROM customers WHERE email = ? LIMIT 1');
+            $stmt->execute([$email]);
+            return $stmt->fetch() ?: null;
+        } catch (Throwable $e) {
+            $stmt = $db->prepare('SELECT id, email, mobile, full_name FROM customers WHERE email = ? LIMIT 1');
+            $stmt->execute([$email]);
+            return $stmt->fetch() ?: null;
+        }
     } catch (Throwable $e) {
         return null;
     }
@@ -857,9 +904,119 @@ function get_customer_by_id(int $id): ?array
 {
     try {
         $db = get_db();
-        $stmt = $db->prepare('SELECT id, email, mobile, full_name FROM customers WHERE id = ? LIMIT 1');
+        try {
+            $stmt = $db->prepare('SELECT id, email, mobile, full_name, date_of_birth FROM customers WHERE id = ? LIMIT 1');
+            $stmt->execute([$id]);
+            return $stmt->fetch() ?: null;
+        } catch (Throwable $e) {
+            $stmt = $db->prepare('SELECT id, email, mobile, full_name FROM customers WHERE id = ? LIMIT 1');
+            $stmt->execute([$id]);
+            return $stmt->fetch() ?: null;
+        }
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function get_appointment_type_by_id(int $id): ?array
+{
+    try {
+        $db = get_db();
+        $stmt = $db->prepare('SELECT id, name, duration_minutes, color_hex, is_active FROM appointment_types WHERE id = ? LIMIT 1');
         $stmt->execute([$id]);
         return $stmt->fetch() ?: null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function find_overlapping_appointment(int $providerId, DateTimeImmutable $startDate, DateTimeImmutable $endDate, ?int $excludeAppointmentId = null): ?array
+{
+    try {
+        $db = get_db();
+        $sql = 'SELECT a.id, a.customer_id, a.provider_id, a.appointment_type_id, a.start_time, a.end_time, a.status, c.full_name AS customer_name
+                FROM appointments a
+                LEFT JOIN customers c ON c.id = a.customer_id
+                WHERE a.provider_id = ?
+                  AND a.start_time < ?
+                  AND a.end_time > ?';
+        $params = [
+            $providerId,
+            $endDate->format('Y-m-d H:i:s'),
+            $startDate->format('Y-m-d H:i:s'),
+        ];
+
+        if ($excludeAppointmentId !== null && $excludeAppointmentId > 0) {
+            $sql .= ' AND a.id <> ?';
+            $params[] = $excludeAppointmentId;
+        }
+
+        $sql .= ' ORDER BY a.start_time ASC LIMIT 1';
+
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function create_appointment(int $customerId, int $providerId, int $appointmentTypeId, string $startTime, ?string $status = null): ?array
+{
+    try {
+        $appointmentType = get_appointment_type_by_id($appointmentTypeId);
+        if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1) {
+            return null;
+        }
+
+        $timezone = new DateTimeZone(get_app_timezone_name());
+        $startDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $startTime, $timezone);
+        if (!$startDate) {
+            $startDate = new DateTimeImmutable($startTime, $timezone);
+        }
+        $durationMinutes = max(1, (int) ($appointmentType['duration_minutes'] ?? 30));
+        $endDate = $startDate->modify('+' . $durationMinutes . ' minutes');
+        $overlappingAppointment = find_overlapping_appointment($providerId, $startDate, $endDate);
+        if ($overlappingAppointment) {
+            return [
+                'error' => 'overlap',
+                'conflict' => $overlappingAppointment,
+            ];
+        }
+
+        $finalStatus = $status ?: 'booked';
+        $hashKey = hash('sha256', implode('|', [
+            (string) $customerId,
+            (string) $providerId,
+            (string) $appointmentTypeId,
+            $startDate->format(DateTimeInterface::ATOM),
+            $endDate->format(DateTimeInterface::ATOM),
+            bin2hex(random_bytes(8)),
+        ]));
+
+        $db = get_db();
+        $stmt = $db->prepare('INSERT INTO appointments (customer_id, provider_id, appointment_type_id, start_time, end_time, status, hash_key) VALUES (?, ?, ?, ?, ?, ?, ?)');
+        $stmt->execute([
+            $customerId,
+            $providerId,
+            $appointmentTypeId,
+            $startDate->format('Y-m-d H:i:s'),
+            $endDate->format('Y-m-d H:i:s'),
+            $finalStatus,
+            $hashKey,
+        ]);
+
+        return [
+            'id' => (int) $db->lastInsertId(),
+            'customer_id' => $customerId,
+            'provider_id' => $providerId,
+            'appointment_type_id' => $appointmentTypeId,
+            'start_time' => $startDate->format('Y-m-d H:i:s'),
+            'end_time' => $endDate->format('Y-m-d H:i:s'),
+            'status' => $finalStatus,
+            'hash_key' => $hashKey,
+        ];
     } catch (Throwable $e) {
         return null;
     }
