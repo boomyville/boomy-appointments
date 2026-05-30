@@ -78,6 +78,7 @@ $booking_show_saturday = (int) get_setting('booking_show_saturday', '0');
 $booking_show_sunday = (int) get_setting('booking_show_sunday', '0');
 $booking_start_time = get_setting('booking_start_time', '09:00');
 $booking_end_time = get_setting('booking_end_time', '21:00');
+$booking_week_start_day = normalize_booking_week_start_day_setting(get_setting('booking_week_start_day', '0'));
 $booking_calendar_height = normalize_booking_calendar_height_setting(get_setting('booking_calendar_height', '1800'));
 $booking_show_now_indicator = (int) get_setting('booking_show_now_indicator', '1');
 $booking_snap_minutes = (int) get_setting('booking_snap_minutes', '15');
@@ -324,6 +325,21 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
           <label>Default end time <input type="time" name="booking_end_time" value="<?php echo htmlspecialchars($booking_end_time); ?>"></label>
         </div>
         <p style="font-size: 0.9em; color: #666;">The calendar will only render this time range in day and week views.</p>
+      </fieldset>
+
+      <fieldset class="field-group">
+        <legend>Week Start</legend>
+        <label for="booking_week_start_day">Start of week</label>
+        <select id="booking_week_start_day" name="booking_week_start_day">
+          <option value="0" <?php echo $booking_week_start_day === 0 ? 'selected' : ''; ?>>Sunday</option>
+          <option value="1" <?php echo $booking_week_start_day === 1 ? 'selected' : ''; ?>>Monday</option>
+          <option value="2" <?php echo $booking_week_start_day === 2 ? 'selected' : ''; ?>>Tuesday</option>
+          <option value="3" <?php echo $booking_week_start_day === 3 ? 'selected' : ''; ?>>Wednesday</option>
+          <option value="4" <?php echo $booking_week_start_day === 4 ? 'selected' : ''; ?>>Thursday</option>
+          <option value="5" <?php echo $booking_week_start_day === 5 ? 'selected' : ''; ?>>Friday</option>
+          <option value="6" <?php echo $booking_week_start_day === 6 ? 'selected' : ''; ?>>Saturday</option>
+        </select>
+        <p style="font-size: 0.9em; color: #666;">This controls the first column in week view. Sunday is the default.</p>
       </fieldset>
 
       <fieldset class="field-group">

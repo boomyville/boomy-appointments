@@ -242,17 +242,18 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       color: #ef4444 !important;
     }
 
+    /* Week/Day Specific Layout (Flex Grid Setup) */
     .booking-event {
       display: flex;
       flex-direction: column;
       gap: 2px;
-      padding: 4px 6px; /* Reduced padding so 15-min text fits perfectly */
+      padding: 4px 6px; 
       box-sizing: border-box;
       line-height: 1.1;
       font-size: 0.75rem; 
       font-weight: 700;
       height: 100%;
-      overflow: hidden; /* Crucial: stops text from forcing a 15-min box to stretch */
+      overflow: hidden; 
     }
 
     .booking-event__status {
@@ -267,31 +268,71 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     .fc .fc-daygrid-event {
       position: relative;
       border-radius: 0;
-      height: 100%; /* Force element boundaries to fill calculated grid space */
+      height: 100%; 
     }
 
+    /* Month view structural modifications to fix cell heights */
+    .fc-daygrid-event-dot {
+      border-color: currentColor !important; 
+    }
+
+    .fc .fc-daygrid-block-event,
+    .fc .fc-daygrid-dot-event {
+      background-color: var(--fc-event-bg-color, #2457ff) !important;
+      border: none !important;
+    }
+
+    /* Target ONLY the month grid elements to turn off forced row stretching */
+    .fc-daygrid-body .fc-daygrid-event {
+      height: auto !important; 
+      margin-top: 2px !important;
+      margin-bottom: 2px !important;
+    }
+    .fc-daygrid-view .fc-timegrid-row,
+    .fc-daygrid-view .fc-daygrid-row,
+    .fc-daygrid-view .fc-daygrid-row-chunk,
+    .fc-daygrid-view .fc-scrollgrid-sync-table tr {
+      height: auto !important;
+    }
+    .fc-daygrid-view .fc-daygrid-day-frame,
+    .fc-daygrid-view .fc-daygrid-day-events,
+    .fc-daygrid-view .fc-daygrid-event-harness {
+      height: auto !important;
+      min-height: 0 !important;
+    }
+    .fc-daygrid-body .booking-event {
+      height: auto !important;   
+      display: block !important;  
+      padding: 4px 6px !important; 
+    }
+
+    .fc-daygrid-view .fc-scrollgrid-sync-table {
+      height: auto !important;
+    }
+
+    /* Status border implementations */
     .fc .fc-timegrid-event.appointment-status-booked,
     .fc .fc-daygrid-event.appointment-status-booked,
     .fc .fc-timegrid-event.appointment-status-unconfirmed,
     .fc .fc-daygrid-event.appointment-status-unconfirmed {
-      box-shadow: inset 0 0 0 0 rgba(0, 0, 0, 0);
+      box-shadow: inset 0 0 0 0 rgba(0, 0, 0, 0) !important;
     }
 
     .fc .fc-timegrid-event.appointment-status-confirmed,
     .fc .fc-daygrid-event.appointment-status-confirmed {
-      box-shadow: inset 0 0 0 3px #d4af37;
+      box-shadow: inset 0 0 0 3px #d4af37 !important;
     }
 
     .fc .fc-timegrid-event.appointment-status-completed,
     .fc .fc-daygrid-event.appointment-status-completed {
-      box-shadow: inset 0 0 0 3px #9ca3af;
+      box-shadow: inset 0 0 0 3px #9ca3af !important;
     }
 
     .fc .fc-timegrid-event.appointment-status-no-show,
     .fc .fc-daygrid-event.appointment-status-no-show,
     .fc .fc-timegrid-event.appointment-status-no_show,
     .fc .fc-daygrid-event.appointment-status-no_show {
-      box-shadow: inset 0 0 0 3px #dc143c;
+      box-shadow: inset 0 0 0 3px #dc143c !important;
     }
 
     .fc .fc-timegrid-event.appointment-status-present,
@@ -377,7 +418,6 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       backdrop-filter: blur(4px);
     }
 
-    /* Flashing Border State for Invalid Bookings */
     .booking-modal.is-invalid-time .booking-card {
       box-shadow: inset 0 0 0 6px #ef4444, var(--shadow) !important;
       animation: flashRedBorder 1.2s ease-in-out infinite;
@@ -423,13 +463,9 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
 
     .fc .fc-timegrid-slot {
       min-height: 30px;
-    } 
-    /* Horizontal lines for each hour slot */
-    .fc .fc-timegrid-slot {
       border-bottom: 1px solid rgba(15,23,42,0.06);
-    }
+    } 
 
-    /* Vertical separators between day columns in timeGrid views */
     .fc .fc-timegrid-col {
       border-left: 1px solid rgba(15,23,42,0.06);
     }
@@ -438,12 +474,10 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       border-right: 0;
     }
 
-    /* Header separation */
     .fc .fc-col-header-cell {
       border-right: 1px solid rgba(15,23,42,0.06);
     }
 
-    /* Dark mode: strengthen gridlines for visibility */
     html[data-theme="dark"] .fc .fc-timegrid-slot {
       border-bottom: 1px solid rgba(255,255,255,0.12) !important;
     }
@@ -525,12 +559,25 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       font-size: 0.92rem;
     }
 
+/* Fix the broken core input theme switcher */
     html[data-theme="dark"] .field input,
     html[data-theme="dark"] .field select,
-    html[data-theme="dark"] .field textarea,
+    html[data-theme="dark"] .field textarea {
       background: rgba(15, 23, 42, 0.5) !important;
       border-color: rgba(226, 232, 240, 0.12) !important;
-      color: var(--text) !important;
+      color: #f8fafc !important; /* Forces clean off-white text in dark mode */
+    }
+
+    /* Target the meta block time inputs specifically so they invert cleanly */
+    html[data-theme="dark"] .meta-inline-inputs input {
+      background: rgba(15, 23, 42, 0.6) !important;
+      border-color: rgba(255, 255, 255, 0.14) !important;
+      color: #f8fafc !important;
+    }
+
+    /* Optional enhancement: Style the native browser clock icon to be visible in dark mode */
+    html[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator {
+      filter: invert(1);
     }
 
     .field input:focus,
@@ -692,13 +739,6 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       background: rgba(239, 68, 68, 0.10);
       border-color: rgba(239, 68, 68, 0.18);
       color: #b91c1c;
-    }
-
-    html[data-theme="dark"] .booking-card__body input,
-    html[data-theme="dark"] .meta-item .meta-inline-inputs input {
-      background: rgba(15, 23, 42, 0.45);
-      border-color: rgba(255, 255, 255, 0.14);
-      color: var(--text);
     }
 
     .booking-status-controls .booking-mode-toggle-secondary {
@@ -1283,6 +1323,9 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     }
 
     const calendarHeight = bookingCalendarSettings.calendar_height ?? 1800;
+    const weekStartDay = Number.isInteger(Number(bookingCalendarSettings.week_start_day))
+      ? Number(bookingCalendarSettings.week_start_day)
+      : 0;
 
     function normalizeTimeValue(value, fallback) {
       const raw = String(value || fallback || '09:00').trim();
@@ -1735,13 +1778,37 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
 const calendar = new FullCalendar.Calendar(calendarEl, {
       now: getServerClockDate(getServerNowDate()),
       initialView: isStaff ? 'timeGridWeek' : 'timeGridDay',
-  height: calendarHeight,
+      height: calendarHeight,
+      firstDay: weekStartDay,
       expandRows: true,
-      forceEventDuration: true, 
+      forceEventDuration: true,   
       nowIndicator: Boolean(bookingCalendarSettings.show_now_indicator),
       selectable: false, // Disable default click-and-drag selection to implement custom fixed-duration selection
       slotDuration: '00:30:00',
       snapDuration: minutesToDuration(bookingSnapMinutes),
+      // FIX: Dynamically change the calendar height settings on the fly during view switches
+      viewDidMount: function(arg) {
+        if (arg.view.type === 'dayGridMonth') {
+          // Force the calendar engine to drop the 1800px layout limits entirely for Month view
+          calendar.setOption('height', 'auto');
+          calendar.setOption('contentHeight', 'auto');
+          calendar.setOption('expandRows', false);
+        } else {
+          // Instantly restore your tall columns when going back to Week or Day views
+          calendar.setOption('height', calendarHeight);
+          calendar.setOption('contentHeight', null);
+          calendar.setOption('expandRows', true);
+        }
+      },
+      // FIX: Add view-specific overrides for the Month view
+      views: {
+        dayGridMonth: {
+          height: 'auto',        // Clears the master height constraint
+          contentHeight: 'auto', // FIX: Forces the inner table structure to collapse tightly
+          expandRows: false      // Stops the day grid cells from stretching out empty
+        }
+      },
+
       slotLabelInterval: '01:00',
       eventStartEditable: isStaff,
       eventDurationEditable: false,

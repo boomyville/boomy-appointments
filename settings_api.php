@@ -48,7 +48,7 @@ try {
             'booking_phone_display', 'booking_phone_required', 'booking_phone_numbers_only', 'booking_phone_min', 'booking_phone_max',
             'booking_dob_display', 'booking_dob_required', 'booking_gender_display', 'booking_gender_required',
             'booking_show_monday', 'booking_show_tuesday', 'booking_show_wednesday', 'booking_show_thursday', 'booking_show_friday', 'booking_show_saturday', 'booking_show_sunday',
-            'booking_start_time', 'booking_end_time', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes',
+            'booking_start_time', 'booking_end_time', 'booking_week_start_day', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes',
             'password_min_length', 'password_max_length', 'password_require_lowercase', 'password_require_uppercase', 'password_require_number', 'password_require_symbol',
             'email_whitelist_enabled', 'email_domain_whitelist', 'email_domain_blacklist',
             'smtp_host', 'smtp_port', 'smtp_encryption', 'smtp_username', 'smtp_password', 'mail_from_address', 'mail_from_name'
@@ -176,7 +176,7 @@ try {
             'booking' => [
                 'booking_deadline_hours',
                 'booking_show_monday', 'booking_show_tuesday', 'booking_show_wednesday', 'booking_show_thursday', 'booking_show_friday', 'booking_show_saturday', 'booking_show_sunday',
-                'booking_start_time', 'booking_end_time', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes'
+                'booking_start_time', 'booking_end_time', 'booking_week_start_day', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes'
             ],
             'authentication' => [
                 'password_min_length', 'password_max_length', 'password_require_lowercase', 'password_require_uppercase', 'password_require_number', 'password_require_symbol',
@@ -207,6 +207,7 @@ try {
             $deadline_hours = (int) ($data['booking_deadline_hours'] ?? 24);
             $start_time = trim((string) ($data['booking_start_time'] ?? '09:00'));
             $end_time = trim((string) ($data['booking_end_time'] ?? '21:00'));
+            $week_start_day = normalize_booking_week_start_day_setting($data['booking_week_start_day'] ?? '0');
             $calendar_height_raw = trim((string) ($data['booking_calendar_height'] ?? '1800'));
             $snap_options = [1, 2, 5, 10, 15, 20, 30, 40, 45, 60];
             $snap_minutes = (int) ($data['booking_snap_minutes'] ?? 15);
@@ -233,6 +234,12 @@ try {
             if ($end_time <= $start_time) {
                 http_response_code(422);
                 echo json_encode(['error' => 'Booking end time must be after start time']);
+                exit;
+            }
+
+            if ($week_start_day < 0 || $week_start_day > 6) {
+                http_response_code(422);
+                echo json_encode(['error' => 'Week start day must be between 0 and 6']);
                 exit;
             }
 
@@ -273,6 +280,7 @@ try {
 
             $data['booking_start_time'] = substr($start_time, 0, 5);
             $data['booking_end_time'] = substr($end_time, 0, 5);
+            $data['booking_week_start_day'] = (string) $week_start_day;
             $data['booking_calendar_height'] = $calendarHeight === 'auto' ? 'auto' : (string) $calendarHeight;
             $data['booking_deadline_hours'] = (string) $deadline_hours;
             $data['booking_snap_minutes'] = (string) $snap_minutes;

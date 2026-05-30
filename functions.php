@@ -1062,6 +1062,7 @@ function get_booking_calendar_settings(): array
     return [
         'deadline_hours' => (int) get_setting('booking_deadline_hours', '24'),
         'calendar_height' => normalize_booking_calendar_height_setting(get_setting('booking_calendar_height', '1800')),
+        'week_start_day' => normalize_booking_week_start_day_setting(get_setting('booking_week_start_day', '0')),
         'show_monday' => (bool) (int) get_setting('booking_show_monday', '1'),
         'show_tuesday' => (bool) (int) get_setting('booking_show_tuesday', '1'),
         'show_wednesday' => (bool) (int) get_setting('booking_show_wednesday', '1'),
@@ -1095,6 +1096,16 @@ function normalize_booking_calendar_height_setting($value)
     }
 
     return 1800;
+}
+
+function normalize_booking_week_start_day_setting($value): int
+{
+    $day = (int) trim((string) ($value ?? '0'));
+    if ($day < 0 || $day > 6) {
+        return 0;
+    }
+
+    return $day;
 }
 
 function get_appointment_types(bool $activeOnly = false): array

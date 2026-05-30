@@ -199,6 +199,7 @@ INSERT INTO `settings` (`setting_key`,`setting_value`) VALUES
 ('booking_show_sunday','0'),
 ('booking_start_time','09:00'),
 ('booking_end_time','21:00'),
+('booking_week_start_day','0'),
 ('booking_calendar_height','1800'),
 ('booking_show_now_indicator','1'),
 ('booking_snap_minutes','15'),
