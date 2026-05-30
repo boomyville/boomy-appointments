@@ -373,6 +373,7 @@ $settings = get_customer_field_settings();
             <th>Email</th>
             <th>Mobile</th>
             <th>Date Added</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody id="customersTableBody">
@@ -385,7 +386,7 @@ $settings = get_customer_field_settings();
   <dialog id="customerModal" class="modal-dialog">
     <div class="modal-card">
       <div class="modal-card__head">
-        <h2>Create New Customer</h2>
+        <h2 id="modalTitle">Create New Customer</h2>
       </div>
       <div class="modal-card__body">
         <div id="modalAlert"></div>
@@ -505,6 +506,7 @@ $settings = get_customer_field_settings();
     const addCustomerBtn = document.getElementById('addCustomerBtn');
     const cancelButton = document.getElementById('cancelButton');
     const submitButton = document.getElementById('submitButton');
+    const modalTitle = document.getElementById('modalTitle');
     const customerForm = document.getElementById('customerForm');
     const overrideSection = document.getElementById('overrideSection');
     const adminOverrideCheckbox = document.getElementById('adminOverrideCheckbox');
@@ -524,6 +526,8 @@ $settings = get_customer_field_settings();
     const pageSize = 20;
     let currentPage = 1;
     let currentSearch = '';
+    let currentCustomerMode = 'create';
+    let currentEditingCustomerId = null;
 
     const sortLabels = {
       full_name: 'Full name',
@@ -558,6 +562,12 @@ $settings = get_customer_field_settings();
       adminOverrideCheckbox.checked = false;
       overrideSection.style.display = 'none';
       modalAlert.innerHTML = '';
+      currentCustomerMode = 'create';
+      currentEditingCustomerId = null;
+      if (modalTitle) {
+        modalTitle.textContent = 'Create New Customer';
+      }
+      submitButton.textContent = 'Create Customer';
     }
 
     function buildPagination(total) {
@@ -643,7 +653,7 @@ $settings = get_customer_field_settings();
     function populateTable(customers) {
       customersTableBody.innerHTML = '';
       if (customers.length === 0) {
-        customersTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted);">No customers yet</td></tr>';
+        customersTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted);">No customers yet</td></tr>';
         customersTable.style.display = 'table';
         return;
       }
@@ -657,7 +667,12 @@ $settings = get_customer_field_settings();
           <td>${escapeHtml(c.email || '-')}</td>
           <td>${escapeHtml(c.mobile || '-')}</td>
           <td>${escapeHtml(formatDateTime(c.date_added || c.created_at || '-'))}</td>
+          <td><button type="button" class="secondary customer-edit-btn">Edit</button></td>
         `;
+        const editButton = row.querySelector('.customer-edit-btn');
+        if (editButton) {
+          editButton.addEventListener('click', () => openCustomerModal('edit', c));
+        }
         customersTableBody.appendChild(row);
       });
       customersTable.style.display = 'table';
@@ -685,15 +700,71 @@ $settings = get_customer_field_settings();
       return div.innerHTML;
     }
 
+    function splitFullName(fullName) {
+      const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+      if (parts.length === 0) {
+        return { firstName: '', middleName: '', lastName: '' };
+      }
+      if (parts.length === 1) {
+        return { firstName: parts[0], middleName: '', lastName: '' };
+      }
+      if (parts.length === 2) {
+        return { firstName: parts[0], middleName: '', lastName: parts[1] };
+      }
+      return {
+        firstName: parts[0],
+        middleName: parts.slice(1, -1).join(' '),
+        lastName: parts[parts.length - 1]
+      };
+    }
+
+    function setFieldValueById(id, value) {
+      const field = document.getElementById(id);
+      if (field) {
+        field.value = value ?? '';
+      }
+    }
+
+    function setCustomerModalMode(mode, customer = null) {
+      currentCustomerMode = mode;
+      currentEditingCustomerId = mode === 'edit' && customer ? Number(customer.id || 0) : null;
+      if (modalTitle) {
+        modalTitle.textContent = mode === 'edit' ? 'Edit Customer' : 'Create New Customer';
+      }
+      submitButton.textContent = mode === 'edit' ? 'Save Customer' : 'Create Customer';
+
+      if (mode === 'edit' && customer) {
+        const nameParts = splitFullName(customer.full_name);
+        setFieldValueById('firstName', nameParts.firstName);
+        setFieldValueById('middleName', nameParts.middleName);
+        setFieldValueById('lastName', nameParts.lastName);
+        setFieldValueById('dateOfBirth', customer.date_of_birth || '');
+        setFieldValueById('gender', customer.gender || '');
+        setFieldValueById('email', customer.email || '');
+        setFieldValueById('mobile', customer.mobile || '');
+      }
+    }
+
+    function openCustomerModal(mode = 'create', customer = null) {
+      resetForm();
+      setCustomerModalMode(mode, customer);
+      customerModal.showModal();
+    }
+
     async function submitCustomer() {
       const data = getFormData();
       const adminOverride = adminOverrideCheckbox.checked;
+      const isEditMode = currentCustomerMode === 'edit' && currentEditingCustomerId;
 
       try {
-        const resp = await fetch('customers_api.php?action=create', {
+        const resp = await fetch(`customers_api.php?action=${isEditMode ? 'update' : 'create'}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...data, admin_override: adminOverride })
+          body: JSON.stringify({
+            ...data,
+            customer_id: isEditMode ? currentEditingCustomerId : undefined,
+            admin_override: adminOverride
+          })
         });
 
         const json = await resp.json();
@@ -713,11 +784,11 @@ $settings = get_customer_field_settings();
             return;
           }
 
-          showAlert(modalAlert, json.error || 'Error creating customer', 'error');
+          showAlert(modalAlert, json.error || (isEditMode ? 'Error updating customer' : 'Error creating customer'), 'error');
           return;
         }
 
-        showAlert(alertContainer, 'Customer created successfully!', 'success');
+        showAlert(alertContainer, isEditMode ? 'Customer updated successfully!' : 'Customer created successfully!', 'success');
         resetForm();
         customerModal.close();
         loadCustomers(searchInput.value.trim());
@@ -727,8 +798,7 @@ $settings = get_customer_field_settings();
     }
 
     addCustomerBtn.addEventListener('click', () => {
-      resetForm();
-      customerModal.showModal();
+      openCustomerModal('create');
     });
 
     cancelButton.addEventListener('click', () => {

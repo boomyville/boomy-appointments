@@ -110,6 +110,18 @@ function ensure_appointment_schema(PDO $db): void
         if (!$hasNotes) {
             $db->exec("ALTER TABLE appointments ADD COLUMN notes TEXT NULL AFTER status");
         }
+
+        $hasHashKey = (bool) $db->query("SHOW COLUMNS FROM appointments LIKE 'hash_key'")->fetch();
+        if (!$hasHashKey) {
+            $db->exec("ALTER TABLE appointments ADD COLUMN hash_key CHAR(64) NOT NULL DEFAULT '' AFTER notes");
+
+            $stmt = $db->query("SELECT id FROM appointments WHERE hash_key = '' OR hash_key IS NULL");
+            $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+            $update = $db->prepare('UPDATE appointments SET hash_key = ? WHERE id = ?');
+            foreach ($rows as $row) {
+                $update->execute([bin2hex(random_bytes(32)), (int) ($row['id'] ?? 0)]);
+            }
+        }
     } catch (Throwable $e) {
         // Ignore schema bootstrap failures so the app can continue running.
     }
@@ -498,6 +510,42 @@ function set_setting(string $key, $value): bool
     $db = get_db();
     $stmt = $db->prepare('INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)');
     return (bool)$stmt->execute([$key, $value]);
+}
+
+function get_site_name(): string
+{
+    $appName = APP_NAME ?? 'Boomy Appointments';
+    $siteName = trim((string) get_setting('site_name', $appName));
+    if ($siteName === '') {
+        $siteName = $appName;
+    }
+
+    return $siteName;
+}
+
+function get_support_contact_message(?string $siteName = null): string
+{
+    $resolvedSiteName = trim((string) ($siteName ?? ''));
+    if ($resolvedSiteName === '') {
+        $resolvedSiteName = get_site_name();
+    }
+
+    $supportEmail = trim((string) get_setting('organization_email', ''));
+    $supportNumber = trim((string) get_setting('organization_number', ''));
+
+    if ($supportEmail !== '' && $supportNumber !== '') {
+        return 'Please contact ' . $resolvedSiteName . ' via ' . $supportEmail . ' or ' . $supportNumber . ' for further help.';
+    }
+
+    if ($supportEmail !== '') {
+        return 'Please contact ' . $resolvedSiteName . ' via ' . $supportEmail . ' for further help.';
+    }
+
+    if ($supportNumber !== '') {
+        return 'Please contact ' . $resolvedSiteName . ' via ' . $supportNumber . ' for further help.';
+    }
+
+    return 'Please contact ' . $resolvedSiteName . ' for extra help.';
 }
 
 // Return server time formatted. Attempts to use server time; if unavailable uses timezone from config
@@ -1010,6 +1058,138 @@ function send_email(string $to_email, string $subject, string $body_html, string
     }
 }
 
+function email_transport_is_ready(): bool
+{
+    return email_is_configured()
+        && file_exists(__DIR__ . '/phpmailer/PHPMailer.php')
+        && file_exists(__DIR__ . '/phpmailer/SMTP.php')
+        && file_exists(__DIR__ . '/phpmailer/Exception.php');
+}
+
+function format_app_datetime(string $value, ?string $format = null): string
+{
+    $raw = trim($value);
+    if ($raw === '') {
+        return '';
+    }
+
+    $timezone = new DateTimeZone(get_app_timezone_name());
+    $dateTime = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $raw, $timezone);
+    if (!$dateTime) {
+        try {
+            $dateTime = new DateTimeImmutable($raw, $timezone);
+        } catch (Throwable $e) {
+            return $raw;
+        }
+    }
+
+    $dateFormat = $format ?: get_setting('date_format', 'd/m/Y H:i');
+    return $dateTime->format($dateFormat);
+}
+
+function format_appointment_person_name(?array $person): string
+{
+    if (!$person) {
+        return '';
+    }
+
+    $firstName = trim((string) ($person['first_name'] ?? ''));
+    $lastName = trim((string) ($person['last_name'] ?? ''));
+    $preferred = trim($firstName . ' ' . $lastName);
+    if ($preferred !== '') {
+        return $preferred;
+    }
+
+    $fullName = trim((string) ($person['full_name'] ?? ''));
+    if ($fullName !== '') {
+        return $fullName;
+    }
+
+    return trim((string) ($person['email'] ?? ''));
+}
+
+function send_appointment_confirmation_email(int $appointmentId): array
+{
+    if (!email_transport_is_ready()) {
+        return ['ok' => false, 'error' => 'Mail settings not configured'];
+    }
+
+    $appointment = get_appointment_by_id($appointmentId);
+    if (!$appointment) {
+        return ['ok' => false, 'error' => 'Appointment not found'];
+    }
+
+    $customer = get_customer_by_id((int) ($appointment['customer_id'] ?? 0));
+    if (!$customer) {
+        return ['ok' => false, 'error' => 'Customer not found'];
+    }
+
+    $customerEmail = trim((string) ($customer['email'] ?? ''));
+    if ($customerEmail === '') {
+        return ['ok' => false, 'error' => 'Email not recorded for this customer'];
+    }
+
+    $provider = get_user_by_id((int) ($appointment['provider_id'] ?? 0));
+    $appointmentType = get_appointment_type_by_id((int) ($appointment['appointment_type_id'] ?? 0));
+    $hashKey = trim((string) ($appointment['hash_key'] ?? ''));
+
+    if ($hashKey === '') {
+        return ['ok' => false, 'error' => 'Appointment link is missing'];
+    }
+
+    $siteName = trim((string) get_setting('site_name', APP_NAME ?? 'Boomy Appointments'));
+    if ($siteName === '') {
+        $siteName = APP_NAME ?? 'Boomy Appointments';
+    }
+
+    $appointmentUrl = build_app_url('confirm_appointment.php', ['code' => $hashKey]);
+    $appointmentTypeName = trim((string) ($appointmentType['name'] ?? 'Appointment'));
+    $providerName = format_appointment_person_name($provider);
+    $startTime = format_app_datetime((string) ($appointment['start_time'] ?? ''));
+    $endTime = format_app_datetime((string) ($appointment['end_time'] ?? ''));
+    $customerName = trim((string) ($customer['full_name'] ?? ''));
+    $customerMobile = trim((string) ($customer['mobile'] ?? ''));
+    $providerDisplay = $providerName !== '' ? $providerName : 'Not recorded';
+    $customerMobileDisplay = $customerMobile !== '' ? $customerMobile : 'Not recorded';
+
+    $subject = 'Your appointment has been successfully booked for ' . $siteName;
+    $body_html = '<h2>Your appointment has been successfully booked for ' . htmlspecialchars($siteName, ENT_QUOTES, 'UTF-8') . '</h2>'
+        . '<p>Thank you for arranging an appointment with us. Below you can see the appointment details. Make changes by clicking the appointment link.</p>'
+        . '<h3>Appointment Details</h3>'
+        . '<ul>'
+        . '<li><strong>Appointment type:</strong> ' . htmlspecialchars($appointmentTypeName, ENT_QUOTES, 'UTF-8') . '</li>'
+        . '<li><strong>Provider:</strong> ' . htmlspecialchars($providerDisplay, ENT_QUOTES, 'UTF-8') . '</li>'
+        . '<li><strong>Start time:</strong> ' . htmlspecialchars($startTime, ENT_QUOTES, 'UTF-8') . '</li>'
+        . '<li><strong>End time:</strong> ' . htmlspecialchars($endTime, ENT_QUOTES, 'UTF-8') . '</li>'
+        . '</ul>'
+        . '<h3>Customer details</h3>'
+        . '<ul>'
+        . '<li><strong>Customer full name:</strong> ' . htmlspecialchars($customerName !== '' ? $customerName : 'Not recorded', ENT_QUOTES, 'UTF-8') . '</li>'
+        . '<li><strong>Mobile number:</strong> ' . htmlspecialchars($customerMobileDisplay, ENT_QUOTES, 'UTF-8') . '</li>'
+        . '</ul>'
+        . '<p><a href="' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '" style="background-color:#2457ff;color:#ffffff;padding:12px 20px;text-decoration:none;border-radius:999px;display:inline-block;font-weight:700;">Confirm or modify your appointment</a></p>'
+        . '<p>Or copy this link: ' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '</p>';
+
+    $body_plain = "Your appointment has been successfully booked for {$siteName}\n\n"
+        . "Thank you for arranging an appointment with us. Below you can see the appointment details. Make changes by clicking the appointment link.\n\n"
+        . "Appointment Details\n"
+        . "Appointment type: {$appointmentTypeName}\n"
+        . "Provider: {$providerDisplay}\n"
+        . "Start time: {$startTime}\n"
+        . "End time: {$endTime}\n\n"
+        . "Customer details:\n"
+        . "Customer full name: " . ($customerName !== '' ? $customerName : 'Not recorded') . "\n"
+        . "Mobile number: {$customerMobileDisplay}\n\n"
+        . "Confirm or modify your appointment: {$appointmentUrl}\n";
+
+    $sendResult = send_email($customerEmail, $subject, $body_html, $body_plain);
+    if ($sendResult === true) {
+        return ['ok' => true, 'sent' => true];
+    }
+
+    return ['ok' => false, 'error' => 'Failed to send confirmation email'];
+}
+
 // Customer settings and validation helpers
 function get_customer_field_settings(): array
 {
@@ -1266,6 +1446,31 @@ function create_customer(string $fullName, ?string $email, ?string $mobile, ?str
     }
 }
 
+function update_customer(int $customerId, string $fullName, ?string $email, ?string $mobile, ?string $dateOfBirth = null, ?string $gender = null): bool
+{
+    try {
+        $db = get_db();
+        if (!get_customer_by_id($customerId)) {
+            return false;
+        }
+
+        $normalizedDateOfBirth = normalize_customer_date_of_birth($dateOfBirth);
+        $normalizedGender = normalize_customer_gender($gender);
+
+        $stmt = $db->prepare('UPDATE customers SET full_name = ?, email = ?, mobile = ?, date_of_birth = ?, gender = ? WHERE id = ?');
+        return $stmt->execute([
+            $fullName,
+            $email ?: '',
+            $mobile ?: '',
+            $normalizedDateOfBirth,
+            $normalizedGender ?? 'unknown',
+            $customerId,
+        ]);
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 function get_customer_by_email(string $email): ?array
 {
     try {
@@ -1279,6 +1484,18 @@ function get_customer_by_email(string $email): ?array
             $stmt->execute([$email]);
             return $stmt->fetch() ?: null;
         }
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function get_user_by_id(int $id): ?array
+{
+    try {
+        $db = get_db();
+        $stmt = $db->prepare('SELECT id, email, password_hash, full_name, first_name, last_name, phone, role, is_active FROM users WHERE id = ? LIMIT 1');
+        $stmt->execute([$id]);
+        return $stmt->fetch() ?: null;
     } catch (Throwable $e) {
         return null;
     }
@@ -1320,6 +1537,18 @@ function get_appointment_by_id(int $id): ?array
         $db = get_db();
         $stmt = $db->prepare('SELECT id, customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key, created_at, updated_at FROM appointments WHERE id = ? LIMIT 1');
         $stmt->execute([$id]);
+        return $stmt->fetch() ?: null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function get_appointment_by_hash_key(string $hashKey): ?array
+{
+    try {
+        $db = get_db();
+        $stmt = $db->prepare('SELECT id, customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key, created_at, updated_at FROM appointments WHERE hash_key = ? LIMIT 1');
+        $stmt->execute([$hashKey]);
         return $stmt->fetch() ?: null;
     } catch (Throwable $e) {
         return null;

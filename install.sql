@@ -152,6 +152,7 @@ INSERT INTO `settings` (`setting_key`,`setting_value`) VALUES
 ('site_name','Boomy Appointments'),
 ('root_url',''),
 ('organization_email','appointments@example.com'),
+('organization_number',''),
 ('date_format','d/m/Y H:i'),
 ('booking_deadline_hours','24'),
 ('email_whitelist_enabled','0'),

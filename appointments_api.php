@@ -45,6 +45,40 @@ try {
         exit;
     }
 
+    if ($action === 'send_confirmation_email' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true) ?? [];
+        $token = $data['csrf_token'] ?? null;
+        if (!verify_csrf_token($token)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'csrf']);
+            exit;
+        }
+
+        $appointmentId = (int) ($data['appointment_id'] ?? 0);
+        if ($appointmentId < 1) {
+            http_response_code(400);
+            echo json_encode(['error' => 'appointment_id is required']);
+            exit;
+        }
+
+        $appointment = get_appointment_by_id($appointmentId);
+        if (!$appointment) {
+            http_response_code(404);
+            echo json_encode(['error' => 'not found']);
+            exit;
+        }
+
+        $result = send_appointment_confirmation_email($appointmentId);
+        if (!empty($result['ok'])) {
+            echo json_encode(['ok' => true, 'sent' => true]);
+            exit;
+        }
+
+        http_response_code(422);
+        echo json_encode(['error' => $result['error'] ?? 'Failed to send confirmation email']);
+        exit;
+    }
+
     // Update appointment
     if ($action === 'update' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $data = json_decode(file_get_contents('php://input'), true) ?? [];

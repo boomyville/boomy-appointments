@@ -40,7 +40,7 @@ if (empty($_SESSION['user'])) {
 try {
     if ($action === 'get') {
         $keys = [
-            'site_name', 'root_url', 'organization_email', 'date_format', 'booking_deadline_hours',
+            'site_name', 'root_url', 'organization_email', 'organization_number', 'date_format', 'booking_deadline_hours',
             'booking_firstname_display', 'booking_firstname_required', 'booking_firstname_letters_only', 'booking_firstname_min', 'booking_firstname_max',
             'booking_lastname_display', 'booking_lastname_required', 'booking_lastname_letters_only', 'booking_lastname_min', 'booking_lastname_max',
             'booking_middlename_display', 'booking_middlename_required', 'booking_middlename_letters_only', 'booking_middlename_min', 'booking_middlename_max',
@@ -164,7 +164,7 @@ try {
 
         // Allowed fields per tab
         $allowed = [
-            'general' => ['site_name', 'root_url', 'organization_email', 'date_format'],
+            'general' => ['site_name', 'root_url', 'organization_email', 'organization_number', 'date_format'],
             'customer_registration' => [
                 'booking_firstname_display', 'booking_firstname_required', 'booking_firstname_letters_only', 'booking_firstname_min', 'booking_firstname_max',
                 'booking_lastname_display', 'booking_lastname_required', 'booking_lastname_letters_only', 'booking_lastname_min', 'booking_lastname_max',

@@ -40,6 +40,7 @@ $bookingCalendarSettings = get_booking_calendar_settings();
 $customerFieldSettings = get_customer_field_settings();
 $serverTimezoneName = get_app_timezone_name();
 $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneName)))->format(DateTimeInterface::ATOM);
+$appointmentEmailDeliveryReady = email_transport_is_ready();
 ?>
 <!doctype html>
 <html lang="en">
@@ -418,9 +419,10 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       backdrop-filter: blur(4px);
     }
 
-    .booking-modal.is-invalid-time .booking-card {
+/* Fix: Bind the animation directly to the container layer being updated by the script */
+    .booking-card.is-invalid-time {
       box-shadow: inset 0 0 0 6px #ef4444, var(--shadow) !important;
-      animation: flashRedBorder 1.2s ease-in-out infinite;
+      animation: flashRedBorder 1.2s ease-in-out infinite !important;
     }
 
     @keyframes flashRedBorder {
@@ -820,6 +822,12 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       line-height: 1.5;
     }
 
+    .appointment-email-warning {
+      margin-top: 10px;
+      color: #b45309;
+      font-weight: 700;
+    }
+
     .booking-warning-card__footer {
       display: flex;
       justify-content: flex-end;
@@ -836,6 +844,12 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       font: inherit;
       font-weight: 700;
       cursor: pointer;
+    }
+
+    .booking-warning-card__footer button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      filter: grayscale(0.25);
     }
 
     .booking-warning-card__footer .primary {
@@ -1260,6 +1274,22 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     </div>
   </dialog>
 
+  <dialog id="appointmentEmailModal" class="booking-warning-modal">
+    <div class="booking-warning-card">
+      <div class="booking-warning-card__head">
+        <h2>Send confirmation email?</h2>
+      </div>
+      <div class="booking-warning-card__body">
+        <p id="appointmentEmailMessage"></p>
+        <p id="appointmentEmailWarning" class="appointment-email-warning" style="display:none;"></p>
+      </div>
+      <div class="booking-warning-card__footer">
+        <button type="button" id="appointmentEmailSkip">No, skip</button>
+        <button type="button" id="appointmentEmailSend" class="primary">Yes, send email</button>
+      </div>
+    </div>
+  </dialog>
+
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
   <script>
     const isStaff = <?php echo json_encode($isStaff); ?>;
@@ -1286,6 +1316,11 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     const bookingWarningMessage = document.getElementById('bookingWarningMessage');
     const bookingWarningCancel = document.getElementById('bookingWarningCancel');
     const bookingWarningConfirm = document.getElementById('bookingWarningConfirm');
+    const appointmentEmailModal = document.getElementById('appointmentEmailModal');
+    const appointmentEmailMessage = document.getElementById('appointmentEmailMessage');
+    const appointmentEmailWarning = document.getElementById('appointmentEmailWarning');
+    const appointmentEmailSkip = document.getElementById('appointmentEmailSkip');
+    const appointmentEmailSend = document.getElementById('appointmentEmailSend');
     const bookingStart = document.getElementById('bookingStart');
     const bookingEnd = document.getElementById('bookingEnd');
     const closeBookingModalTop = document.getElementById('closeBookingModalTop');
@@ -1306,7 +1341,9 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     let currentBookingStartDate = null;
     let currentBookingEndDate = null;
     let notesExpanded = false;
+    let pendingEmailPromptContext = null;
     const appointmentStatusValues = ['booked', 'confirmed', 'present', 'completed', 'no show'];
+    const appointmentEmailDeliveryReady = Boolean(<?php echo json_encode($appointmentEmailDeliveryReady); ?>);
 
     const fallbackDurationMinutes = appointmentTypes.length > 0 ? Number(appointmentTypes[0].duration_minutes || 30) : 30;
 
@@ -1645,6 +1682,8 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       if (bookingEndTimeInput) {
         bookingEndTimeInput.value = getServerTimePartFromDateTime(bookingEnd.value).slice(0, 5);
       }
+      // FIX: Force validation to run every time draft values sync up
+      setTimeout(checkTimeSlotConflicts, 100);
     }
 
     function syncBookingNotes(value) {
@@ -2233,6 +2272,123 @@ eventClick: function(info) {
       });
     }
 
+    function getAppointmentEmailWarning(customerEmail) {
+      if (!String(customerEmail || '').trim()) {
+        return 'Email not recorded for this customer';
+      }
+
+      if (!appointmentEmailDeliveryReady) {
+        return 'Mail settings not configured';
+      }
+
+      return '';
+    }
+
+    function setAppointmentEmailPromptState(context) {
+      if (!appointmentEmailModal) {
+        return;
+      }
+
+      const warning = getAppointmentEmailWarning(context && context.customerEmail);
+      if (appointmentEmailMessage) {
+        appointmentEmailMessage.textContent = 'Send a confirmation email to ' + (context && context.customerName ? context.customerName : 'this customer') + '?';
+      }
+      if (appointmentEmailWarning) {
+        if (warning) {
+          appointmentEmailWarning.textContent = warning;
+          appointmentEmailWarning.style.display = '';
+        } else {
+          appointmentEmailWarning.textContent = '';
+          appointmentEmailWarning.style.display = 'none';
+        }
+      }
+      if (appointmentEmailSend) {
+        appointmentEmailSend.disabled = Boolean(warning);
+      }
+    }
+
+    function hideAppointmentEmailPrompt() {
+      if (appointmentEmailModal && typeof appointmentEmailModal.close === 'function') {
+        appointmentEmailModal.close();
+      } else if (appointmentEmailModal) {
+        appointmentEmailModal.removeAttribute('open');
+      }
+      pendingEmailPromptContext = null;
+    }
+
+    function showAppointmentEmailPrompt(context) {
+      pendingEmailPromptContext = context;
+      setAppointmentEmailPromptState(context);
+
+      if (appointmentEmailModal && appointmentEmailModal.open && typeof appointmentEmailModal.close === 'function') {
+        appointmentEmailModal.close();
+      }
+
+      return new Promise((resolve) => {
+        if (!appointmentEmailModal) {
+          resolve(false);
+          return;
+        }
+
+        const cleanup = () => {
+          if (appointmentEmailSend) {
+            appointmentEmailSend.removeEventListener('click', handleSend);
+          }
+          if (appointmentEmailSkip) {
+            appointmentEmailSkip.removeEventListener('click', handleSkip);
+          }
+          appointmentEmailModal.removeEventListener('cancel', handleCancel);
+        };
+
+        const finish = (value) => {
+          cleanup();
+          hideAppointmentEmailPrompt();
+          resolve(value);
+        };
+
+        const handleSend = () => finish(true);
+        const handleSkip = () => finish(false);
+        const handleCancel = function(event) {
+          event.preventDefault();
+          finish(false);
+        };
+
+        if (appointmentEmailSend) {
+          appointmentEmailSend.addEventListener('click', handleSend, { once: true });
+        }
+        if (appointmentEmailSkip) {
+          appointmentEmailSkip.addEventListener('click', handleSkip, { once: true });
+        }
+        appointmentEmailModal.addEventListener('cancel', handleCancel, { once: true });
+
+        if (typeof appointmentEmailModal.showModal === 'function') {
+          appointmentEmailModal.showModal();
+        } else {
+          appointmentEmailModal.setAttribute('open', 'open');
+        }
+      });
+    }
+
+    async function sendAppointmentConfirmationEmail(appointmentId) {
+      const response = await fetch('appointments_api.php?action=send_confirmation_email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          csrf_token: document.querySelector('input[name="csrf_token"]').value,
+          appointment_id: appointmentId
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send confirmation email');
+      }
+
+      return data;
+    }
+
     const createCustomerTab = document.getElementById('createCustomerTab');
     const existingCustomerTab = document.getElementById('existingCustomerTab');
     const createCustomerPanel = document.getElementById('createCustomerPanel');
@@ -2622,6 +2778,36 @@ eventClick: function(info) {
           throw new Error(json.error || 'Failed to create booking');
         }
 
+        const savedAppointmentId = Number(json.appointment && json.appointment.id ? json.appointment.id : 0);
+        const savedCustomerEmail = String(json.customer && json.customer.email ? json.customer.email : '').trim();
+        const savedCustomerName = String(json.customer && json.customer.full_name ? json.customer.full_name : customerName || 'this customer').trim();
+
+        if (savedAppointmentId > 0) {
+          while (true) {
+            const sendEmail = await showAppointmentEmailPrompt({
+              appointmentId: savedAppointmentId,
+              customerEmail: savedCustomerEmail,
+              customerName: savedCustomerName
+            });
+
+            if (!sendEmail) {
+              break;
+            }
+
+            makeBookingBtn.disabled = true;
+            makeBookingBtn.textContent = 'Sending email...';
+            try {
+              await sendAppointmentConfirmationEmail(savedAppointmentId);
+              break;
+            } catch (emailErr) {
+              setBookingAlert(emailErr.message || 'Failed to send confirmation email.');
+            } finally {
+              makeBookingBtn.disabled = false;
+              makeBookingBtn.textContent = mode === 'edit' ? 'Save changes' : 'Make booking';
+            }
+          }
+        }
+
         await calendar.refetchEvents();
         if (typeof bookingModal.close === 'function') {
           bookingModal.close();
@@ -2665,8 +2851,9 @@ eventClick: function(info) {
     setCustomerMode('create');
 
 function setDraftMode() {
-       // ADD THIS LINE: Reset the invalid configuration rules on close/cancel
-      bookingModal.classList.remove('is-invalid-time');
+      // FIX: Clean the border status indicators off your inner layout node elements cleanly
+      const cardElement = bookingModal.querySelector('.booking-card');
+      if (cardElement) cardElement.classList.remove('is-invalid-time');
       // ADD THIS LINE: Automatically clear the placeholder event from the screen on cancel/close
       const draft = window.calendarInstance?.getEventById('booking-draft-placeholder');
       if (draft) { draft.remove(); }
@@ -2765,19 +2952,20 @@ function setDraftMode() {
       });
     }
 
-    // Appointment type change updates duration
-    appointmentTypeSelect.addEventListener('change', function() {
-      // If we're in draft mode, keep old behavior
+    // Appointment type change updates duration and validates immediately
+      appointmentTypeSelect.addEventListener('change', function() {
       if (bookingModal.getAttribute('data-mode') === 'draft') {
         syncBookingDraftTimes();
         return;
       }
 
-      // If in edit mode and override was active, clear override and recompute end
       if (bookingEndOverrideActive) {
         bookingEndOverrideActive = false;
       }
       applyVisibleTimeInputsToHidden();
+      
+      // Re-run validations when the duration shifts in edit mode
+      checkTimeSlotConflicts();
     });
 
     if (bookingStartTimeInput) {
@@ -2870,7 +3058,7 @@ function setDraftMode() {
         selectedEndLabel.textContent = formatCalendarDate(calendar, ed);
 
         // RUN CONFLICT VERIFICATIONS AFTER RECOMPUTING NEW HIDDEN BOUNDARIES
-        checkTimeSlotConflicts();
+        setTimeout(checkTimeSlotConflicts, 100);
         
       } catch (e) {
         // ignore
@@ -2878,41 +3066,52 @@ function setDraftMode() {
     }
 
     function checkTimeSlotConflicts() {
-  const startIso = bookingStart.value.trim();
-  const endIso = bookingEnd.value.trim();
-  
-  if (!startIso || !endIso) return false;
+      const startIso = bookingStart.value.trim();
+      const endIso = bookingEnd.value.trim();
+      
+      if (!startIso || !endIso) return false;
 
-  // Parse active draft coordinates
-  const draftStart = new Date(startIso + 'Z');
-  const draftEnd = new Date(endIso + 'Z');
+      // Safe date formatting translation parsing
+      const draftStart = new Date(startIso.replace(' ', 'T') + 'Z');
+      const draftEnd = new Date(endIso.replace(' ', 'T') + 'Z');
 
-  // Scan calendar cache for overlapping background elements
-  const hasTimeConflict = window.calendarInstance.getEvents().some(function(event) {
-    if (event.display !== 'background') return false;
-    
-    const breakStart = event.start;
-    const breakEnd = event.end || event.start;
-    
-    return breakStart < draftEnd && breakEnd > draftStart;
-  });
+      if (Number.isNaN(draftStart.getTime()) || Number.isNaN(draftEnd.getTime())) {
+        return false; 
+      }
 
-  // Toggle UI rules based on tracking states
-  if (hasTimeConflict) {
-    bookingModal.classList.add('is-invalid-time');
-    setBookingAlert('🚨 This appointment cannot be booked because it overlaps with an unavailable or break time slot.', true);
-    if (makeBookingBtn) makeBookingBtn.disabled = true; // Lock out immediate submissions
-    return true;
-  } else {
-    bookingModal.classList.remove('is-invalid-time');
-    // Only wipe the alert if it was our specific conflict warning to prevent overwriting other system flags
-    if (bookingModalAlert.textContent.includes('unavailable or break time slot')) {
-      setBookingAlert('');
+      // Scan calendar cache for ANY overlapping elements
+      const hasTimeConflict = window.calendarInstance.getEvents().some(function(event) {
+        // 1. Ignore our own temporary visual draft placeholder block
+        if (event.id === 'booking-draft-placeholder') return false;
+        if (event.extendedProps?.isDraftPlaceholder) return false;
+        
+        // 2. Ignore the actual appointment block we are currently editing
+        if (currentEditingAppointmentId && String(event.id) === String(currentEditingAppointmentId)) {
+          return false;
+        }
+
+        const checkStart = event.start;
+        const checkEnd = event.end || event.start;
+        
+        // 3. Math check: Does our draft track slip inside this event's window bounds?
+        const overlaps = checkStart < draftEnd && checkEnd > draftStart;
+        
+        return overlaps;
+      });
+
+      // Target the card element for the animation wrapper
+      const cardElement = bookingModal.querySelector('.booking-card');
+
+      if (hasTimeConflict) {
+        if (cardElement) cardElement.classList.add('is-invalid-time'); 
+        if (makeBookingBtn) makeBookingBtn.disabled = true;
+        return true;
+      } else {
+        if (cardElement) cardElement.classList.remove('is-invalid-time'); 
+        if (makeBookingBtn) makeBookingBtn.disabled = false;
+        return false;
+      }
     }
-    if (makeBookingBtn) makeBookingBtn.disabled = false; // Safe to tap
-    return false;
-  }
-}
   </script>
 
   <script src="assets/js/global.js"></script>

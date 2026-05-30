@@ -32,6 +32,7 @@ $user = $_SESSION['user'];
 $site_name = get_setting('site_name', APP_NAME ?? 'Boomy Appointments');
 $root_url = get_setting('root_url', '');
 $org_email = get_setting('organization_email', '');
+$org_number = get_setting('organization_number', '');
 $date_format = get_setting('date_format', 'd/m/Y H:i');
 $booking_deadline = get_setting('booking_deadline_hours', '24');
 
@@ -161,6 +162,9 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
 
       <label for="organization_email">Organisation Email</label>
       <input id="organization_email" name="organization_email" type="email" value="<?php echo htmlspecialchars($org_email); ?>" required>
+
+      <label for="organization_number">Organisation Number</label>
+      <input id="organization_number" name="organization_number" type="text" value="<?php echo htmlspecialchars($org_number); ?>" maxlength="64" placeholder="e.g. mobile number or landline">
 
       <label for="date_format">Time Format</label>
       <select id="date_format" name="date_format">

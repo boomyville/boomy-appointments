@@ -13,6 +13,134 @@ if (empty($_SESSION['user'])) {
 $user = $_SESSION['user'];
 $role = $user['role'] ?? '';
 
+function save_customer_record(array $data, string $role, bool $isUpdate = false): array
+{
+    $firstName = trim((string) ($data['first_name'] ?? ''));
+    $lastName = trim((string) ($data['last_name'] ?? ''));
+    $middleName = trim((string) ($data['middle_name'] ?? ''));
+    $email = trim((string) ($data['email'] ?? ''));
+    $mobile = trim((string) ($data['mobile'] ?? ''));
+    $dateOfBirth = trim((string) ($data['date_of_birth'] ?? ''));
+    $gender = trim((string) ($data['gender'] ?? ''));
+    $adminOverride = (bool) ($data['admin_override'] ?? false);
+    $customerId = (int) ($data['customer_id'] ?? 0);
+
+    $settings = get_customer_field_settings();
+    $validationErrors = [];
+
+    if ($settings['first_name']['display']) {
+        $err = validate_customer_field('first_name', $firstName);
+        if ($err) {
+          $validationErrors['first_name'] = $err;
+        }
+    }
+
+    if ($settings['last_name']['display']) {
+        $err = validate_customer_field('last_name', $lastName);
+        if ($err) {
+          $validationErrors['last_name'] = $err;
+        }
+    }
+
+    if ($settings['middle_name']['display']) {
+        $err = validate_customer_field('middle_name', $middleName);
+        if ($err) {
+          $validationErrors['middle_name'] = $err;
+        }
+    }
+
+    if ($settings['email']['display']) {
+        $err = validate_customer_field('email', $email);
+        if ($err) {
+          $validationErrors['email'] = $err;
+        }
+    }
+
+    if ($settings['mobile']['display']) {
+        $err = validate_customer_field('mobile', $mobile);
+        if ($err) {
+          $validationErrors['mobile'] = $err;
+        }
+    }
+
+    if ($settings['date_of_birth']['display'] || $settings['date_of_birth']['required'] || $dateOfBirth !== '') {
+        $err = validate_customer_field('date_of_birth', $dateOfBirth);
+        if ($err) {
+          $validationErrors['date_of_birth'] = $err;
+        }
+    }
+
+    if ($settings['gender']['display'] || $settings['gender']['required'] || $gender !== '') {
+        $err = validate_customer_field('gender', $gender);
+        if ($err) {
+          $validationErrors['gender'] = $err;
+        }
+    }
+
+    if (!empty($validationErrors)) {
+        if ($adminOverride && $role === 'admin') {
+            $onlyMissingRequired = true;
+            foreach ($validationErrors as $error) {
+                if (strpos($error, 'is required') === false) {
+                    $onlyMissingRequired = false;
+                    break;
+                }
+            }
+
+            if (!$onlyMissingRequired) {
+                return ['ok' => false, 'status' => 422, 'error' => 'validation_error', 'errors' => $validationErrors];
+            }
+        } else {
+            $missingRequired = [];
+            foreach ($validationErrors as $field => $error) {
+                if (strpos($error, 'is required') !== false) {
+                    $missingRequired[] = $field;
+                }
+            }
+
+            if (!empty($missingRequired)) {
+                return [
+                    'ok' => false,
+                    'status' => 422,
+                    'error' => 'missing_required_fields',
+                    'missing_fields' => $missingRequired,
+                    'details' => $validationErrors,
+                ];
+            }
+
+            return ['ok' => false, 'status' => 422, 'error' => 'validation_error', 'errors' => $validationErrors];
+        }
+    }
+
+    $fullName = trim(implode(' ', array_filter([$firstName, $middleName, $lastName])));
+    if ($fullName === '') {
+        return ['ok' => false, 'status' => 422, 'error' => 'At least first name is required'];
+    }
+
+    if ($isUpdate) {
+        if ($customerId < 1) {
+            return ['ok' => false, 'status' => 400, 'error' => 'customer_id is required'];
+        }
+
+        if (!get_customer_by_id($customerId)) {
+            return ['ok' => false, 'status' => 404, 'error' => 'customer not found'];
+        }
+
+        if (!update_customer($customerId, $fullName, $email ?: null, $mobile ?: null, $dateOfBirth ?: null, $gender ?: null)) {
+            return ['ok' => false, 'status' => 500, 'error' => 'Failed to update customer'];
+        }
+
+        return ['ok' => true, 'customer' => get_customer_by_id($customerId)];
+    }
+
+    $customerId = create_customer($fullName, $email ?: null, $mobile ?: null, $dateOfBirth ?: null, $gender ?: null);
+    if (!$customerId) {
+        return ['ok' => false, 'status' => 500, 'error' => 'Failed to create customer'];
+    }
+
+    return ['ok' => true, 'customer' => get_customer_by_id($customerId)];
+}
+
 try {
     $action = $_GET['action'] ?? 'list';
 
@@ -52,137 +180,31 @@ try {
     // POST /customers_api.php?action=create - Create a new customer
     if ($action === 'create' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $data = json_decode(file_get_contents('php://input'), true) ?? [];
-
-        $firstName = trim((string) ($data['first_name'] ?? ''));
-        $lastName = trim((string) ($data['last_name'] ?? ''));
-        $middleName = trim((string) ($data['middle_name'] ?? ''));
-        $email = trim((string) ($data['email'] ?? ''));
-        $mobile = trim((string) ($data['mobile'] ?? ''));
-        $dateOfBirth = trim((string) ($data['date_of_birth'] ?? ''));
-        $gender = trim((string) ($data['gender'] ?? ''));
-        $adminOverride = (bool) ($data['admin_override'] ?? false);
-
-        $settings = get_customer_field_settings();
-
-        // Validate each field if it's displayed
-        $validationErrors = [];
-
-        if ($settings['first_name']['display']) {
-            $err = validate_customer_field('first_name', $firstName);
-            if ($err) {
-                $validationErrors['first_name'] = $err;
-            }
-        }
-
-        if ($settings['last_name']['display']) {
-            $err = validate_customer_field('last_name', $lastName);
-            if ($err) {
-                $validationErrors['last_name'] = $err;
-            }
-        }
-
-        if ($settings['middle_name']['display']) {
-            $err = validate_customer_field('middle_name', $middleName);
-            if ($err) {
-                $validationErrors['middle_name'] = $err;
-            }
-        }
-
-        if ($settings['email']['display']) {
-            $err = validate_customer_field('email', $email);
-            if ($err) {
-                $validationErrors['email'] = $err;
-            }
-        }
-
-        if ($settings['mobile']['display']) {
-            $err = validate_customer_field('mobile', $mobile);
-            if ($err) {
-                $validationErrors['mobile'] = $err;
-            }
-        }
-
-        if ($settings['date_of_birth']['display'] || $settings['date_of_birth']['required'] || $dateOfBirth !== '') {
-            $err = validate_customer_field('date_of_birth', $dateOfBirth);
-            if ($err) {
-                $validationErrors['date_of_birth'] = $err;
-            }
-        }
-
-        if ($settings['gender']['display'] || $settings['gender']['required'] || $gender !== '') {
-            $err = validate_customer_field('gender', $gender);
-            if ($err) {
-                $validationErrors['gender'] = $err;
-            }
-        }
-
-        // If there are validation errors
-        if (!empty($validationErrors)) {
-            // Admin can override missing required fields
-            if ($adminOverride && $role === 'admin') {
-                // Check if ONLY required fields are missing (not format errors)
-                $onlyMissingRequired = true;
-                foreach ($validationErrors as $field => $error) {
-                    // If it's not a "is required" error, it's a format/length error and can't be overridden
-                    if (strpos($error, 'is required') === false) {
-                        $onlyMissingRequired = false;
-                        break;
-                    }
-                }
-
-                if (!$onlyMissingRequired) {
-                    http_response_code(422);
-                    echo json_encode(['error' => 'validation_error', 'errors' => $validationErrors]);
-                    exit;
-                }
-
-                // Allowed to proceed with override
-            } else {
-                // Not admin or not overriding; report missing required fields
-                $missingRequired = [];
-                foreach ($validationErrors as $field => $error) {
-                    if (strpos($error, 'is required') !== false) {
-                        $missingRequired[] = $field;
-                    }
-                }
-
-                if (!empty($missingRequired)) {
-                    // Return missing fields so client can prompt for override
-                    http_response_code(422);
-                    echo json_encode([
-                        'error' => 'missing_required_fields',
-                        'missing_fields' => $missingRequired,
-                        'details' => $validationErrors
-                    ]);
-                    exit;
-                }
-
-                // Non-required validation errors (format/length)
-                http_response_code(422);
-                echo json_encode(['error' => 'validation_error', 'errors' => $validationErrors]);
-                exit;
-            }
-        }
-
-        // Build full name from parts
-        $fullName = trim(implode(' ', array_filter([$firstName, $middleName, $lastName])));
-        if (empty($fullName)) {
-            http_response_code(422);
-            echo json_encode(['error' => 'At least first name is required']);
+        $result = save_customer_record($data, $role, false);
+        if (empty($result['ok'])) {
+            http_response_code((int) ($result['status'] ?? 400));
+            unset($result['status']);
+            echo json_encode($result);
             exit;
         }
 
-        // Create customer
-        $customerId = create_customer($fullName, $email ?: null, $mobile ?: null, $dateOfBirth ?: null, $gender ?: null);
-
-        if (!$customerId) {
-            http_response_code(500);
-            echo json_encode(['error' => 'Failed to create customer']);
-            exit;
-        }
-
-        $customer = get_customer_by_id($customerId);
+        $customer = $result['customer'] ?? null;
         echo json_encode(['ok' => true, 'customer' => $customer]);
+        exit;
+    }
+
+    // POST /customers_api.php?action=update - Update an existing customer
+    if ($action === 'update' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true) ?? [];
+        $result = save_customer_record($data, $role, true);
+        if (empty($result['ok'])) {
+            http_response_code((int) ($result['status'] ?? 400));
+            unset($result['status']);
+            echo json_encode($result);
+            exit;
+        }
+
+        echo json_encode(['ok' => true, 'customer' => $result['customer'] ?? null]);
         exit;
     }
 
