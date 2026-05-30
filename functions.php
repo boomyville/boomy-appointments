@@ -37,7 +37,329 @@ function get_db(): PDO
     ];
 
     $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
+    ensure_customer_schema($pdo);
+    ensure_breaks_schema($pdo);
+    ensure_appointment_schema($pdo);
     return $pdo;
+}
+
+function ensure_customer_schema(PDO $db): void
+{
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
+    try {
+        $hasDateAdded = (bool) $db->query("SHOW COLUMNS FROM customers LIKE 'date_added'")->fetch();
+        if (!$hasDateAdded) {
+            $db->exec("ALTER TABLE customers ADD COLUMN date_added TIMESTAMP NULL DEFAULT NULL AFTER date_of_birth");
+            $db->exec("UPDATE customers SET date_added = created_at WHERE date_added IS NULL");
+            $db->exec("ALTER TABLE customers MODIFY date_added TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP");
+        }
+
+        $hasGender = (bool) $db->query("SHOW COLUMNS FROM customers LIKE 'gender'")->fetch();
+        if (!$hasGender) {
+            $db->exec("ALTER TABLE customers ADD COLUMN gender ENUM('male','female','other','unknown') NOT NULL DEFAULT 'unknown' AFTER date_added");
+        }
+    } catch (Throwable $e) {
+        // Keep the app running even if the schema cannot be updated automatically.
+    }
+}
+
+function ensure_breaks_schema(PDO $db): void
+{
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
+    try {
+        $tableExists = (bool) $db->query("SHOW TABLES LIKE 'breaks'")->fetch();
+        if (!$tableExists) {
+            $db->exec("CREATE TABLE `breaks` (
+  `id` INT UNSIGNED AUTO_INCREMENT,
+  `day_of_week` TINYINT UNSIGNED NULL,
+  `start_time` TIME NOT NULL,
+  `end_time` TIME NOT NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_breaks_day_time` (`day_of_week`,`start_time`,`end_time`),
+  KEY `idx_breaks_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        }
+    } catch (Throwable $e) {
+        // Ignore schema bootstrap failures so the app can continue running.
+    }
+}
+
+function ensure_appointment_schema(PDO $db): void
+{
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
+    try {
+        $hasNotes = (bool) $db->query("SHOW COLUMNS FROM appointments LIKE 'notes'")->fetch();
+        if (!$hasNotes) {
+            $db->exec("ALTER TABLE appointments ADD COLUMN notes TEXT NULL AFTER status");
+        }
+    } catch (Throwable $e) {
+        // Ignore schema bootstrap failures so the app can continue running.
+    }
+}
+
+function normalize_break_day_of_week(?string $value): ?int
+{
+    $raw = strtolower(trim((string) ($value ?? '')));
+    if ($raw === '') {
+        return null;
+    }
+
+    $dayMap = [
+        'monday' => 1,
+        'tuesday' => 2,
+        'wednesday' => 3,
+        'thursday' => 4,
+        'friday' => 5,
+        'saturday' => 6,
+        'sunday' => 7,
+    ];
+
+    if (isset($dayMap[$raw])) {
+        return $dayMap[$raw];
+    }
+
+    if (ctype_digit($raw)) {
+        $day = (int) $raw;
+        if ($day >= 1 && $day <= 7) {
+            return $day;
+        }
+    }
+
+    return null;
+}
+
+function format_break_day_label(?int $dayOfWeek): string
+{
+    return match ($dayOfWeek) {
+        1 => 'Monday',
+        2 => 'Tuesday',
+        3 => 'Wednesday',
+        4 => 'Thursday',
+        5 => 'Friday',
+        6 => 'Saturday',
+        7 => 'Sunday',
+        default => 'Every day',
+    };
+}
+
+function normalize_break_time_value(?string $value): ?string
+{
+    $raw = trim((string) ($value ?? ''));
+    if ($raw === '') {
+        return null;
+    }
+
+    $formats = ['H:i', 'H:i:s'];
+    foreach ($formats as $format) {
+        $dateTime = DateTimeImmutable::createFromFormat($format, $raw);
+        $errors = DateTimeImmutable::getLastErrors();
+        if ($dateTime && ($errors['warning_count'] ?? 0) === 0 && ($errors['error_count'] ?? 0) === 0) {
+            return $dateTime->format('H:i:s');
+        }
+    }
+
+    return null;
+}
+
+function get_standard_breaks(?int $dayOfWeek = null, bool $includeInactive = false): array
+{
+    try {
+        $db = get_db();
+        $sql = 'SELECT id, day_of_week, start_time, end_time, is_active, created_at, updated_at FROM breaks';
+        $params = [];
+
+        if ($dayOfWeek === null) {
+            $sql .= ' WHERE day_of_week IS NULL';
+        } else {
+            $sql .= ' WHERE (day_of_week IS NULL OR day_of_week = ?)';
+            $params[] = $dayOfWeek;
+        }
+
+        if (!$includeInactive) {
+            $sql .= ' AND is_active = 1';
+        }
+
+        $sql .= ' ORDER BY (day_of_week IS NULL) DESC, start_time ASC, id ASC';
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function get_all_standard_breaks(bool $includeInactive = false): array
+{
+    try {
+        $db = get_db();
+        $sql = 'SELECT id, day_of_week, start_time, end_time, is_active, created_at, updated_at FROM breaks';
+        if (!$includeInactive) {
+            $sql .= ' WHERE is_active = 1';
+        }
+        $sql .= ' ORDER BY (day_of_week IS NULL) DESC, day_of_week ASC, start_time ASC, id ASC';
+        $stmt = $db->query($sql);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function create_standard_break(?int $dayOfWeek, string $startTime, string $endTime, ?bool $isActive = true): ?int
+{
+    try {
+        $normalizedStart = normalize_break_time_value($startTime);
+        $normalizedEnd = normalize_break_time_value($endTime);
+        if ($normalizedStart === null || $normalizedEnd === null) {
+            return null;
+        }
+
+        $referenceDate = new DateTimeImmutable('2000-01-01');
+        $startDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $referenceDate->format('Y-m-d') . ' ' . $normalizedStart);
+        $endDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $referenceDate->format('Y-m-d') . ' ' . $normalizedEnd);
+        if (!$startDate || !$endDate || $endDate <= $startDate) {
+            return null;
+        }
+
+        $db = get_db();
+        $stmt = $db->prepare('INSERT INTO breaks (day_of_week, start_time, end_time, is_active) VALUES (?, ?, ?, ?)');
+        $stmt->execute([
+            $dayOfWeek,
+            $normalizedStart,
+            $normalizedEnd,
+            $isActive ? 1 : 0,
+        ]);
+
+        return (int) $db->lastInsertId();
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function delete_standard_break(int $breakId): bool
+{
+    try {
+        $db = get_db();
+        $stmt = $db->prepare('DELETE FROM breaks WHERE id = ?');
+        return $stmt->execute([$breakId]);
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function find_overlapping_break(DateTimeImmutable $startDate, DateTimeImmutable $endDate): ?array
+{
+    try {
+        $dayOfWeek = (int) $startDate->format('N');
+        $breakRows = get_all_standard_breaks(false);
+
+        foreach ($breakRows as $breakRow) {
+            $breakDay = $breakRow['day_of_week'] !== null ? (int) $breakRow['day_of_week'] : null;
+            if ($breakDay !== null && $breakDay !== $dayOfWeek) {
+                continue;
+            }
+
+            $breakStartTime = substr((string) $breakRow['start_time'], 0, 8);
+            $breakEndTime = substr((string) $breakRow['end_time'], 0, 8);
+            $breakStart = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $startDate->format('Y-m-d') . ' ' . $breakStartTime, $startDate->getTimezone());
+            $breakEnd = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $startDate->format('Y-m-d') . ' ' . $breakEndTime, $startDate->getTimezone());
+
+            if (!$breakStart || !$breakEnd) {
+                continue;
+            }
+
+            if ($endDate > $breakStart && $startDate < $breakEnd) {
+                return [
+                    'id' => (int) $breakRow['id'],
+                    'day_of_week' => $breakDay,
+                    'start_time' => $breakStartTime,
+                    'end_time' => $breakEndTime,
+                    'is_active' => (int) $breakRow['is_active'],
+                    'break_start' => $breakStart->format('Y-m-d H:i:s'),
+                    'break_end' => $breakEnd->format('Y-m-d H:i:s'),
+                    'break_label' => format_break_day_label($breakDay),
+                ];
+            }
+        }
+
+        return null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function get_standard_break_events(DateTimeImmutable $rangeStart, DateTimeImmutable $rangeEnd): array
+{
+    try {
+        $timezone = $rangeStart->getTimezone();
+        $breakRows = get_all_standard_breaks(false);
+        if (!$breakRows) {
+            return [];
+        }
+
+        $events = [];
+        $cursor = $rangeStart->setTime(0, 0, 0);
+        $rangeEndDate = $rangeEnd->setTime(0, 0, 0);
+
+        while ($cursor < $rangeEndDate) {
+            $dayOfWeek = (int) $cursor->format('N');
+            foreach ($breakRows as $breakRow) {
+                $breakDay = $breakRow['day_of_week'] !== null ? (int) $breakRow['day_of_week'] : null;
+                if ($breakDay !== null && $breakDay !== $dayOfWeek) {
+                    continue;
+                }
+
+                $startTime = substr((string) $breakRow['start_time'], 0, 8);
+                $endTime = substr((string) $breakRow['end_time'], 0, 8);
+                $startDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $cursor->format('Y-m-d') . ' ' . $startTime, $timezone);
+                $endDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $cursor->format('Y-m-d') . ' ' . $endTime, $timezone);
+                if (!$startDate || !$endDate) {
+                    continue;
+                }
+
+                if ($endDate <= $rangeStart || $startDate >= $rangeEnd) {
+                    continue;
+                }
+
+                $events[] = [
+                    'id' => 'break-' . $breakRow['id'] . '-' . $cursor->format('Ymd'),
+                    'title' => 'Break',
+                    'start' => $startDate->format('Y-m-d H:i:s'),
+                    'end' => $endDate->format('Y-m-d H:i:s'),
+                    'display' => 'background',
+                    'backgroundColor' => 'rgba(245, 158, 11, 0.22)',
+                    'classNames' => ['standard-break-event'],
+                    'extendedProps' => [
+                        'break_id' => (int) $breakRow['id'],
+                        'day_of_week' => $breakDay,
+                    ],
+                ];
+            }
+
+            $cursor = $cursor->modify('+1 day');
+        }
+
+        return $events;
+    } catch (Throwable $e) {
+        return [];
+    }
 }
 
 // User helpers
@@ -728,12 +1050,18 @@ function get_customer_field_settings(): array
             'display' => (bool) (int) get_setting('booking_dob_display', '1'),
             'required' => (bool) (int) get_setting('booking_dob_required', '0'),
         ],
+        'gender' => [
+            'display' => (bool) (int) get_setting('booking_gender_display', '1'),
+            'required' => (bool) (int) get_setting('booking_gender_required', '0'),
+        ],
     ];
 }
 
 function get_booking_calendar_settings(): array
 {
     return [
+        'deadline_hours' => (int) get_setting('booking_deadline_hours', '24'),
+        'calendar_height' => normalize_booking_calendar_height_setting(get_setting('booking_calendar_height', '1800')),
         'show_monday' => (bool) (int) get_setting('booking_show_monday', '1'),
         'show_tuesday' => (bool) (int) get_setting('booking_show_tuesday', '1'),
         'show_wednesday' => (bool) (int) get_setting('booking_show_wednesday', '1'),
@@ -744,7 +1072,29 @@ function get_booking_calendar_settings(): array
         'start_time' => (string) get_setting('booking_start_time', '09:00'),
         'end_time' => (string) get_setting('booking_end_time', '21:00'),
         'show_now_indicator' => (bool) (int) get_setting('booking_show_now_indicator', '1'),
+        'snap_minutes' => (int) get_setting('booking_snap_minutes', '15'),
     ];
+}
+
+function normalize_booking_calendar_height_setting($value)
+{
+    $raw = strtolower(trim((string) ($value ?? '')));
+    if ($raw === '') {
+        return 1800;
+    }
+
+    if ($raw === 'auto') {
+        return 'auto';
+    }
+
+    if (preg_match('/^(\d+)(?:px)?$/', $raw, $matches)) {
+        $height = (int) $matches[1];
+        if ($height >= 600 && $height <= 10000) {
+            return $height;
+        }
+    }
+
+    return 1800;
 }
 
 function get_appointment_types(bool $activeOnly = false): array
@@ -820,6 +1170,13 @@ function validate_customer_field(string $fieldName, ?string $value): ?string
         }
     }
 
+    if ($fieldName === 'gender') {
+        $allowedGenders = ['male', 'female', 'other', 'unknown'];
+        if (!in_array(strtolower($value), $allowedGenders, true)) {
+            return 'Gender must be one of male, female, other, or unknown';
+        }
+    }
+
     return null;
 }
 
@@ -856,25 +1213,41 @@ function normalize_customer_date_of_birth(?string $value): ?string
     return $date->format('Y-m-d');
 }
 
+function normalize_customer_gender(?string $value): ?string
+{
+    $raw = strtolower(trim((string) ($value ?? '')));
+    if ($raw === '') {
+        return null;
+    }
 
-function create_customer(string $fullName, ?string $email, ?string $mobile, ?string $dateOfBirth = null): ?int
+    $allowed = ['male', 'female', 'other', 'unknown'];
+    return in_array($raw, $allowed, true) ? $raw : null;
+}
+
+
+function create_customer(string $fullName, ?string $email, ?string $mobile, ?string $dateOfBirth = null, ?string $gender = null): ?int
 {
     try {
         $db = get_db();
         $normalizedDateOfBirth = normalize_customer_date_of_birth($dateOfBirth);
+        $normalizedGender = normalize_customer_gender($gender);
+
+        $columns = ['full_name', 'email', 'mobile'];
+        $values = [$fullName, $email ?: '', $mobile ?: ''];
 
         if ($normalizedDateOfBirth !== null) {
-            try {
-                $stmt = $db->prepare('INSERT INTO customers (full_name, email, mobile, date_of_birth) VALUES (?, ?, ?, ?)');
-                $stmt->execute([$fullName, $email ?: '', $mobile ?: '', $normalizedDateOfBirth]);
-            } catch (Throwable $e) {
-                $stmt = $db->prepare('INSERT INTO customers (full_name, email, mobile) VALUES (?, ?, ?)');
-                $stmt->execute([$fullName, $email ?: '', $mobile ?: '']);
-            }
-        } else {
-            $stmt = $db->prepare('INSERT INTO customers (full_name, email, mobile) VALUES (?, ?, ?)');
-            $stmt->execute([$fullName, $email ?: '', $mobile ?: '']);
+            $columns[] = 'date_of_birth';
+            $values[] = $normalizedDateOfBirth;
         }
+
+        if ($normalizedGender !== null) {
+            $columns[] = 'gender';
+            $values[] = $normalizedGender;
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($columns), '?'));
+        $stmt = $db->prepare('INSERT INTO customers (' . implode(', ', $columns) . ') VALUES (' . $placeholders . ')');
+        $stmt->execute($values);
 
         return (int) $db->lastInsertId();
     } catch (Throwable $e) {
@@ -887,7 +1260,7 @@ function get_customer_by_email(string $email): ?array
     try {
         $db = get_db();
         try {
-            $stmt = $db->prepare('SELECT id, email, mobile, full_name, date_of_birth FROM customers WHERE email = ? LIMIT 1');
+            $stmt = $db->prepare('SELECT id, email, mobile, full_name, date_of_birth, gender, date_added FROM customers WHERE email = ? LIMIT 1');
             $stmt->execute([$email]);
             return $stmt->fetch() ?: null;
         } catch (Throwable $e) {
@@ -905,7 +1278,7 @@ function get_customer_by_id(int $id): ?array
     try {
         $db = get_db();
         try {
-            $stmt = $db->prepare('SELECT id, email, mobile, full_name, date_of_birth FROM customers WHERE id = ? LIMIT 1');
+            $stmt = $db->prepare('SELECT id, email, mobile, full_name, date_of_birth, gender, date_added FROM customers WHERE id = ? LIMIT 1');
             $stmt->execute([$id]);
             return $stmt->fetch() ?: null;
         } catch (Throwable $e) {
@@ -928,6 +1301,105 @@ function get_appointment_type_by_id(int $id): ?array
     } catch (Throwable $e) {
         return null;
     }
+}
+
+function get_appointment_by_id(int $id): ?array
+{
+    try {
+        $db = get_db();
+        $stmt = $db->prepare('SELECT id, customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key, created_at, updated_at FROM appointments WHERE id = ? LIMIT 1');
+        $stmt->execute([$id]);
+        return $stmt->fetch() ?: null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function time_string_to_seconds(string $timeValue): ?int
+{
+    $parts = explode(':', trim($timeValue));
+    if (count($parts) < 2) {
+        return null;
+    }
+
+    $hours = is_numeric($parts[0]) ? (int) $parts[0] : null;
+    $minutes = is_numeric($parts[1]) ? (int) $parts[1] : null;
+    $seconds = isset($parts[2]) && is_numeric($parts[2]) ? (int) $parts[2] : 0;
+
+    if ($hours === null || $minutes === null) {
+        return null;
+    }
+
+    return ($hours * 3600) + ($minutes * 60) + $seconds;
+}
+
+function is_booking_day_enabled(DateTimeImmutable $date, array $bookingSettings): bool
+{
+    $map = [
+        1 => 'show_monday',
+        2 => 'show_tuesday',
+        3 => 'show_wednesday',
+        4 => 'show_thursday',
+        5 => 'show_friday',
+        6 => 'show_saturday',
+        7 => 'show_sunday',
+    ];
+
+    $dayOfWeek = (int) $date->format('N');
+    $settingKey = $map[$dayOfWeek] ?? null;
+    if ($settingKey === null) {
+        return false;
+    }
+
+    return !empty($bookingSettings[$settingKey]);
+}
+
+function validate_appointment_window(int $providerId, DateTimeImmutable $startDate, DateTimeImmutable $endDate, ?int $excludeAppointmentId = null): ?array
+{
+    $bookingSettings = get_booking_calendar_settings();
+    if (!is_booking_day_enabled($startDate, $bookingSettings)) {
+        return [
+            'error' => 'outside_booking_hours',
+            'message' => 'Selected day is not enabled for bookings',
+        ];
+    }
+
+    $startSeconds = time_string_to_seconds($startDate->format('H:i:s'));
+    $endSeconds = time_string_to_seconds($endDate->format('H:i:s'));
+    $visibleStartSeconds = time_string_to_seconds((string) $bookingSettings['start_time']);
+    $visibleEndSeconds = time_string_to_seconds((string) $bookingSettings['end_time']);
+
+    if ($startSeconds === null || $endSeconds === null || $visibleStartSeconds === null || $visibleEndSeconds === null) {
+        return [
+            'error' => 'outside_booking_hours',
+            'message' => 'Unable to validate booking time window',
+        ];
+    }
+
+    if ($startSeconds < $visibleStartSeconds || $endSeconds > $visibleEndSeconds) {
+        return [
+            'error' => 'outside_booking_hours',
+            'message' => 'Selected time is outside the configured booking hours',
+        ];
+    }
+
+    $overlappingAppointment = find_overlapping_appointment($providerId, $startDate, $endDate, $excludeAppointmentId);
+    if ($overlappingAppointment) {
+        return [
+            'error' => 'overlap',
+            'conflict' => $overlappingAppointment,
+        ];
+    }
+
+    $overlappingBreak = find_overlapping_break($startDate, $endDate);
+    if ($overlappingBreak) {
+        return [
+            'error' => 'break_overlap',
+            'conflict' => $overlappingBreak,
+        ];
+    }
+
+    return null;
 }
 
 function find_overlapping_appointment(int $providerId, DateTimeImmutable $startDate, DateTimeImmutable $endDate, ?int $excludeAppointmentId = null): ?array
@@ -962,7 +1434,7 @@ function find_overlapping_appointment(int $providerId, DateTimeImmutable $startD
     }
 }
 
-function create_appointment(int $customerId, int $providerId, int $appointmentTypeId, string $startTime, ?string $status = null): ?array
+function create_appointment(int $customerId, int $providerId, int $appointmentTypeId, string $startTime, ?string $status = null, ?string $endTime = null, ?string $notes = null): ?array
 {
     try {
         $appointmentType = get_appointment_type_by_id($appointmentTypeId);
@@ -976,13 +1448,20 @@ function create_appointment(int $customerId, int $providerId, int $appointmentTy
             $startDate = new DateTimeImmutable($startTime, $timezone);
         }
         $durationMinutes = max(1, (int) ($appointmentType['duration_minutes'] ?? 30));
-        $endDate = $startDate->modify('+' . $durationMinutes . ' minutes');
-        $overlappingAppointment = find_overlapping_appointment($providerId, $startDate, $endDate);
-        if ($overlappingAppointment) {
-            return [
-                'error' => 'overlap',
-                'conflict' => $overlappingAppointment,
-            ];
+        $resolvedEndDate = null;
+
+        $endTimeValue = trim((string) ($endTime ?? ''));
+        if ($endTimeValue !== '') {
+            $resolvedEndDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $endTimeValue, $timezone);
+            if (!$resolvedEndDate) {
+                $resolvedEndDate = new DateTimeImmutable($endTimeValue, $timezone);
+            }
+        }
+
+        $endDate = $resolvedEndDate ?: $startDate->modify('+' . $durationMinutes . ' minutes');
+        $windowError = validate_appointment_window($providerId, $startDate, $endDate);
+        if ($windowError) {
+            return $windowError;
         }
 
         $finalStatus = $status ?: 'booked';
@@ -996,7 +1475,7 @@ function create_appointment(int $customerId, int $providerId, int $appointmentTy
         ]));
 
         $db = get_db();
-        $stmt = $db->prepare('INSERT INTO appointments (customer_id, provider_id, appointment_type_id, start_time, end_time, status, hash_key) VALUES (?, ?, ?, ?, ?, ?, ?)');
+        $stmt = $db->prepare('INSERT INTO appointments (customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
         $stmt->execute([
             $customerId,
             $providerId,
@@ -1004,6 +1483,7 @@ function create_appointment(int $customerId, int $providerId, int $appointmentTy
             $startDate->format('Y-m-d H:i:s'),
             $endDate->format('Y-m-d H:i:s'),
             $finalStatus,
+            $notes !== null && trim($notes) !== '' ? trim($notes) : null,
             $hashKey,
         ]);
 
@@ -1015,10 +1495,101 @@ function create_appointment(int $customerId, int $providerId, int $appointmentTy
             'start_time' => $startDate->format('Y-m-d H:i:s'),
             'end_time' => $endDate->format('Y-m-d H:i:s'),
             'status' => $finalStatus,
+            'notes' => $notes !== null && trim($notes) !== '' ? trim($notes) : null,
             'hash_key' => $hashKey,
         ];
     } catch (Throwable $e) {
         return null;
+    }
+}
+
+function update_appointment(int $appointmentId, int $customerId, int $providerId, int $appointmentTypeId, string $startTime, ?string $endTime = null, ?string $status = null, ?string $notes = null): ?array
+{
+    try {
+        $existingAppointment = get_appointment_by_id($appointmentId);
+        if (!$existingAppointment) {
+            return null;
+        }
+
+        $appointmentType = get_appointment_type_by_id($appointmentTypeId);
+        if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1) {
+            return null;
+        }
+
+        $timezone = new DateTimeZone(get_app_timezone_name());
+        $startDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $startTime, $timezone);
+        if (!$startDate) {
+            $startDate = new DateTimeImmutable($startTime, $timezone);
+        }
+
+        $durationMinutes = max(1, (int) ($appointmentType['duration_minutes'] ?? 30));
+        $resolvedEndDate = null;
+        $endTimeValue = trim((string) ($endTime ?? ''));
+        if ($endTimeValue !== '') {
+            $resolvedEndDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $endTimeValue, $timezone);
+            if (!$resolvedEndDate) {
+                $resolvedEndDate = new DateTimeImmutable($endTimeValue, $timezone);
+            }
+        }
+
+        $endDate = $resolvedEndDate ?: $startDate->modify('+' . $durationMinutes . ' minutes');
+        $windowError = validate_appointment_window($providerId, $startDate, $endDate, $appointmentId);
+        if ($windowError) {
+            return $windowError;
+        }
+
+        $finalStatus = $status ?: (string) ($existingAppointment['status'] ?? 'booked');
+        $db = get_db();
+        $stmt = $db->prepare('UPDATE appointments SET customer_id = ?, provider_id = ?, appointment_type_id = ?, start_time = ?, end_time = ?, status = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+        $stmt->execute([
+            $customerId,
+            $providerId,
+            $appointmentTypeId,
+            $startDate->format('Y-m-d H:i:s'),
+            $endDate->format('Y-m-d H:i:s'),
+            $finalStatus,
+            $notes !== null && trim($notes) !== '' ? trim($notes) : null,
+            $appointmentId,
+        ]);
+
+        return [
+            'id' => $appointmentId,
+            'customer_id' => $customerId,
+            'provider_id' => $providerId,
+            'appointment_type_id' => $appointmentTypeId,
+            'start_time' => $startDate->format('Y-m-d H:i:s'),
+            'end_time' => $endDate->format('Y-m-d H:i:s'),
+            'status' => $finalStatus,
+            'notes' => $notes !== null && trim($notes) !== '' ? trim($notes) : null,
+        ];
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function get_appointment_status_values(): array
+{
+    return ['booked', 'confirmed', 'present', 'completed', 'no show'];
+}
+
+function normalize_appointment_status(?string $status): ?string
+{
+    $value = strtolower(trim((string) $status));
+    if ($value === '') {
+        return null;
+    }
+
+    return in_array($value, get_appointment_status_values(), true) ? $value : null;
+}
+
+function delete_appointment(int $appointmentId): bool
+{
+    try {
+        $db = get_db();
+        $stmt = $db->prepare('DELETE FROM appointments WHERE id = ?');
+        return (bool) $stmt->execute([$appointmentId]);
+    } catch (Throwable $e) {
+        return false;
     }
 }
 

@@ -47,7 +47,6 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Calendar - <?php echo htmlspecialchars(APP_NAME); ?></title>
-  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet" />
   <link rel="stylesheet" href="assets/css/theme.css">
   <link rel="stylesheet" href="assets/css/admin-shared.css">
   <style>
@@ -244,12 +243,16 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     }
 
     .booking-event {
-      display: grid;
+      display: flex;
+      flex-direction: column;
       gap: 2px;
-      line-height: 1.15;
-      font-size: 0.76rem;
+      padding: 4px 6px; /* Reduced padding so 15-min text fits perfectly */
+      box-sizing: border-box;
+      line-height: 1.1;
+      font-size: 0.75rem; 
       font-weight: 700;
-      text-wrap: balance;
+      height: 100%;
+      overflow: hidden; /* Crucial: stops text from forcing a 15-min box to stretch */
     }
 
     .booking-event__status {
@@ -258,6 +261,78 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       text-transform: uppercase;
       letter-spacing: 0.08em;
       opacity: 0.86;
+    }
+
+    .fc .fc-timegrid-event,
+    .fc .fc-daygrid-event {
+      position: relative;
+      border-radius: 0;
+      height: 100%; /* Force element boundaries to fill calculated grid space */
+    }
+
+    .fc .fc-timegrid-event.appointment-status-booked,
+    .fc .fc-daygrid-event.appointment-status-booked,
+    .fc .fc-timegrid-event.appointment-status-unconfirmed,
+    .fc .fc-daygrid-event.appointment-status-unconfirmed {
+      box-shadow: inset 0 0 0 0 rgba(0, 0, 0, 0);
+    }
+
+    .fc .fc-timegrid-event.appointment-status-confirmed,
+    .fc .fc-daygrid-event.appointment-status-confirmed {
+      box-shadow: inset 0 0 0 3px #d4af37;
+    }
+
+    .fc .fc-timegrid-event.appointment-status-completed,
+    .fc .fc-daygrid-event.appointment-status-completed {
+      box-shadow: inset 0 0 0 3px #9ca3af;
+    }
+
+    .fc .fc-timegrid-event.appointment-status-no-show,
+    .fc .fc-daygrid-event.appointment-status-no-show,
+    .fc .fc-timegrid-event.appointment-status-no_show,
+    .fc .fc-daygrid-event.appointment-status-no_show {
+      box-shadow: inset 0 0 0 3px #dc143c;
+    }
+
+    .fc .fc-timegrid-event.appointment-status-present,
+    .fc .fc-daygrid-event.appointment-status-present {
+      box-shadow: inset 0 0 0 0 rgba(0, 0, 0, 0);
+    }
+
+    .fc .fc-timegrid-event.appointment-status-present::before,
+    .fc .fc-daygrid-event.appointment-status-present::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 0;
+      padding: 3px;
+      background: linear-gradient(90deg, rgba(0, 255, 102, 0.15), rgba(0, 255, 102, 0.9), rgba(0, 255, 102, 0.15));
+      background-size: 200% 100%;
+      animation: presentBorderPulse 1.8s ease-in-out infinite;
+      -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .fc .fc-timegrid-event .booking-event,
+    .fc .fc-daygrid-event .booking-event {
+      position: relative;
+      z-index: 2;
+    }
+
+    @keyframes presentBorderPulse {
+      0%, 100% {
+        opacity: 0.35;
+        background-position: 0% 50%;
+      }
+      50% {
+        opacity: 1;
+        background-position: 100% 50%;
+      }
     }
 
     .fc .server-today {
@@ -302,6 +377,21 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       backdrop-filter: blur(4px);
     }
 
+    /* Flashing Border State for Invalid Bookings */
+    .booking-modal.is-invalid-time .booking-card {
+      box-shadow: inset 0 0 0 6px #ef4444, var(--shadow) !important;
+      animation: flashRedBorder 1.2s ease-in-out infinite;
+    }
+
+    @keyframes flashRedBorder {
+      0%, 100% {
+        box-shadow: inset 0 0 0 6px #ef4444, var(--shadow);
+      }
+      50% {
+        box-shadow: inset 0 0 0 6px rgba(239, 68, 68, 0.2), var(--shadow);
+      }
+    }
+
     .booking-card {
       position: relative;
       background: var(--panel);
@@ -325,9 +415,42 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     }
 
     .booking-card__body {
-      padding: 16px 18px 18px;
+      padding: 12px 14px 14px;
       display: grid;
-      gap: 12px;
+      gap: 8px;
+      font-size: 0.94rem;
+    }
+
+    .fc .fc-timegrid-slot {
+      min-height: 30px;
+    } 
+    /* Horizontal lines for each hour slot */
+    .fc .fc-timegrid-slot {
+      border-bottom: 1px solid rgba(15,23,42,0.06);
+    }
+
+    /* Vertical separators between day columns in timeGrid views */
+    .fc .fc-timegrid-col {
+      border-left: 1px solid rgba(15,23,42,0.06);
+    }
+
+    .fc .fc-timegrid-col:last-child {
+      border-right: 0;
+    }
+
+    /* Header separation */
+    .fc .fc-col-header-cell {
+      border-right: 1px solid rgba(15,23,42,0.06);
+    }
+
+    /* Dark mode: strengthen gridlines for visibility */
+    html[data-theme="dark"] .fc .fc-timegrid-slot {
+      border-bottom: 1px solid rgba(255,255,255,0.12) !important;
+    }
+
+    html[data-theme="dark"] .fc .fc-timegrid-col,
+    html[data-theme="dark"] .fc .fc-col-header-cell {
+      border-color: rgba(255,255,255,0.10) !important;
     }
 
     .booking-modal-alert {
@@ -366,6 +489,16 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       gap: 12px;
     }
 
+    .customer-name-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .customer-name-grid.is-single-field {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
     .booking-grid .span-2 {
       grid-column: span 2;
     }
@@ -395,7 +528,6 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     html[data-theme="dark"] .field input,
     html[data-theme="dark"] .field select,
     html[data-theme="dark"] .field textarea,
-    html[data-theme="dark"] #existingCustomerSelect {
       background: rgba(15, 23, 42, 0.5) !important;
       border-color: rgba(226, 232, 240, 0.12) !important;
       color: var(--text) !important;
@@ -417,8 +549,8 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     .booking-meta {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-      padding: 12px 14px;
+      gap: 8px;
+      padding: 10px 12px;
       border: 1px dashed var(--panel-border);
       border-radius: 18px;
       background: var(--panel);
@@ -430,7 +562,7 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     }
 
     .meta-item span {
-      font-size: 0.74rem;
+      font-size: 0.68rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: var(--muted);
@@ -438,17 +570,35 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     }
 
     .meta-item strong {
-      font-size: 0.9rem;
+      font-size: 0.84rem;
       font-weight: 700;
       color: var(--text);
+    }
+
+    .meta-item .meta-inline-inputs {
+      display: grid;
+      gap: 4px;
+      margin-top: 6px;
+    }
+
+    .meta-item .meta-inline-inputs input {
+      width: 100%;
+      border: 1px solid rgba(15, 23, 42, 0.15);
+      border-radius: 12px;
+      padding: 7px 10px;
+      font: inherit;
+      font-size: 0.86rem;
+      color: var(--text);
+      background: #fff;
+      box-sizing: border-box;
     }
 
     .booking-card__footer {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 16px;
-      padding: 0 18px 18px;
+      gap: 8px;
+      padding: 0 14px 12px;
     }
 
     .booking-card__footer .secondary {
@@ -459,11 +609,12 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     .booking-card__footer button {
       border: 1px solid var(--panel-border);
       border-radius: 999px;
-      padding: 9px 14px;
+      padding: 8px 12px;
       background: rgba(255, 255, 255, 0.06);
       color: var(--text);
       font: inherit;
       font-weight: 700;
+      font-size: 0.92rem;
       cursor: pointer;
     }
 
@@ -471,6 +622,88 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       background: var(--accent);
       color: #fff;
       border-color: var(--accent);
+    }
+
+    .booking-edit-only {
+      display: none;
+    }
+
+    .booking-modal[data-mode="edit"] .booking-status-row {
+      display: grid;
+    }
+
+    .booking-modal[data-mode="edit"] .booking-delete-action {
+      display: inline-flex;
+    }
+
+    .booking-modal[data-mode="draft"] .booking-draft-only {
+      display: grid;
+    }
+
+    .booking-modal[data-mode="edit"] .booking-draft-only {
+      display: none;
+    }
+
+    .booking-modal[data-mode="edit"] .booking-edit-customer-only {
+      display: grid;
+    }
+
+    .booking-modal[data-mode="edit"] .booking-create-customer-only {
+      display: none;
+    }
+
+    .booking-status-row {
+      display: grid;
+      grid-template-columns: 3fr 1fr;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .booking-status-controls {
+      display: grid;
+      grid-template-columns: 3fr 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .booking-status-controls select {
+      min-width: 150px;
+    }
+
+    .booking-notes-label {
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+    }
+
+    .booking-notes-label::after {
+      content: '▾';
+      font-size: 0.9em;
+      opacity: 0.7;
+    }
+
+    .booking-notes-panel.is-collapsed {
+      display: none;
+    }
+
+    .booking-delete-action {
+      background: rgba(239, 68, 68, 0.10);
+      border-color: rgba(239, 68, 68, 0.18);
+      color: #b91c1c;
+    }
+
+    html[data-theme="dark"] .booking-card__body input,
+    html[data-theme="dark"] .meta-item .meta-inline-inputs input {
+      background: rgba(15, 23, 42, 0.45);
+      border-color: rgba(255, 255, 255, 0.14);
+      color: var(--text);
+    }
+
+    .booking-status-controls .booking-mode-toggle-secondary {
+      padding: 8px 12px;
+      font-size: 0.88rem;
     }
 
     .booking-card__footer .primary:hover {
@@ -610,6 +843,108 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       background: rgba(36, 87, 255, 0.10);
     }
 
+    .booking-customer-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .booking-customer-tab {
+      border: 1px solid var(--panel-border);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    html[data-theme="dark"] .booking-customer-tab {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .booking-customer-tab.is-active {
+      background: rgba(36, 87, 255, 0.10);
+      border-color: rgba(36, 87, 255, 0.35);
+    }
+
+    .booking-customer-panel {
+      display: grid;
+      gap: 12px;
+    }
+
+    .customer-search-results {
+      display: grid;
+      gap: 8px;
+      max-height: 240px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .customer-search-result {
+      width: 100%;
+      border: 1px solid var(--panel-border);
+      background: rgba(255, 255, 255, 0.75);
+      border-radius: 16px;
+      padding: 12px 14px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .customer-search-result:hover {
+      background: rgba(36, 87, 255, 0.06);
+    }
+
+    .customer-search-result.is-selected {
+      background: rgba(36, 87, 255, 0.10);
+      border-color: rgba(36, 87, 255, 0.45);
+    }
+
+    .customer-search-result strong {
+      display: block;
+      font-size: 0.95rem;
+      margin-bottom: 2px;
+    }
+
+    .customer-search-result span {
+      display: block;
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    .customer-search-state,
+    .selected-customer-card {
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      background: var(--panel);
+      padding: 12px 14px;
+    }
+
+    .selected-customer-card__head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .selected-customer-card button {
+      border: 0;
+      background: transparent;
+      color: var(--accent);
+      padding: 0;
+      font-weight: 700;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .selected-customer-card strong {
+      display: block;
+      margin-bottom: 2px;
+    }
+
     .booking-time-summary {
       display: none;
     }
@@ -703,30 +1038,98 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
           <div class="meta-item">
             <span>Start</span>
             <strong id="selectedStartLabel">-</strong>
+            <div class="meta-inline-inputs">
+              <input id="bookingStartTimeInput" type="time" step="60" aria-label="Start time">
+            </div>
           </div>
           <div class="meta-item">
             <span>End</span>
             <strong id="selectedEndLabel">-</strong>
+            <div class="meta-inline-inputs">
+              <input id="bookingEndTimeInput" type="time" step="60" aria-label="End time">
+            </div>
           </div>
         </div>
 
-        <div class="booking-grid booking-draft-only">
+        <div class="booking-edit-only booking-status-row">
+          <div class="field">
+            <label for="appointmentStatusSelect">Status</label>
+            <div class="booking-status-controls">
+              <select id="appointmentStatusSelect">
+                <option value="booked">Booked</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="present">Present</option>
+                <option value="completed">Completed</option>
+                <option value="no show">No show</option>
+              </select>
+              <button type="button" id="cycleAppointmentStatusBtn" class="booking-mode-toggle-secondary">Toggle</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="booking-grid booking-customer-section">
           <div class="field span-2">
             <label>Who do I want to book?</label>
-            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-              <button type="button" id="toggleCreateMode" class="booking-mode-toggle is-active">+ Create new customer</button>
-              <button type="button" id="toggleSelectMode" class="booking-mode-toggle-secondary" style="display:none;">or Select existing</button>
+            <div class="booking-customer-tabs" role="tablist" aria-label="Customer selection mode">
+              <button type="button" id="createCustomerTab" class="booking-customer-tab is-active booking-create-customer-only" role="tab" aria-selected="true">Create new customer</button>
+              <button type="button" id="existingCustomerTab" class="booking-customer-tab booking-edit-customer-only" role="tab" aria-selected="false">Existing customer</button>
             </div>
 
-            <div id="createCustomerSection">
-              <div class="field">
-                <label for="newCustomerName">Customer Name</label>
-                <input id="newCustomerName" name="new_customer_name" type="text" placeholder="Full name">
+            <div id="createCustomerPanel" class="booking-customer-panel booking-create-customer-only">
+              <?php
+                $firstNameFieldSettings = $customerFieldSettings['first_name'] ?? ['display' => true, 'required' => false];
+                $lastNameFieldSettings = $customerFieldSettings['last_name'] ?? ['display' => true, 'required' => false];
+                $showFirstNameField = !empty($firstNameFieldSettings['display']);
+                $showLastNameField = !empty($lastNameFieldSettings['display']);
+              ?>
+              <?php if ($showFirstNameField || $showLastNameField): ?>
+              <div class="customer-name-grid <?php echo ($showFirstNameField && $showLastNameField) ? '' : 'is-single-field'; ?>">
+                <?php if ($showFirstNameField): ?>
+                <div class="field">
+                  <label for="newCustomerFirstName">
+                    First name
+                    <?php if (!empty($firstNameFieldSettings['required'])): ?>
+                      <span style="color:red;">*</span>
+                    <?php endif; ?>
+                  </label>
+                  <input id="newCustomerFirstName" name="new_customer_first_name" type="text" placeholder="First name">
+                </div>
+                <?php endif; ?>
+                <?php if ($showLastNameField): ?>
+                <div class="field">
+                  <label for="newCustomerLastName">
+                    Last name
+                    <?php if (!empty($lastNameFieldSettings['required'])): ?>
+                      <span style="color:red;">*</span>
+                    <?php endif; ?>
+                  </label>
+                  <input id="newCustomerLastName" name="new_customer_last_name" type="text" placeholder="Last name">
+                </div>
+                <?php endif; ?>
               </div>
+              <?php endif; ?>
               <div class="field">
                 <label for="newCustomerDob">Date of Birth</label>
                 <input id="newCustomerDob" name="date_of_birth" type="date">
               </div>
+              <?php $genderFieldSettings = $customerFieldSettings['gender'] ?? ['display' => false, 'required' => false]; ?>
+              <?php if (!empty($genderFieldSettings['display'])): ?>
+              <div class="field">
+                <label for="newCustomerGender">
+                  Gender
+                  <?php if (!empty($genderFieldSettings['required'])): ?>
+                    <span style="color:red;">*</span>
+                  <?php endif; ?>
+                </label>
+                <select id="newCustomerGender" name="customer_gender">
+                  <option value="">Select gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                  <option value="unknown">Unknown</option>
+                </select>
+              </div>
+              <?php endif; ?>
               <div class="field">
                 <label for="newCustomerEmail">Email (optional)</label>
                 <input id="newCustomerEmail" name="new_customer_email" type="email" placeholder="customer@example.com">
@@ -737,10 +1140,22 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
               </div>
             </div>
 
-            <div id="selectCustomerSection" style="display:none;">
-              <select id="existingCustomerSelect" style="width: 100%; border: 1px solid var(--panel-border); border-radius: 16px; padding: 13px 14px; font: inherit; color: var(--text); background: var(--panel); box-sizing: border-box;">
-                <option value="">-- Search and select customer --</option>
-              </select>
+            <div id="existingCustomerPanel" class="booking-customer-panel" style="display:none;">
+              <div class="field">
+                <label for="customerSearchInput">Search customers</label>
+                <input id="customerSearchInput" type="search" placeholder="Search by name, mobile, or email">
+              </div>
+              <div id="customerSearchState" class="customer-search-state">Start typing to search.</div>
+              <div id="customerSearchResults" class="customer-search-results"></div>
+              <div id="selectedCustomerCard" class="selected-customer-card" style="display:none;">
+                <div class="selected-customer-card__head">
+                  <div>
+                    <strong id="selectedCustomerName"></strong>
+                    <div id="selectedCustomerDetails" class="booking-note"></div>
+                  </div>
+                  <button type="button" id="clearSelectedCustomerBtn">Change</button>
+                </div>
+              </div>
             </div>
             
             <input type="hidden" id="selectedCustomerId" value="">
@@ -772,8 +1187,10 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
           </div>
 
           <div class="field span-2">
-            <label for="bookingNotes">Notes</label>
-            <textarea id="bookingNotes" name="notes" rows="3" placeholder="Optional notes for the booking draft"></textarea>
+            <label id="bookingNotesLabel" for="bookingNotes" class="booking-notes-label">Notes</label>
+            <div id="bookingNotesPanel" class="booking-notes-panel is-collapsed">
+              <textarea id="bookingNotes" name="notes" rows="3" placeholder="Optional notes for the booking draft"></textarea>
+            </div>
           </div>
         </div>
 
@@ -782,6 +1199,7 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       </div>
       <div class="booking-card__footer">
         <button type="button" id="makeBookingBtn" class="primary booking-booking-action">Make booking</button>
+        <button type="button" id="deleteBookingBtn" class="booking-delete-action booking-edit-only">Delete</button>
         <button type="button" id="closeBookingModal">Close</button>
       </div>
     </div>
@@ -812,6 +1230,7 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     const defaultAppointmentTypeId = <?php echo json_encode($defaultAppointmentTypeId); ?>;
     const bookingCalendarSettings = <?php echo json_encode($bookingCalendarSettings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
     const customerFieldSettings = <?php echo json_encode($customerFieldSettings, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
+    const genderFieldSettings = customerFieldSettings.gender || { display: false, required: false };
     const serverTimezoneName = <?php echo json_encode($serverTimezoneName); ?>;
     let serverNowIso = <?php echo json_encode($serverNowIso); ?>;
 
@@ -833,8 +1252,21 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
     const makeBookingBtn = document.getElementById('makeBookingBtn');
     const providerSelect = document.getElementById('providerSelect');
     const appointmentTypeSelect = document.getElementById('appointmentTypeSelect');
+    const bookingStartTimeInput = document.getElementById('bookingStartTimeInput');
+    const bookingEndTimeInput = document.getElementById('bookingEndTimeInput');
+    const appointmentStatusSelect = document.getElementById('appointmentStatusSelect');
+    const cycleAppointmentStatusBtn = document.getElementById('cycleAppointmentStatusBtn');
+    const deleteBookingBtn = document.getElementById('deleteBookingBtn');
+    const bookingNotesLabel = document.getElementById('bookingNotesLabel');
+    const bookingNotesPanel = document.getElementById('bookingNotesPanel');
+    const bookingNotes = document.getElementById('bookingNotes');
+    let bookingEndOverrideActive = false;
+    let currentEditingAppointmentId = null;
+    let currentEditingAppointmentStatus = 'booked';
     let currentBookingStartDate = null;
     let currentBookingEndDate = null;
+    let notesExpanded = false;
+    const appointmentStatusValues = ['booked', 'confirmed', 'present', 'completed', 'no show'];
 
     const fallbackDurationMinutes = appointmentTypes.length > 0 ? Number(appointmentTypes[0].duration_minutes || 30) : 30;
 
@@ -850,6 +1282,8 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       visibleDaysOfWeek.push(1, 2, 3, 4, 5);
     }
 
+    const calendarHeight = bookingCalendarSettings.calendar_height ?? 1800;
+
     function normalizeTimeValue(value, fallback) {
       const raw = String(value || fallback || '09:00').trim();
       if (/^\d{2}:\d{2}$/.test(raw)) {
@@ -859,6 +1293,50 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
         return raw;
       }
       return fallback;
+    }
+
+    const bookingSnapOptions = [1, 2, 5, 10, 15, 20, 30, 40, 45, 60];
+    const bookingSnapMinutes = bookingSnapOptions.includes(Number(bookingCalendarSettings.snap_minutes))
+      ? Number(bookingCalendarSettings.snap_minutes)
+      : 15;
+    const bookingDeadlineHours = Number.isFinite(Number(bookingCalendarSettings.deadline_hours))
+      ? Number(bookingCalendarSettings.deadline_hours)
+      : 24;
+
+    function minutesToDuration(minutes) {
+      const safeMinutes = Number(minutes) > 0 ? Math.floor(Number(minutes)) : 30;
+      const hours = String(Math.floor(safeMinutes / 60)).padStart(2, '0');
+      const mins = String(safeMinutes % 60).padStart(2, '0');
+      return hours + ':' + mins + ':00';
+    }
+
+    const appointmentTypeDurationById = new Map(
+      appointmentTypes.map(function(type) {
+        return [Number(type.id), Number(type.duration_minutes || fallbackDurationMinutes)];
+      })
+    );
+
+    function parseCalendarDate(value) {
+      if (value instanceof Date) {
+        return new Date(value.getTime());
+      }
+
+      const raw = String(value || '').trim();
+      if (!raw) {
+        return null;
+      }
+
+      if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(raw)) {
+        return new Date(raw);
+      }
+
+      return new Date(raw.includes('T') ? raw + 'Z' : raw.replace(' ', 'T') + 'Z');
+    }
+
+    function roundDateToSnap(date, snapMinutes) {
+      const intervalMinutes = Number(snapMinutes) > 0 ? Number(snapMinutes) : 15;
+      const intervalMs = intervalMinutes * 60000;
+      return new Date(Math.round(date.getTime() / intervalMs) * intervalMs);
     }
 
     const visibleStartTime = normalizeTimeValue(bookingCalendarSettings.start_time, '09:00:00');
@@ -1118,6 +1596,22 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       selectedEndLabel.textContent = formatCalendarDate(calendar, currentBookingEndDate);
       bookingStart.value = formatServerClockDateTime(currentBookingStartDate);
       bookingEnd.value = formatServerClockDateTime(currentBookingEndDate);
+      if (bookingStartTimeInput) {
+        bookingStartTimeInput.value = getServerTimePartFromDateTime(bookingStart.value).slice(0, 5);
+      }
+      if (bookingEndTimeInput) {
+        bookingEndTimeInput.value = getServerTimePartFromDateTime(bookingEnd.value).slice(0, 5);
+      }
+    }
+
+    function syncBookingNotes(value) {
+      if (!bookingNotes) {
+        return;
+      }
+
+      bookingNotes.value = String(value || '');
+      notesExpanded = bookingNotes.value.trim().length > 0;
+      syncNotesVisibility(notesExpanded);
     }
 
     function openBookingModal(startDate, endDate, options = {}) {
@@ -1132,14 +1626,72 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
 
       bookingModal.setAttribute('data-mode', mode);
       bookingModalTitle.textContent = options.title || (mode === 'appointment' ? 'Appointment details' : 'New booking draft');
+      if (makeBookingBtn) {
+        makeBookingBtn.textContent = mode === 'edit' ? 'Save changes' : 'Make booking';
+      }
+      if (deleteBookingBtn) {
+        deleteBookingBtn.style.display = mode === 'edit' ? '' : 'none';
+      }
 
       if (mode === 'draft') {
+        currentEditingAppointmentId = null;
+        syncAppointmentStatusUI('booked');
+        notesExpanded = false;
+        syncBookingNotes('');
         syncBookingDraftTimes();
       } else {
         selectedStartLabel.textContent = formatCalendarDate(calendar, startDate);
         selectedEndLabel.textContent = formatCalendarDate(calendar, derivedEndDate);
         bookingStart.value = formatServerClockDateTime(startDate);
         bookingEnd.value = formatServerClockDateTime(derivedEndDate);
+        // populate visible time inputs
+        if (bookingStartTimeInput) bookingStartTimeInput.value = getServerTimePartFromDateTime(bookingStart.value).slice(0,5);
+        if (bookingEndTimeInput) bookingEndTimeInput.value = getServerTimePartFromDateTime(bookingEnd.value).slice(0,5);
+        bookingEndOverrideActive = false;
+        currentEditingAppointmentId = null;
+
+        if (mode === 'edit' && options.appointment) {
+          const appt = options.appointment;
+          const cust = options.customer || {};
+          currentEditingAppointmentId = appt.id;
+          syncAppointmentStatusUI(appt.status || 'booked');
+          syncBookingNotes(appt.notes || '');
+          // prefill customer
+          if (cust && cust.id) {
+            // Set mode first (which may trigger a search that clears selection), then re-apply the selected customer
+            setCustomerMode('existing');
+            showSelectedCustomer({ id: cust.id, full_name: cust.full_name || ((cust.first_name || '') + ' ' + (cust.last_name || '')), email: cust.email || '', mobile: cust.mobile || '' });
+          } else {
+            // populate create customer fields
+            if (newCustomerFirstName) newCustomerFirstName.value = cust.first_name || '';
+            if (newCustomerLastName) newCustomerLastName.value = cust.last_name || '';
+            if (newCustomerEmail) newCustomerEmail.value = cust.email || '';
+            if (newCustomerMobile) newCustomerMobile.value = cust.mobile || '';
+            if (newCustomerDob) newCustomerDob.value = cust.date_of_birth || '';
+            if (newCustomerGender) newCustomerGender.value = cust.gender || '';
+            setCustomerMode('create');
+          }
+
+          // provider & type
+          if (appt.provider_id) {
+            providerSelect.value = String(appt.provider_id);
+          }
+          if (appt.appointment_type_id) {
+            appointmentTypeSelect.value = String(appt.appointment_type_id);
+          }
+
+          // determine if end time was overridden (end != default duration)
+          const opt = appointmentTypeSelect.options[appointmentTypeSelect.selectedIndex];
+          const duration = Number(opt?.dataset?.duration || fallbackDurationMinutes);
+          const start = new Date(appt.start_time + 'Z');
+          const defaultEnd = addMinutes(start, duration);
+          const actualEnd = new Date(appt.end_time + 'Z');
+          if (Math.abs((actualEnd.getTime() - defaultEnd.getTime())) > 60000) { // more than 1 minute
+            bookingEndOverrideActive = true;
+          } else {
+            bookingEndOverrideActive = false;
+          }
+        }
       }
 
       if (defaultProviderId && !providerSelect.value) {
@@ -1160,24 +1712,76 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       } else {
         bookingModal.setAttribute('open', 'open');
       }
-    }
 
-    const calendar = new FullCalendar.Calendar(calendarEl, {
+      if (defaultAppointmentTypeId && !appointmentTypeSelect.value) {
+        appointmentTypeSelect.value = String(defaultAppointmentTypeId);
+        if (mode === 'draft') {
+          syncBookingDraftTimes();
+        }
+      }
+
+      // RUN CONFLICT MAP VERIFICATIONS ON MODAL LOAD
+      // Wrapping in a brief timeout ensures hidden inputs have finished syncing dates
+      setTimeout(checkTimeSlotConflicts, 50);
+
+      if (typeof bookingModal.showModal === 'function') {
+        bookingModal.showModal();
+      } else {
+        bookingModal.setAttribute('open', 'open');
+      }
+    }
+  
+
+const calendar = new FullCalendar.Calendar(calendarEl, {
       now: getServerClockDate(getServerNowDate()),
       initialView: isStaff ? 'timeGridWeek' : 'timeGridDay',
-      height: 'auto',
+  height: calendarHeight,
       expandRows: true,
+      forceEventDuration: true, 
       nowIndicator: Boolean(bookingCalendarSettings.show_now_indicator),
-      selectable: true,
+      selectable: false, // Disable default click-and-drag selection to implement custom fixed-duration selection
+      slotDuration: '00:30:00',
+      snapDuration: minutesToDuration(bookingSnapMinutes),
+      slotLabelInterval: '01:00',
+      eventStartEditable: isStaff,
+      eventDurationEditable: false,
+      eventResizableFromStart: false,
       timeZone: 'UTC',
-      selectMirror: true,
+      selectMirror: false,
+      unselectAuto: true,
       hiddenDays: [0, 1, 2, 3, 4, 5, 6].filter(function(day) {
         return visibleDaysOfWeek.indexOf(day) === -1;
       }),
-      ...getEffectiveSlotRange(),
+      slotMinTime: getEffectiveSlotRange().slotMinTime,
+      slotMaxTime: getEffectiveSlotRange().slotMaxTime,
       scrollTime: getEffectiveSlotRange().slotMinTime,
       slotEventOverlap: true,
+      eventDataTransform: function(rawEvent) {
+        if (!rawEvent || rawEvent.display === 'background') {
+          return rawEvent;
+        }
+
+        const transformedEvent = Object.assign({}, rawEvent);
+        const startDate = parseCalendarDate(transformedEvent.start);
+        if (startDate && !Number.isNaN(startDate.getTime())) {
+          transformedEvent.start = startDate;
+          const parsedEnd = parseCalendarDate(transformedEvent.end);
+          if (parsedEnd && !Number.isNaN(parsedEnd.getTime())) {
+            transformedEvent.end = parsedEnd;
+          } else {
+            const typeId = Number(transformedEvent.extendedProps?.appointment_type_id || 0);
+            const durationMinutes = appointmentTypeDurationById.get(typeId) || fallbackDurationMinutes;
+            transformedEvent.end = addMinutes(startDate, durationMinutes);
+          }
+        }
+
+        return transformedEvent;
+      },
       eventContent: function(arg) {
+        if (arg.event.display === 'background') {
+          return { domNodes: [] };
+        }
+
         const wrapper = document.createElement('div');
         wrapper.className = 'booking-event';
 
@@ -1187,11 +1791,41 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
 
         const status = document.createElement('div');
         status.className = 'booking-event__status';
-        status.textContent = String(arg.event.extendedProps.status || 'booked');
+        status.textContent = String(arg.event.extendedProps.status || 'booked').replace(/_/g, ' ');
 
         wrapper.appendChild(title);
         wrapper.appendChild(status);
         return { domNodes: [wrapper] };
+      },
+      eventClassNames: function(arg) {
+        if (arg.event.display === 'background') {
+          return [];
+        }
+
+        const rawStatus = String(arg.event.extendedProps.status || 'booked').trim().toLowerCase().replace(/_/g, '-');
+        return ['appointment-status-' + rawStatus];
+      },
+      // 2. CRITICAL CHANGE: Force the visual mirror box to stay a fixed length (15 mins) while dragging
+      selectAllow: function(selectInfo) {
+        // Calculate the snap duration in milliseconds
+        const durationMs = bookingSnapMinutes * 60000; 
+        
+        if (selectInfo.end - selectInfo.start !== durationMs) {
+          // If the user drags up or down, shift the selection window to a fixed block size
+          if (selectInfo.end > currentBookingEndDate || selectInfo.start > currentBookingStartDate) {
+            // Dragging Down: Lock duration from the current drag endpoint
+            selectInfo.end = new Date(selectInfo.start.getTime() + durationMs);
+          } else {
+            // Dragging Up: Lock duration up from the drag endpoint
+            selectInfo.start = new Date(selectInfo.end.getTime() - durationMs);
+          }
+        }
+
+        // Keep your existing background collision prevention logic here
+        return !calendar.getEvents().some(function(event) {
+          if (event.display !== 'background') return false;
+          return event.start < selectInfo.end && (event.end || event.start) > selectInfo.start;
+        });
       },
       businessHours: {
         daysOfWeek: visibleDaysOfWeek,
@@ -1228,41 +1862,164 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
         },
         failure: () => alert('Could not load appointments')
       },
-      dateClick: function(info) {
-        openBookingModal(info.date);
+     dateClick: function(info) {
+        // Remove any previous unconfirmed draft events sitting on the board
+        const oldDraft = calendar.getEventById('booking-draft-placeholder');
+        if (oldDraft) { oldDraft.remove(); }
+
+        const roundedStart = roundDateToSnap(info.date, bookingSnapMinutes);
+        const fixedEnd = addMinutes(roundedStart, bookingSnapMinutes);
+
+        // Instantly generate a visual event block that can be cleanly dragged around
+        const draftEvent = calendar.addEvent({
+          id: 'booking-draft-placeholder',
+          title: '🆕 Creating Draft...',
+          start: roundedStart,
+          end: fixedEnd,
+          color: '#2457ff', // Accent theme color
+          editable: true,
+          extendedProps: { isDraftPlaceholder: true }
+        });
+
+        // Track initial coordinates in case you release immediately
+        currentBookingStartDate = roundedStart;
+        currentBookingEndDate = fixedEnd;
       },
       select: function(info) {
-        openBookingModal(info.start);
+        const roundedStart = roundDateToSnap(info.start, bookingSnapMinutes);
+        // Force the final appointment size to be exactly your snap minutes (15 mins)
+        const fixedEnd = addMinutes(roundedStart, bookingSnapMinutes); 
+        
+        openBookingModal(roundedStart, fixedEnd);
+        calendar.unselect(); // Clear the highlighted mirror selection box from the UI
       },
       editable: isStaff,
-      eventClick: function(info) {
-        const startDate = info.event.start;
-        const endDate = info.event.end || addMinutes(startDate, getSelectedDurationMinutes());
-        const status = info.event.extendedProps.status || 'unknown';
-        const detailText = formatTimeRange(startDate, endDate) + ' • Status: ' + status;
-        openBookingModal(startDate, endDate, {
-          mode: 'appointment',
-          title: (info.event.extendedProps.customer_name || info.event.title || 'Appointment') + ' • ' + status,
-          description: detailText
-        });
+eventClick: function(info) {
+        const event = info.event;
+
+        // FIX: If clicking the interactive draft placeholder, just open the modal workspace
+        if (event.extendedProps?.isDraftPlaceholder || event.id === 'booking-draft-placeholder') {
+          currentBookingStartDate = event.start;
+          currentBookingEndDate = event.end ? event.end : addMinutes(event.start, bookingSnapMinutes);
+          
+          openBookingModal(currentBookingStartDate, currentBookingEndDate);
+          return;
+        }
+
+        // --- EXISTING REAL APPOINTMENT LOOKUP LOGIC ---
+        const appointmentId = event.id;
+        if (!appointmentId) return;
+        
+        fetch('appointments_api.php?action=get&id=' + encodeURIComponent(appointmentId), { credentials: 'same-origin' })
+          .then(r => r.json())
+          .then(json => {
+            if (!json || !json.ok || !json.appointment) {
+              alert('Could not load appointment details');
+              return;
+            }
+            const appt = json.appointment;
+            const cust = json.customer || {};
+            const startDate = new Date(appt.start_time + 'Z');
+            const endDate = new Date(appt.end_time + 'Z');
+            const status = appt.status || 'unknown';
+            
+            openBookingModal(startDate, endDate, {
+              mode: 'edit',
+              title: (cust.full_name || appt.id ? ('Appt #' + appt.id) : (cust.full_name || appt.title)) + ' • ' + status,
+              appointment: appt,
+              customer: cust
+            });
+          }).catch(err => {
+            alert('Could not load appointment details');
+          });
       },
-      eventDrop: function(info) {
-        alert('Drag & drop is not yet implemented on the server.');
-        info.revert();
+     eventDrop: function(info) {
+        const event = info.event;
+
+        // NEW LOGIC: If moving our new draft block, just update the temporary values
+        if (event.extendedProps?.isDraftPlaceholder) {
+          currentBookingStartDate = event.start;
+          currentBookingEndDate = event.end ? event.end : addMinutes(event.start, bookingSnapMinutes);
+          
+          // Instantly trigger your modal workspace to pop open at the new dragged coordinates
+          openBookingModal(currentBookingStartDate, currentBookingEndDate);
+          
+          // RUN VALIDATIONS THE INSTANT ACCIDENT-DROPS LAND
+          setTimeout(checkTimeSlotConflicts, 50);
+          return;
+        }
+
+        const appointmentId = event && event.id ? event.id : '';
+        const customerId = Number(event?.extendedProps?.customer_id || 0);
+        const providerValue = Number(event?.extendedProps?.provider_id || 0);
+        const appointmentTypeValue = Number(event?.extendedProps?.appointment_type_id || 0);
+
+        if (!appointmentId || !customerId || !providerValue || !appointmentTypeValue || !event.start) {
+          info.revert();
+          alert('Unable to move this appointment.');
+          return;
+        }
+
+        const startTime = formatServerClockDateTime(event.start);
+        const endTime = event.end ? formatServerClockDateTime(event.end) : formatServerClockDateTime(addMinutes(event.start, getSelectedDurationMinutes()));
+
+        fetch('appointments_api.php?action=update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            csrf_token: document.querySelector('input[name="csrf_token"]').value,
+            appointment_id: appointmentId,
+            selected_customer_id: customerId,
+            provider_id: providerValue,
+            appointment_type_id: appointmentTypeValue,
+            start_time: startTime,
+            end_time: endTime,
+            status: normalizeAppointmentStatus(event.extendedProps?.status || 'booked'),
+            notes: event.extendedProps?.notes || ''
+          })
+        })
+          .then(function(response) {
+            return response.json().then(function(data) {
+              return { ok: response.ok, data: data };
+            });
+          })
+          .then(function(result) {
+            if (!result.ok) {
+              throw new Error(result.data.error || 'Failed to move appointment');
+            }
+            return calendar.refetchEvents();
+          })
+          .catch(function(err) {
+            info.revert();
+            alert(err.message || 'Failed to move appointment.');
+          });
       }
     });
 
     window.calendarInstance = calendar;
     calendar.render();
 
-    // Customer mode toggle
-    const createCustomerSection = document.getElementById('createCustomerSection');
-    const selectCustomerSection = document.getElementById('selectCustomerSection');
-    const toggleCreateMode = document.getElementById('toggleCreateMode');
-    const toggleSelectMode = document.getElementById('toggleSelectMode');
-    const existingCustomerSelect = document.getElementById('existingCustomerSelect');
-    const newCustomerName = document.getElementById('newCustomerName');
+    // Add horizontal hour lines for visible timegrid slots (if data-time attribute exists)
+    (function addHourLines() {
+      try {
+        const slots = calendarEl.querySelectorAll('[data-time]');
+        slots.forEach(el => {
+          const t = el.getAttribute('data-time') || '';
+          if (t.endsWith(':00:00')) {
+            el.classList.add('fc-hour-line');
+          }
+        });
+      } catch (e) {
+        // fallback: nothing
+      }
+    })();
+
+    const newCustomerFirstName = document.getElementById('newCustomerFirstName');
+    const newCustomerLastName = document.getElementById('newCustomerLastName');
     const newCustomerDob = document.getElementById('newCustomerDob');
+    const newCustomerGender = document.getElementById('newCustomerGender');
     const newCustomerEmail = document.getElementById('newCustomerEmail');
     const newCustomerMobile = document.getElementById('newCustomerMobile');
     const selectedCustomerId = document.getElementById('selectedCustomerId');
@@ -1315,11 +2072,12 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       }
 
       const missing = [];
-      const fullName = newCustomerName.value.trim();
-      const nameParts = fullName.split(/\s+/).filter(Boolean);
+      const firstNameValue = newCustomerFirstName ? newCustomerFirstName.value.trim() : '';
+      const lastNameValue = newCustomerLastName ? newCustomerLastName.value.trim() : '';
       const emailValue = newCustomerEmail.value.trim();
       const mobileValue = newCustomerMobile.value.trim();
       const dobValue = newCustomerDob.value.trim();
+      const genderValue = newCustomerGender ? newCustomerGender.value.trim() : '';
 
       const firstNameRequired = Boolean(customerFieldSettings.first_name && customerFieldSettings.first_name.required);
       const lastNameRequired = Boolean(customerFieldSettings.last_name && customerFieldSettings.last_name.required);
@@ -1327,14 +2085,15 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       const emailRequired = Boolean(customerFieldSettings.email && customerFieldSettings.email.required);
       const mobileRequired = Boolean(customerFieldSettings.mobile && customerFieldSettings.mobile.required);
       const dobRequired = Boolean(customerFieldSettings.date_of_birth && customerFieldSettings.date_of_birth.required);
+      const genderRequired = Boolean(customerFieldSettings.gender && customerFieldSettings.gender.required);
 
-      if (firstNameRequired && nameParts.length < 1) {
+      if (firstNameRequired && !firstNameValue) {
         missing.push('first name');
       }
-      if (lastNameRequired && nameParts.length < 2) {
+      if (lastNameRequired && !lastNameValue) {
         missing.push('last name');
       }
-      if (middleNameRequired && nameParts.length < 3) {
+      if (middleNameRequired && !firstNameValue && !lastNameValue) {
         missing.push('middle name');
       }
       if (emailRequired && !emailValue) {
@@ -1345,6 +2104,9 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       }
       if (dobRequired && !dobValue) {
         missing.push('date of birth');
+      }
+      if (genderRequired && !genderValue) {
+        missing.push('gender');
       }
 
       return missing;
@@ -1358,6 +2120,16 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
         }
 
         bookingWarningMessage.textContent = message;
+
+        if (bookingWarningModal.open) {
+          if (typeof bookingWarningModal.close === 'function') {
+            bookingWarningModal.close();
+          } else {
+            bookingWarningModal.removeAttribute('open');
+          }
+        }
+
+        bookingWarningModal.returnValue = '';
 
         const handleConfirm = () => {
           cleanup();
@@ -1379,8 +2151,8 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
           }
         };
 
-        bookingWarningConfirm.addEventListener('click', handleConfirm);
-        bookingWarningCancel.addEventListener('click', handleCancel);
+        bookingWarningConfirm.addEventListener('click', handleConfirm, { once: true });
+        bookingWarningCancel.addEventListener('click', handleCancel, { once: true });
         bookingWarningModal.addEventListener('cancel', function(event) {
           event.preventDefault();
           handleCancel();
@@ -1394,39 +2166,277 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       });
     }
 
-    // Sync customer selection
-    existingCustomerSelect.addEventListener('change', function() {
-      selectedCustomerId.value = this.value;
-    });
+    const createCustomerTab = document.getElementById('createCustomerTab');
+    const existingCustomerTab = document.getElementById('existingCustomerTab');
+    const createCustomerPanel = document.getElementById('createCustomerPanel');
+    const existingCustomerPanel = document.getElementById('existingCustomerPanel');
+    const customerSearchInput = document.getElementById('customerSearchInput');
+    const customerSearchState = document.getElementById('customerSearchState');
+    const customerSearchResults = document.getElementById('customerSearchResults');
+    const selectedCustomerCard = document.getElementById('selectedCustomerCard');
+    const selectedCustomerName = document.getElementById('selectedCustomerName');
+    const selectedCustomerDetails = document.getElementById('selectedCustomerDetails');
+    const clearSelectedCustomerBtn = document.getElementById('clearSelectedCustomerBtn');
+    let currentCustomerMode = 'create';
+    let selectedCustomerRecord = null;
+    let customerSearchTimer = null;
+    let customerSearchRequestId = 0;
 
-    function setCreateMode() {
-      createCustomerSection.style.display = 'block';
-      selectCustomerSection.style.display = 'none';
-      toggleCreateMode.classList.add('is-active');
-      toggleSelectMode.classList.remove('is-active');
-      toggleCreateMode.style.display = 'block';
-      toggleSelectMode.style.display = 'none';
-      selectedCustomerId.value = '';
+    function formatCustomerContact(customer) {
+      const parts = [];
+      if (customer.email) parts.push(customer.email);
+      if (customer.mobile) parts.push(customer.mobile);
+      return parts.length ? parts.join(' • ') : 'No contact details';
     }
 
-    function setSelectMode() {
-      createCustomerSection.style.display = 'none';
-      selectCustomerSection.style.display = 'block';
-      toggleCreateMode.style.display = 'none';
-      toggleCreateMode.classList.remove('is-active');
-      toggleSelectMode.classList.add('is-active');
-      toggleSelectMode.style.display = 'block';
-      newCustomerName.value = '';
+    function escapeHtml(str) {
+      return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function normalizeAppointmentStatus(status) {
+      const value = String(status || '').trim().toLowerCase().replace(/_/g, ' ');
+      return appointmentStatusValues.indexOf(value) >= 0 ? value : 'booked';
+    }
+
+    function syncAppointmentStatusUI(status) {
+      const normalized = normalizeAppointmentStatus(status);
+      currentEditingAppointmentStatus = normalized;
+      if (appointmentStatusSelect) {
+        appointmentStatusSelect.value = normalized;
+      }
+    }
+
+    function cycleAppointmentStatus() {
+      const currentIndex = appointmentStatusValues.indexOf(normalizeAppointmentStatus(appointmentStatusSelect ? appointmentStatusSelect.value : currentEditingAppointmentStatus));
+      const nextStatus = appointmentStatusValues[(currentIndex + 1) % appointmentStatusValues.length];
+      syncAppointmentStatusUI(nextStatus);
+    }
+
+    async function saveAppointmentStatus(status) {
+      if (!currentEditingAppointmentId) {
+        return false;
+      }
+
+      const normalizedStatus = normalizeAppointmentStatus(status);
+      const payload = {
+        csrf_token: document.querySelector('input[name="csrf_token"]').value,
+        appointment_id: currentEditingAppointmentId,
+        selected_customer_id: selectedCustomerId.value.trim(),
+        provider_id: providerSelect.value.trim(),
+        appointment_type_id: appointmentTypeSelect.value.trim(),
+        start_time: bookingStart.value.trim(),
+        status: normalizedStatus,
+        notes: bookingNotes ? bookingNotes.value.trim() : ''
+      };
+
+      if (bookingEndOverrideActive && bookingEnd) {
+        payload.end_time = bookingEnd.value.trim();
+      }
+
+      const response = await fetch('appointments_api.php?action=update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update appointment status');
+      }
+
+      await calendar.refetchEvents();
+      syncAppointmentStatusUI(normalizedStatus);
+      return true;
+    }
+
+    function syncNotesVisibility(forceExpanded = null) {
+      if (!bookingNotesPanel || !bookingNotes) {
+        return;
+      }
+
+      const hasNotes = bookingNotes.value.trim().length > 0;
+      if (forceExpanded !== null) {
+        notesExpanded = Boolean(forceExpanded);
+      }
+
+      const shouldShow = hasNotes || notesExpanded;
+      bookingNotesPanel.classList.toggle('is-collapsed', !shouldShow);
+    }
+
+    function toggleNotesVisibility() {
+      notesExpanded = !notesExpanded;
+      syncNotesVisibility();
+    }
+
+    function isAppointmentInPast(startTimeValue) {
+      const startDate = parseDateValue(startTimeValue);
+      if (Number.isNaN(startDate.getTime())) {
+        return false;
+      }
+
+      return startDate.getTime() < getServerNowDate().getTime();
+    }
+
+    function isBookingWithinDeadline(startTimeValue) {
+      const startDate = parseDateValue(startTimeValue);
+      if (Number.isNaN(startDate.getTime()) || bookingDeadlineHours <= 0) {
+        return false;
+      }
+
+      const deadlineWindowMs = bookingDeadlineHours * 60 * 60 * 1000;
+      return startDate.getTime() < (getServerNowDate().getTime() + deadlineWindowMs);
+    }
+
+    function clearCreateCustomerFields() {
+      if (newCustomerFirstName) {
+        newCustomerFirstName.value = '';
+      }
+      if (newCustomerLastName) {
+        newCustomerLastName.value = '';
+      }
       newCustomerDob.value = '';
+      if (newCustomerGender) {
+        newCustomerGender.value = '';
+      }
       newCustomerEmail.value = '';
       newCustomerMobile.value = '';
-      loadExistingCustomers();
+    }
+
+    function updateCustomerSearchSelection() {
+      if (!customerSearchResults) {
+        return;
+      }
+      customerSearchResults.querySelectorAll('[data-customer-id]').forEach(item => {
+        item.classList.toggle('is-selected', Boolean(selectedCustomerRecord) && item.getAttribute('data-customer-id') === String(selectedCustomerRecord.id));
+      });
+    }
+
+    function renderCustomerSearchState(message) {
+      if (customerSearchState) {
+        customerSearchState.textContent = message;
+      }
+      if (customerSearchResults) {
+        customerSearchResults.innerHTML = '';
+      }
+    }
+
+    function showSelectedCustomer(customer) {
+      selectedCustomerRecord = customer;
+      selectedCustomerId.value = String(customer.id);
+      selectedCustomerName.textContent = customer.full_name || 'Selected customer';
+      selectedCustomerDetails.textContent = formatCustomerContact(customer);
+      selectedCustomerCard.style.display = 'block';
+      if (customerSearchState) {
+        customerSearchState.textContent = 'Selected customer saved. Search again to change it.';
+      }
+      updateCustomerSearchSelection();
+    }
+
+    function clearSelectedCustomer() {
+      selectedCustomerRecord = null;
+      selectedCustomerId.value = '';
+      selectedCustomerName.textContent = '';
+      selectedCustomerDetails.textContent = '';
+      selectedCustomerCard.style.display = 'none';
+      updateCustomerSearchSelection();
+    }
+
+    function renderCustomerSearchResults(customers) {
+      if (!customerSearchResults || !customerSearchState) {
+        return;
+      }
+
+      if (!customers.length) {
+        renderCustomerSearchState('No matching customers found.');
+        return;
+      }
+
+      customerSearchState.textContent = `Found ${customers.length} matching customer${customers.length === 1 ? '' : 's'}.`;
+      customerSearchResults.innerHTML = '';
+
+      customers.forEach(customer => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'customer-search-result';
+        button.setAttribute('data-customer-id', String(customer.id));
+        button.innerHTML = `<strong>${escapeHtml(customer.full_name || 'Unnamed customer')}</strong><span>${escapeHtml(formatCustomerContact(customer))}</span>`;
+        button.addEventListener('click', () => showSelectedCustomer(customer));
+        customerSearchResults.appendChild(button);
+      });
+
+      updateCustomerSearchSelection();
+    }
+
+    async function searchExistingCustomers(query) {
+      const term = String(query || '').trim();
+      const requestId = ++customerSearchRequestId;
+
+      clearSelectedCustomer();
+
+      if (term.length < 2) {
+        renderCustomerSearchState(term ? 'Type at least 2 characters to search.' : 'Start typing to search.');
+        return;
+      }
+
+      if (customerSearchState) {
+        customerSearchState.textContent = 'Searching...';
+      }
+      if (customerSearchResults) {
+        customerSearchResults.innerHTML = '';
+      }
+
+      try {
+        const params = new URLSearchParams({ action: 'search', q: term, limit: '8' });
+        const resp = await fetch(`customers_api.php?${params}`);
+        if (!resp.ok) throw new Error('Failed to search customers');
+        const json = await resp.json();
+        if (requestId !== customerSearchRequestId) {
+          return;
+        }
+        renderCustomerSearchResults(json.customers || []);
+      } catch (err) {
+        if (requestId !== customerSearchRequestId) {
+          return;
+        }
+        renderCustomerSearchState(err.message || 'Failed to search customers.');
+      }
+    }
+
+    function setCustomerMode(mode) {
+      currentCustomerMode = mode;
+      createCustomerTab.classList.toggle('is-active', mode === 'create');
+      existingCustomerTab.classList.toggle('is-active', mode === 'existing');
+      createCustomerTab.setAttribute('aria-selected', mode === 'create' ? 'true' : 'false');
+      existingCustomerTab.setAttribute('aria-selected', mode === 'existing' ? 'true' : 'false');
+      createCustomerPanel.style.display = mode === 'create' ? 'grid' : 'none';
+      existingCustomerPanel.style.display = mode === 'existing' ? 'grid' : 'none';
+
+      if (mode === 'create') {
+        clearSelectedCustomer();
+        clearCreateCustomerFields();
+        if (customerSearchInput) {
+          customerSearchInput.value = '';
+        }
+        renderCustomerSearchState('Start typing to search.');
+      } else {
+        clearCreateCustomerFields();
+        if (customerSearchInput) {
+          customerSearchInput.focus();
+          searchExistingCustomers(customerSearchInput.value);
+        }
+      }
     }
 
     async function submitBooking() {
+      const mode = bookingModal.getAttribute('data-mode');
+      const isEdit = mode === 'edit' && currentEditingAppointmentId;
       const selectedCustomerValue = selectedCustomerId.value.trim();
-      const customerName = newCustomerName.value.trim();
+      const firstNameValue = newCustomerFirstName ? newCustomerFirstName.value.trim() : '';
+      const lastNameValue = newCustomerLastName ? newCustomerLastName.value.trim() : '';
       const customerDob = newCustomerDob.value.trim();
+      const customerGender = newCustomerGender ? newCustomerGender.value.trim() : '';
       const customerEmail = newCustomerEmail.value.trim();
       const customerMobile = newCustomerMobile.value.trim();
       const providerId = providerSelect.value.trim();
@@ -1437,29 +2447,72 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
         setBookingAlert('Choose a provider before making the booking.');
         return;
       }
-
       if (!appointmentTypeId) {
         setBookingAlert('Choose an appointment type before making the booking.');
         return;
       }
 
-      if (!selectedCustomerValue && !customerName) {
-        setBookingAlert('Select an existing customer or enter a new customer name.');
+      // RE-VERIFY FOR SAFETY ONE LAST TIME
+      if (checkTimeSlotConflicts()) {
+        return; // Halt if background loop reports conflict track hits
+      }
+
+      // 1. CRITICAL CONFLICT CHECK: Parse active draft bounds
+      const draftStart = new Date(bookingStart.value + 'Z');
+      const draftEnd = new Date(bookingEnd.value + 'Z');
+
+      // Scan active background break tracks for overlapping bounds
+      const hasTimeConflict = window.calendarInstance.getEvents().some(function(event) {
+        if (event.display !== 'background') return false;
+        
+        const breakStart = event.start;
+        const breakEnd = event.end || event.start;
+        
+        // Mathematical check for overlapping date windows
+        return breakStart < draftEnd && breakEnd > draftStart;
+      });
+
+      // 2. TRIGGER RED FLASH IF LOCKED OUT BY BREAK TIMES
+      if (hasTimeConflict) {
+        bookingModal.classList.add('is-invalid-time');
+        setBookingAlert('🚨 This appointment cannot be booked because it overlaps with an unavailable or break time slot.', true);
+        
+        // Shake or vibrate device slightly if supported
+        if (navigator.vibrate) navigator.vibrate(100);
+        return; 
+      } else {
+        // Clear warning states if coordinates slide out onto safe tracks
+        bookingModal.classList.remove('is-invalid-time');
+      }
+
+      if (currentCustomerMode === 'existing') {
+        if (!selectedCustomerValue) {
+          setBookingAlert('Select a customer from the search results.');
+          return;
+        }
+      } else if (!firstNameValue && !lastNameValue) {
+        setBookingAlert('Enter a customer name or switch to existing customer search.');
         return;
       }
 
-      const warningMessages = [];
+      const confirmationQueue = [];
+      if (isAppointmentInPast(startTime)) {
+        confirmationQueue.push('This appointment is in the past.');
+      } else if (isBookingWithinDeadline(startTime)) {
+        confirmationQueue.push('This booking is within the ' + bookingDeadlineHours + '-hour booking deadline.');
+      }
       if (isBookingOutsideDisplayTime()) {
-        warningMessages.push('This booking is outside the configured display time (' + visibleStartTime.slice(0, 5) + ' to ' + visibleEndTime.slice(0, 5) + ').');
+        confirmationQueue.push('This booking is outside the configured display time (' + visibleStartTime.slice(0, 5) + ' to ' + visibleEndTime.slice(0, 5) + ').');
       }
 
       const missingFields = getCustomerMissingRequiredFields();
       if (missingFields.length) {
-        warningMessages.push('The new customer is missing ' + missingFields.length + ' required field' + (missingFields.length === 1 ? '' : 's') + ': ' + missingFields.join(', ') + '.');
+        confirmationQueue.push('The new customer is missing ' + missingFields.length + ' required field' + (missingFields.length === 1 ? '' : 's') + ': ' + missingFields.join(', ') + '.');
       }
 
-      if (warningMessages.length) {
-        const proceed = await showBookingWarning(warningMessages.join(' Do you want to continue? '));
+      for (const warningMessage of confirmationQueue) {
+        setBookingAlert(warningMessage, false);
+        const proceed = await showBookingWarning(warningMessage + ' Do you want to continue?');
         if (!proceed) {
           return;
         }
@@ -1470,22 +2523,31 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       setBookingAlert('');
 
       try {
-        const resp = await fetch('appointments_api.php?action=create', {
+        const customerName = [firstNameValue, lastNameValue].filter(Boolean).join(' ').trim();
+        const url = 'appointments_api.php?action=' + (isEdit ? 'update' : 'create');
+        const statusValue = isEdit && appointmentStatusSelect ? normalizeAppointmentStatus(appointmentStatusSelect.value) : 'booked';
+        const notesValue = bookingNotes ? bookingNotes.value.trim() : '';
+        const resp = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
+          body: JSON.stringify(Object.assign({
             csrf_token: document.querySelector('input[name="csrf_token"]').value,
             selected_customer_id: selectedCustomerValue,
             customer_name: customerName,
+            customer_first_name: firstNameValue,
+            customer_last_name: lastNameValue,
             customer_email: customerEmail,
             customer_mobile: customerMobile,
             date_of_birth: customerDob,
+            customer_gender: customerGender,
             provider_id: providerId,
             appointment_type_id: appointmentTypeId,
-            start_time: startTime
-          })
+            start_time: startTime,
+            status: statusValue,
+            notes: notesValue
+          }, (isEdit ? { appointment_id: currentEditingAppointmentId } : {}), (bookingEndOverrideActive ? { end_time: bookingEnd.value } : {})))
         });
 
         const json = await resp.json();
@@ -1501,49 +2563,69 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
         }
         setDraftMode();
       } catch (err) {
-        setBookingAlert(err.message || 'Failed to create booking.');
+        setBookingAlert(err.message || (mode === 'edit' ? 'Failed to update booking.' : 'Failed to create booking.'));
       } finally {
         makeBookingBtn.disabled = false;
-        makeBookingBtn.textContent = 'Make booking';
+        makeBookingBtn.textContent = mode === 'edit' ? 'Save changes' : 'Make booking';
       }
     }
 
-    async function loadExistingCustomers() {
-      try {
-        const resp = await fetch('customers_api.php?action=list');
-        if (!resp.ok) throw new Error('Failed to load customers');
-        const json = await resp.json();
-        const customers = json.customers || [];
+    createCustomerTab.addEventListener('click', () => setCustomerMode('create'));
+    existingCustomerTab.addEventListener('click', () => setCustomerMode('existing'));
 
-        existingCustomerSelect.innerHTML = '<option value="">-- Search and select customer --</option>';
-        customers.forEach(customer => {
-          const opt = document.createElement('option');
-          opt.value = customer.id;
-          opt.textContent = customer.full_name + ' (' + (customer.email || 'no email') + ')';
-          existingCustomerSelect.appendChild(opt);
-        });
-      } catch (err) {
-        console.error('Error loading customers:', err);
-      }
+    if (customerSearchInput) {
+      customerSearchInput.addEventListener('input', () => {
+        window.clearTimeout(customerSearchTimer);
+        customerSearchTimer = window.setTimeout(() => {
+          if (currentCustomerMode === 'existing') {
+            searchExistingCustomers(customerSearchInput.value);
+          }
+        }, 220);
+      });
+
+      customerSearchInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          if (currentCustomerMode === 'existing') {
+            searchExistingCustomers(customerSearchInput.value);
+          }
+        }
+      });
     }
 
-    toggleCreateMode.addEventListener('click', setCreateMode);
-    toggleSelectMode.addEventListener('click', setSelectMode);
+    clearSelectedCustomerBtn.addEventListener('click', clearSelectedCustomer);
 
-    setCreateMode();
+    setCustomerMode('create');
 
-    function setDraftMode() {
+function setDraftMode() {
+       // ADD THIS LINE: Reset the invalid configuration rules on close/cancel
+      bookingModal.classList.remove('is-invalid-time');
+      // ADD THIS LINE: Automatically clear the placeholder event from the screen on cancel/close
+      const draft = window.calendarInstance?.getEventById('booking-draft-placeholder');
+      if (draft) { draft.remove(); }
+
       bookingModal.setAttribute('data-mode', 'draft');
       bookingModalTitle.textContent = 'New booking draft';
       currentBookingStartDate = null;
       currentBookingEndDate = null;
+      currentEditingAppointmentId = null;
+      syncAppointmentStatusUI('booked');
+      notesExpanded = false;
+      syncBookingNotes('');
+      if (makeBookingBtn) {
+        makeBookingBtn.textContent = 'Make booking';
+      }
+      if (deleteBookingBtn) {
+        deleteBookingBtn.style.display = 'none';
+      }
       setBookingAlert('');
-      selectedCustomerId.value = '';
-      existingCustomerSelect.value = '';
-      newCustomerName.value = '';
-      newCustomerDob.value = '';
-      newCustomerEmail.value = '';
-      newCustomerMobile.value = '';
+      clearSelectedCustomer();
+      clearCreateCustomerFields();
+      if (customerSearchInput) {
+        customerSearchInput.value = '';
+      }
+      renderCustomerSearchState('Start typing to search.');
+      setCustomerMode('create');
     }
 
     // Close modal
@@ -1571,10 +2653,199 @@ $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneNa
       makeBookingBtn.addEventListener('click', submitBooking);
     }
 
+    if (deleteBookingBtn) {
+      deleteBookingBtn.addEventListener('click', async function() {
+        if (!currentEditingAppointmentId) {
+          return;
+        }
+
+        const confirmed = window.confirm('Delete this appointment? This cannot be undone.');
+        if (!confirmed) {
+          return;
+        }
+
+        deleteBookingBtn.disabled = true;
+        deleteBookingBtn.textContent = 'Deleting...';
+        try {
+          const resp = await fetch('appointments_api.php?action=delete', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              csrf_token: document.querySelector('input[name="csrf_token"]').value,
+              appointment_id: currentEditingAppointmentId
+            })
+          });
+          const json = await resp.json();
+          if (!resp.ok) {
+            throw new Error(json.error || 'Failed to delete appointment');
+          }
+
+          await calendar.refetchEvents();
+          if (typeof bookingModal.close === 'function') {
+            bookingModal.close();
+          } else {
+            bookingModal.removeAttribute('open');
+          }
+          setDraftMode();
+        } catch (err) {
+          setBookingAlert(err.message || 'Failed to delete appointment.');
+        } finally {
+          deleteBookingBtn.disabled = false;
+          deleteBookingBtn.textContent = 'Delete';
+        }
+      });
+    }
+
     // Appointment type change updates duration
     appointmentTypeSelect.addEventListener('change', function() {
-      syncBookingDraftTimes();
+      // If we're in draft mode, keep old behavior
+      if (bookingModal.getAttribute('data-mode') === 'draft') {
+        syncBookingDraftTimes();
+        return;
+      }
+
+      // If in edit mode and override was active, clear override and recompute end
+      if (bookingEndOverrideActive) {
+        bookingEndOverrideActive = false;
+      }
+      applyVisibleTimeInputsToHidden();
     });
+
+    if (bookingStartTimeInput) {
+      bookingStartTimeInput.addEventListener('change', function() {
+        // changing start time cancels any end override and recomputes
+        bookingEndOverrideActive = false;
+        applyVisibleTimeInputsToHidden();
+      });
+    }
+
+    if (bookingEndTimeInput) {
+      bookingEndTimeInput.addEventListener('change', function() {
+        // manual change indicates override
+        bookingEndOverrideActive = true;
+        applyVisibleTimeInputsToHidden();
+      });
+    }
+
+    if (appointmentStatusSelect) {
+      appointmentStatusSelect.addEventListener('change', function() {
+        syncAppointmentStatusUI(appointmentStatusSelect.value);
+      });
+    }
+
+    if (cycleAppointmentStatusBtn) {
+      cycleAppointmentStatusBtn.addEventListener('click', async function() {
+        cycleAppointmentStatus();
+        if (bookingModal.getAttribute('data-mode') === 'edit' && currentEditingAppointmentId) {
+          cycleAppointmentStatusBtn.disabled = true;
+          cycleAppointmentStatusBtn.textContent = 'Saving...';
+          try {
+            await saveAppointmentStatus(appointmentStatusSelect ? appointmentStatusSelect.value : currentEditingAppointmentStatus);
+          } catch (err) {
+            setBookingAlert(err.message || 'Failed to save appointment status.');
+          } finally {
+            cycleAppointmentStatusBtn.disabled = false;
+            cycleAppointmentStatusBtn.textContent = 'Toggle';
+          }
+        }
+      });
+    }
+
+    if (bookingNotesLabel) {
+      bookingNotesLabel.addEventListener('click', function(event) {
+        event.preventDefault();
+        toggleNotesVisibility();
+      });
+    }
+
+    if (bookingNotes) {
+      bookingNotes.addEventListener('input', function() {
+        syncNotesVisibility();
+      });
+    }
+
+    function applyVisibleTimeInputsToHidden() {
+      try {
+        const startIso = bookingStart.value.trim();
+        if (!startIso) return;
+        const datePart = startIso.split(' ')[0];
+        const startTimePart = (bookingStartTimeInput && bookingStartTimeInput.value) ? bookingStartTimeInput.value + ':00' : getServerTimePartFromDateTime(startIso) || '00:00:00';
+        const newStart = datePart + ' ' + (startTimePart.length === 8 ? startTimePart : startTimePart + ':00');
+        bookingStart.value = newStart;
+
+        if (bookingEndOverrideActive) {
+          const endTimePart = (bookingEndTimeInput && bookingEndTimeInput.value) ? bookingEndTimeInput.value + ':00' : getServerTimePartFromDateTime(bookingEnd.value) || startTimePart;
+          bookingEnd.value = datePart + ' ' + (endTimePart.length === 8 ? endTimePart : endTimePart + ':00');
+        } else {
+          // compute default end from selected type
+          const opt = appointmentTypeSelect.options[appointmentTypeSelect.selectedIndex];
+          const duration = Number(opt?.dataset?.duration || fallbackDurationMinutes);
+          const startDate = new Date(newStart + 'Z');
+          const endDate = addMinutes(startDate, duration);
+          // format endDate into server format
+          const yyyy = endDate.getUTCFullYear();
+          const mm = String(endDate.getUTCMonth() + 1).padStart(2, '0');
+          const dd = String(endDate.getUTCDate()).padStart(2, '0');
+          const hh = String(endDate.getUTCHours()).padStart(2, '0');
+          const mi = String(endDate.getUTCMinutes()).padStart(2, '0');
+          const ss = String(endDate.getUTCSeconds()).padStart(2, '0');
+          bookingEnd.value = `${yyyy}-${mm}-${dd} ${hh}:${mi}:${ss}`;
+          if (bookingEndTimeInput) bookingEndTimeInput.value = `${hh}:${mi}`;
+        }
+
+        // update labels
+        const calendar = window.calendarInstance;
+        const sd = new Date(bookingStart.value + 'Z');
+        const ed = new Date(bookingEnd.value + 'Z');
+        selectedStartLabel.textContent = formatCalendarDate(calendar, sd);
+        selectedEndLabel.textContent = formatCalendarDate(calendar, ed);
+
+        // RUN CONFLICT VERIFICATIONS AFTER RECOMPUTING NEW HIDDEN BOUNDARIES
+        checkTimeSlotConflicts();
+        
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    function checkTimeSlotConflicts() {
+  const startIso = bookingStart.value.trim();
+  const endIso = bookingEnd.value.trim();
+  
+  if (!startIso || !endIso) return false;
+
+  // Parse active draft coordinates
+  const draftStart = new Date(startIso + 'Z');
+  const draftEnd = new Date(endIso + 'Z');
+
+  // Scan calendar cache for overlapping background elements
+  const hasTimeConflict = window.calendarInstance.getEvents().some(function(event) {
+    if (event.display !== 'background') return false;
+    
+    const breakStart = event.start;
+    const breakEnd = event.end || event.start;
+    
+    return breakStart < draftEnd && breakEnd > draftStart;
+  });
+
+  // Toggle UI rules based on tracking states
+  if (hasTimeConflict) {
+    bookingModal.classList.add('is-invalid-time');
+    setBookingAlert('🚨 This appointment cannot be booked because it overlaps with an unavailable or break time slot.', true);
+    if (makeBookingBtn) makeBookingBtn.disabled = true; // Lock out immediate submissions
+    return true;
+  } else {
+    bookingModal.classList.remove('is-invalid-time');
+    // Only wipe the alert if it was our specific conflict warning to prevent overwriting other system flags
+    if (bookingModalAlert.textContent.includes('unavailable or break time slot')) {
+      setBookingAlert('');
+    }
+    if (makeBookingBtn) makeBookingBtn.disabled = false; // Safe to tap
+    return false;
+  }
+}
   </script>
 
   <script src="assets/js/global.js"></script>

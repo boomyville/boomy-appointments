@@ -16,6 +16,32 @@ $role = $user['role'] ?? '';
 try {
     $action = $_GET['action'] ?? 'list';
 
+    // GET /customers_api.php?action=search - Search customers for booking selection
+    if ($action === 'search' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        if (!in_array($role, ['admin', 'provider'], true)) {
+            http_response_code(403);
+            echo json_encode(['error' => 'permission denied']);
+            exit;
+        }
+
+        $db = get_db();
+        $query = trim((string) ($_GET['q'] ?? ''));
+        $limit = min(max((int) ($_GET['limit'] ?? 8), 1), 20);
+
+        if ($query === '') {
+            echo json_encode(['customers' => []]);
+            exit;
+        }
+
+        $searchPattern = '%' . $query . '%';
+        $stmt = $db->prepare('SELECT id, full_name, email, mobile, date_of_birth, gender, date_added FROM customers WHERE full_name LIKE ? OR email LIKE ? OR mobile LIKE ? ORDER BY full_name ASC LIMIT ?');
+        $stmt->execute([$searchPattern, $searchPattern, $searchPattern, $limit]);
+        $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        echo json_encode(['customers' => $customers]);
+        exit;
+    }
+
     // GET /customers_api.php?action=settings - Returns field settings for the client
     if ($action === 'settings' && $_SERVER['REQUEST_METHOD'] === 'GET') {
         $settings = get_customer_field_settings();
@@ -33,6 +59,7 @@ try {
         $email = trim((string) ($data['email'] ?? ''));
         $mobile = trim((string) ($data['mobile'] ?? ''));
         $dateOfBirth = trim((string) ($data['date_of_birth'] ?? ''));
+        $gender = trim((string) ($data['gender'] ?? ''));
         $adminOverride = (bool) ($data['admin_override'] ?? false);
 
         $settings = get_customer_field_settings();
@@ -79,6 +106,13 @@ try {
             $err = validate_customer_field('date_of_birth', $dateOfBirth);
             if ($err) {
                 $validationErrors['date_of_birth'] = $err;
+            }
+        }
+
+        if ($settings['gender']['display'] || $settings['gender']['required'] || $gender !== '') {
+            $err = validate_customer_field('gender', $gender);
+            if ($err) {
+                $validationErrors['gender'] = $err;
             }
         }
 
@@ -139,7 +173,7 @@ try {
         }
 
         // Create customer
-        $customerId = create_customer($fullName, $email ?: null, $mobile ?: null, $dateOfBirth ?: null);
+        $customerId = create_customer($fullName, $email ?: null, $mobile ?: null, $dateOfBirth ?: null, $gender ?: null);
 
         if (!$customerId) {
             http_response_code(500);
@@ -162,14 +196,28 @@ try {
 
         $db = get_db();
         $query = trim((string) ($_GET['q'] ?? ''));
-        $offset = (int) ($_GET['offset'] ?? 0);
-        $limit = min((int) ($_GET['limit'] ?? 50), 200);
+        $page = max(1, (int) ($_GET['page'] ?? 1));
+        $offset = (int) ($_GET['offset'] ?? (($page - 1) * 20));
+        $limit = min(max((int) ($_GET['limit'] ?? 20), 1), 100);
+        $sort = strtolower(trim((string) ($_GET['sort'] ?? 'full_name')));
 
         $offset = max(0, $offset);
         $limit = max(1, $limit);
 
+        $sortMap = [
+            'full_name' => 'full_name ASC, id ASC',
+            'first_name' => "TRIM(SUBSTRING_INDEX(full_name, ' ', 1)) ASC, full_name ASC, id ASC",
+            'last_name' => "TRIM(SUBSTRING_INDEX(full_name, ' ', -1)) ASC, full_name ASC, id ASC",
+            'mobile' => 'mobile ASC, full_name ASC, id ASC',
+            'email' => 'email ASC, full_name ASC, id ASC',
+            'date_added_desc' => 'date_added DESC, full_name ASC, id ASC',
+            'date_added_asc' => 'date_added ASC, full_name ASC, id ASC',
+            'gender' => 'gender ASC, full_name ASC, id ASC',
+        ];
+        $orderBy = $sortMap[$sort] ?? $sortMap['full_name'];
+
         if ($query === '') {
-            $stmt = $db->prepare('SELECT id, full_name, email, mobile, date_of_birth FROM customers ORDER BY full_name ASC LIMIT ? OFFSET ?');
+            $stmt = $db->prepare("SELECT id, full_name, email, mobile, date_of_birth, gender, date_added FROM customers ORDER BY {$orderBy} LIMIT ? OFFSET ?");
             $stmt->execute([$limit, $offset]);
             $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -177,7 +225,7 @@ try {
             $totalCount = (int) ($countStmt->fetch()['cnt'] ?? 0);
         } else {
             $searchPattern = '%' . $query . '%';
-            $stmt = $db->prepare('SELECT id, full_name, email, mobile, date_of_birth FROM customers WHERE full_name LIKE ? OR email LIKE ? OR mobile LIKE ? ORDER BY full_name ASC LIMIT ? OFFSET ?');
+            $stmt = $db->prepare("SELECT id, full_name, email, mobile, date_of_birth, gender, date_added FROM customers WHERE full_name LIKE ? OR email LIKE ? OR mobile LIKE ? ORDER BY {$orderBy} LIMIT ? OFFSET ?");
             $stmt->execute([$searchPattern, $searchPattern, $searchPattern, $limit, $offset]);
             $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
 

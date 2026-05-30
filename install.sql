@@ -7,6 +7,7 @@ USE boomy_appointments;
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS `settings`;
 DROP TABLE IF EXISTS `unavailabilities`;
+DROP TABLE IF EXISTS `breaks`;
 DROP TABLE IF EXISTS `appointments`;
 DROP TABLE IF EXISTS `provider_appointment_types`;
 DROP TABLE IF EXISTS `appointment_types`;
@@ -92,12 +93,28 @@ CREATE TABLE `customers` (
   `mobile` VARCHAR(32) NOT NULL,
   `full_name` VARCHAR(128) NOT NULL,
   `date_of_birth` DATE NULL,
+  `date_added` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `gender` ENUM('male','female','other','unknown') NOT NULL DEFAULT 'unknown',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_customer_lookup` (`email`,`mobile`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 6. APPOINTMENTS
+-- 6. BREAKS
+CREATE TABLE `breaks` (
+  `id` INT UNSIGNED AUTO_INCREMENT,
+  `day_of_week` TINYINT UNSIGNED NULL,
+  `start_time` TIME NOT NULL,
+  `end_time` TIME NOT NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_breaks_day_time` (`day_of_week`,`start_time`,`end_time`),
+  KEY `idx_breaks_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 7. APPOINTMENTS
 CREATE TABLE `appointments` (
   `id` INT UNSIGNED AUTO_INCREMENT,
   `customer_id` INT UNSIGNED NOT NULL,
@@ -106,6 +123,7 @@ CREATE TABLE `appointments` (
   `start_time` DATETIME NOT NULL,
   `end_time` DATETIME NOT NULL,
   `status` ENUM('booked','unconfirmed','confirmed','present','completed','no_show') NOT NULL DEFAULT 'booked',
+  `notes` TEXT NULL,
   `hash_key` CHAR(64) NOT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -117,7 +135,7 @@ CREATE TABLE `appointments` (
   CONSTRAINT `fk_appt_type` FOREIGN KEY (`appointment_type_id`) REFERENCES `appointment_types` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 7. UNAVAILABILITIES
+-- 8. UNAVAILABILITIES
 CREATE TABLE `unavailabilities` (
   `id` INT UNSIGNED AUTO_INCREMENT,
   `provider_id` INT UNSIGNED NULL,
@@ -170,6 +188,8 @@ INSERT INTO `settings` (`setting_key`,`setting_value`) VALUES
 ('booking_phone_max','20'),
 ('booking_dob_display','1'),
 ('booking_dob_required','0'),
+('booking_gender_display','1'),
+('booking_gender_required','0'),
 ('booking_show_monday','1'),
 ('booking_show_tuesday','1'),
 ('booking_show_wednesday','1'),
@@ -179,7 +199,9 @@ INSERT INTO `settings` (`setting_key`,`setting_value`) VALUES
 ('booking_show_sunday','0'),
 ('booking_start_time','09:00'),
 ('booking_end_time','21:00'),
+('booking_calendar_height','1800'),
 ('booking_show_now_indicator','1'),
+('booking_snap_minutes','15'),
 ('smtp_host','smtp.gmail.com'),
 ('smtp_port','587'),
 ('smtp_encryption','tls'),

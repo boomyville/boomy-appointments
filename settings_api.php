@@ -5,6 +5,29 @@ require_once __DIR__ . '/functions.php';
 init_session();
 header('Content-Type: application/json; charset=utf-8');
 
+if (!function_exists('normalize_booking_calendar_height_setting')) {
+    function normalize_booking_calendar_height_setting($value)
+    {
+        $raw = strtolower(trim((string) ($value ?? '')));
+        if ($raw === '') {
+            return 1800;
+        }
+
+        if ($raw === 'auto') {
+            return 'auto';
+        }
+
+        if (preg_match('/^(\d+)(?:px)?$/', $raw, $matches)) {
+            $height = (int) $matches[1];
+            if ($height >= 600 && $height <= 10000) {
+                return $height;
+            }
+        }
+
+        return 1800;
+    }
+}
+
 // Allow initial PHPMailer setup from the login page before any admin exists.
 $action = $_GET['action'] ?? 'get';
 
@@ -23,9 +46,9 @@ try {
             'booking_middlename_display', 'booking_middlename_required', 'booking_middlename_letters_only', 'booking_middlename_min', 'booking_middlename_max',
             'booking_email_display', 'booking_email_required',
             'booking_phone_display', 'booking_phone_required', 'booking_phone_numbers_only', 'booking_phone_min', 'booking_phone_max',
-            'booking_dob_display', 'booking_dob_required',
+            'booking_dob_display', 'booking_dob_required', 'booking_gender_display', 'booking_gender_required',
             'booking_show_monday', 'booking_show_tuesday', 'booking_show_wednesday', 'booking_show_thursday', 'booking_show_friday', 'booking_show_saturday', 'booking_show_sunday',
-            'booking_start_time', 'booking_end_time', 'booking_show_now_indicator',
+            'booking_start_time', 'booking_end_time', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes',
             'password_min_length', 'password_max_length', 'password_require_lowercase', 'password_require_uppercase', 'password_require_number', 'password_require_symbol',
             'email_whitelist_enabled', 'email_domain_whitelist', 'email_domain_blacklist',
             'smtp_host', 'smtp_port', 'smtp_encryption', 'smtp_username', 'smtp_password', 'mail_from_address', 'mail_from_name'
@@ -33,6 +56,92 @@ try {
         $out = [];
         foreach ($keys as $k) $out[$k] = get_setting($k, null);
         echo json_encode(['ok' => true, 'settings' => $out]);
+        exit;
+    }
+
+    if ($action === 'breaks') {
+        if (empty($_SESSION['user']['role']) || $_SESSION['user']['role'] !== 'admin') {
+            http_response_code(403);
+            echo json_encode(['error' => 'forbidden']);
+            exit;
+        }
+
+        $requestMethod = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        $rawInput = file_get_contents('php://input');
+        $data = $rawInput ? json_decode($rawInput, true) : $_POST;
+
+        if ($requestMethod === 'GET') {
+            $dayValue = $_GET['day_of_week'] ?? $_GET['day'] ?? '';
+            $dayOfWeek = normalize_break_day_of_week(is_string($dayValue) ? $dayValue : (string) $dayValue);
+            $breaks = get_standard_breaks($dayOfWeek, true);
+            foreach ($breaks as &$breakRow) {
+                $breakRow['day_label'] = format_break_day_label(isset($breakRow['day_of_week']) ? ($breakRow['day_of_week'] !== null ? (int) $breakRow['day_of_week'] : null) : null);
+            }
+            unset($breakRow);
+
+            echo json_encode(['ok' => true, 'breaks' => $breaks]);
+            exit;
+        }
+
+        if ($requestMethod !== 'POST') {
+            http_response_code(405);
+            echo json_encode(['error' => 'method not allowed']);
+            exit;
+        }
+
+        $token = $data['csrf_token'] ?? null;
+        if (!verify_csrf_token($token)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'csrf']);
+            exit;
+        }
+
+        $command = (string) ($data['command'] ?? 'create');
+        if ($command === 'delete') {
+            $breakId = (int) ($data['break_id'] ?? 0);
+            if ($breakId < 1) {
+                http_response_code(422);
+                echo json_encode(['error' => 'break id is required']);
+                exit;
+            }
+
+            $deleted = delete_standard_break($breakId);
+            if (!$deleted) {
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to delete break']);
+                exit;
+            }
+
+            echo json_encode(['ok' => true, 'message' => 'Break deleted successfully']);
+            exit;
+        }
+
+        $dayValue = $data['day_of_week'] ?? '';
+        $dayOfWeek = normalize_break_day_of_week(is_string($dayValue) ? $dayValue : (string) $dayValue);
+        $startTime = trim((string) ($data['start_time'] ?? ''));
+        $endTime = trim((string) ($data['end_time'] ?? ''));
+        $isActive = array_key_exists('is_active', $data) ? !empty($data['is_active']) : true;
+
+        if ($startTime === '' || $endTime === '') {
+            http_response_code(422);
+            echo json_encode(['error' => 'Start time and end time are required']);
+            exit;
+        }
+
+        $breakId = create_standard_break($dayOfWeek, $startTime, $endTime, $isActive);
+        if (!$breakId) {
+            http_response_code(422);
+            echo json_encode(['error' => 'Unable to create break. Check the selected times.']);
+            exit;
+        }
+
+        $createdBreaks = get_standard_breaks($dayOfWeek, true);
+        foreach ($createdBreaks as &$breakRow) {
+            $breakRow['day_label'] = format_break_day_label(isset($breakRow['day_of_week']) ? ($breakRow['day_of_week'] !== null ? (int) $breakRow['day_of_week'] : null) : null);
+        }
+        unset($breakRow);
+
+        echo json_encode(['ok' => true, 'message' => 'Break created successfully', 'breaks' => $createdBreaks]);
         exit;
     }
 
@@ -62,11 +171,12 @@ try {
                 'booking_middlename_display', 'booking_middlename_required', 'booking_middlename_letters_only', 'booking_middlename_min', 'booking_middlename_max',
                 'booking_email_display', 'booking_email_required',
                 'booking_phone_display', 'booking_phone_required', 'booking_phone_numbers_only', 'booking_phone_min', 'booking_phone_max',
-                'booking_dob_display', 'booking_dob_required'
+                'booking_dob_display', 'booking_dob_required', 'booking_gender_display', 'booking_gender_required'
             ],
             'booking' => [
+                'booking_deadline_hours',
                 'booking_show_monday', 'booking_show_tuesday', 'booking_show_wednesday', 'booking_show_thursday', 'booking_show_friday', 'booking_show_saturday', 'booking_show_sunday',
-                'booking_start_time', 'booking_end_time', 'booking_show_now_indicator'
+                'booking_start_time', 'booking_end_time', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes'
             ],
             'authentication' => [
                 'password_min_length', 'password_max_length', 'password_require_lowercase', 'password_require_uppercase', 'password_require_number', 'password_require_symbol',
@@ -94,8 +204,18 @@ try {
         }
 
         if ($tab === 'booking') {
+            $deadline_hours = (int) ($data['booking_deadline_hours'] ?? 24);
             $start_time = trim((string) ($data['booking_start_time'] ?? '09:00'));
             $end_time = trim((string) ($data['booking_end_time'] ?? '21:00'));
+            $calendar_height_raw = trim((string) ($data['booking_calendar_height'] ?? '1800'));
+            $snap_options = [1, 2, 5, 10, 15, 20, 30, 40, 45, 60];
+            $snap_minutes = (int) ($data['booking_snap_minutes'] ?? 15);
+
+            if ($deadline_hours < 0) {
+                http_response_code(422);
+                echo json_encode(['error' => 'Booking deadline must be zero or greater']);
+                exit;
+            }
 
             if (!preg_match('/^\d{2}:\d{2}(?::\d{2})?$/', $start_time) || !preg_match('/^\d{2}:\d{2}(?::\d{2})?$/', $end_time)) {
                 http_response_code(422);
@@ -116,6 +236,21 @@ try {
                 exit;
             }
 
+            if (strcasecmp($calendar_height_raw, 'auto') === 0) {
+                $calendarHeight = 'auto';
+            } elseif (preg_match('/^(\d+)(?:px)?$/i', $calendar_height_raw, $matches)) {
+                $calendarHeight = (int) $matches[1];
+                if ($calendarHeight < 600 || $calendarHeight > 10000) {
+                    http_response_code(422);
+                    echo json_encode(['error' => 'Calendar height must be auto or a value between 600 and 10000']);
+                    exit;
+                }
+            } else {
+                http_response_code(422);
+                echo json_encode(['error' => 'Calendar height must be auto or a value between 600 and 10000']);
+                exit;
+            }
+
             $days_enabled = false;
             foreach (['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as $day) {
                 if (!empty($data['booking_show_' . $day])) {
@@ -130,8 +265,17 @@ try {
                 exit;
             }
 
+            if (!in_array($snap_minutes, $snap_options, true)) {
+                http_response_code(422);
+                echo json_encode(['error' => 'Booking snap window must be one of the configured minute values']);
+                exit;
+            }
+
             $data['booking_start_time'] = substr($start_time, 0, 5);
             $data['booking_end_time'] = substr($end_time, 0, 5);
+            $data['booking_calendar_height'] = $calendarHeight === 'auto' ? 'auto' : (string) $calendarHeight;
+            $data['booking_deadline_hours'] = (string) $deadline_hours;
+            $data['booking_snap_minutes'] = (string) $snap_minutes;
 
             $db = get_db();
             $existingTypes = [];

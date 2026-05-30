@@ -32,21 +32,23 @@ try {
         exit;
     }
 
-        $db = get_db();
-        $timezone = new DateTimeZone(get_app_timezone_name());
-        $rangeStart = (new DateTimeImmutable((string) $start))->setTimezone($timezone)->format('Y-m-d H:i:s');
-        $rangeEnd = (new DateTimeImmutable((string) $end))->setTimezone($timezone)->format('Y-m-d H:i:s');
+    $db = get_db();
+    $timezone = new DateTimeZone(get_app_timezone_name());
+    $rangeStartDate = (new DateTimeImmutable((string) $start))->setTimezone($timezone);
+    $rangeEndDate = (new DateTimeImmutable((string) $end))->setTimezone($timezone);
+    $rangeStart = $rangeStartDate->format('Y-m-d H:i:s');
+    $rangeEnd = $rangeEndDate->format('Y-m-d H:i:s');
 
-    $sql = "SELECT a.id, a.customer_id, a.provider_id, a.appointment_type_id, a.start_time, a.end_time, a.status,
-                   c.full_name AS customer_name, t.name AS type_name, t.color_hex
+    // Updated SELECT query to pull contact fields, notes, and prevent index errors
+    $sql = "SELECT a.id, a.customer_id, a.provider_id, a.appointment_type_id, a.start_time, a.end_time, a.status, a.notes,
+                   c.full_name AS customer_name, c.email AS customer_email, c.mobile AS customer_mobile, t.name AS type_name, t.color_hex
             FROM appointments a
             LEFT JOIN customers c ON c.id = a.customer_id
             LEFT JOIN appointment_types t ON t.id = a.appointment_type_id
             WHERE a.start_time < ? AND a.end_time > ?";
 
-        $params = [$rangeEnd, $rangeStart];
+    $params = [$rangeEnd, $rangeStart];
 
-    // If requester is a provider, limit to their provider_id unless admin requests a specific provider
     if ($isStaff && $role === 'provider') {
         $sql .= ' AND a.provider_id = ?';
         $params[] = (int)$user['id'];
@@ -64,20 +66,33 @@ try {
         $title = $r['customer_name'] ? $r['customer_name'] : 'Appt #' . $r['id'];
         $color = $r['color_hex'] ?: '#3498db';
 
+        // CRITICAL FIX: Convert "YYYY-MM-DD HH:MM:SS" into standard ISO8601 "YYYY-MM-DDTHH:MM:SSZ"
+        $isoStart = str_replace(' ', 'T', $r['start_time']) . 'Z';
+        $isoEnd = str_replace(' ', 'T', $r['end_time']) . 'Z';
+
         $events[] = [
             'id' => (int)$r['id'],
             'title' => $title,
-            'start' => $r['start_time'],
-            'end' => $r['end_time'],
+            'start' => $isoStart, 
+            'end' => $isoEnd,     
             'color' => $color,
             'extendedProps' => [
                 'customer_name' => $r['customer_name'] ?? null,
                 'status' => $r['status'],
                 'provider_id' => (int)$r['provider_id'],
-                'appointment_type' => $r['type_name'] ?? null
+                'appointment_type' => $r['type_name'] ?? null,
+                'appointment_type_id' => (int)$r['appointment_type_id'],
+                'customer_id' => isset($r['customer_id']) ? (int)$r['customer_id'] : null,
+                'customer_email' => $r['customer_email'] ?? null,   
+                'customer_mobile' => $r['customer_mobile'] ?? null, 
+                'end_time' => $isoEnd,
+                'notes' => $r['notes'] ?? null,                     
             ]
         ];
     }
+
+    $breakEvents = get_standard_break_events($rangeStartDate, $rangeEndDate);
+    $events = array_merge($events, $breakEvents);
 
     echo json_encode($events);
     exit;

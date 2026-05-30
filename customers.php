@@ -126,7 +126,7 @@ $settings = get_customer_field_settings();
     }
 
     .modal-dialog {
-      width: min(640px, calc(100vw - 24px));
+       width: min(640px, calc(100vw - 24px));
       border: 0;
       padding: 0;
       border-radius: 28px;
@@ -169,6 +169,22 @@ $settings = get_customer_field_settings();
       padding: 16px 18px 18px;
       display: grid;
       gap: 12px;
+    }
+
+    #customerForm {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    #customerForm .field {
+      min-width: 0;
+    }
+
+    @media (max-width: 640px) {
+      #customerForm {
+        grid-template-columns: 1fr;
+      }
     }
 
     .field label {
@@ -317,15 +333,28 @@ $settings = get_customer_field_settings();
         <h1>Customer Management</h1>
         <p>Create and manage customer records for appointments.</p>
       </div>
-      <button id="addCustomerBtn" style="height:40px; padding:8px 12px; flex-shrink: 0;">+ Add Customer</button>
     </div>
 
     <div id="alertContainer"></div>
 
     <div class="admin-panel">
+      <button id="addCustomerBtn" style="height:40px; padding:8px 12px; flex-shrink: 0;">+ Add Customer</button>
+    </div>
+
+    <div class="admin-panel">
       <h2>Search Customers</h2>
       <div class="admin-toolbar">
         <input type="text" id="searchInput" placeholder="Search by name, email, or mobile..." style="flex:1; min-width:200px;" />
+        <select id="sortSelect" style="min-width: 220px;">
+          <option value="full_name">Sort: Full name</option>
+          <option value="first_name">Sort: First name</option>
+          <option value="last_name">Sort: Last name</option>
+          <option value="mobile">Sort: Mobile</option>
+          <option value="email">Sort: Email</option>
+          <option value="date_added_desc">Sort: Date added (newest)</option>
+          <option value="date_added_asc">Sort: Date added (oldest)</option>
+          <option value="gender">Sort: Gender</option>
+        </select>
         <button type="button" id="searchBtn">Search</button>
         <button type="button" id="clearBtn">Clear</button>
       </div>
@@ -340,13 +369,16 @@ $settings = get_customer_field_settings();
           <tr>
             <th>Full Name</th>
             <th>Date of Birth</th>
+            <th>Gender</th>
             <th>Email</th>
             <th>Mobile</th>
+            <th>Date Added</th>
           </tr>
         </thead>
         <tbody id="customersTableBody">
         </tbody>
       </table>
+      <div id="customersPagination" style="display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-top: 14px;"></div>
     </div>
   </div>
 
@@ -405,6 +437,25 @@ $settings = get_customer_field_settings();
             <input id="dateOfBirth" name="date_of_birth" type="date" />
           </div>
 
+          <?php $genderFieldSettings = $settings['gender'] ?? ['display' => true, 'required' => false]; ?>
+          <?php if (!empty($genderFieldSettings['display'])): ?>
+            <div class="field">
+              <label for="gender">
+                Gender
+                <?php if (!empty($genderFieldSettings['required'])): ?>
+                  <span style="color:red;">*</span>
+                <?php endif; ?>
+              </label>
+              <select id="gender" name="gender">
+                <option value="">Select gender</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+                <option value="unknown">Unknown</option>
+              </select>
+            </div>
+          <?php endif; ?>
+
           <?php if ($settings['email']['display']): ?>
             <div class="field">
               <label for="email">
@@ -460,14 +511,30 @@ $settings = get_customer_field_settings();
     const searchInput = document.getElementById('searchInput');
     const searchBtn = document.getElementById('searchBtn');
     const clearBtn = document.getElementById('clearBtn');
+    const sortSelect = document.getElementById('sortSelect');
     const resultCount = document.getElementById('resultCount');
     const customersTable = document.getElementById('customersTable');
     const customersTableBody = document.getElementById('customersTableBody');
     const customersLoading = document.getElementById('customersLoading');
     const alertContainer = document.getElementById('alertContainer');
     const modalAlert = document.getElementById('modalAlert');
+    const customersPagination = document.getElementById('customersPagination');
 
     const settings = <?php echo json_encode($settings); ?>;
+    const pageSize = 20;
+    let currentPage = 1;
+    let currentSearch = '';
+
+    const sortLabels = {
+      full_name: 'Full name',
+      first_name: 'First name',
+      last_name: 'Last name',
+      mobile: 'Mobile',
+      email: 'Email',
+      date_added_desc: 'Date added (newest)',
+      date_added_asc: 'Date added (oldest)',
+      gender: 'Gender'
+    };
 
     function showAlert(container, message, type = 'info') {
       const alert = document.createElement('div');
@@ -479,43 +546,95 @@ $settings = get_customer_field_settings();
 
     function getFormData() {
       const data = {};
-      const inputs = customerForm.querySelectorAll('input');
-      inputs.forEach(inp => {
-        data[inp.name] = inp.value;
+      const fields = customerForm.querySelectorAll('input, select');
+      fields.forEach(field => {
+        data[field.name] = field.value;
       });
       return data;
     }
 
     function resetForm() {
-      customerForm.querySelectorAll('input').forEach(inp => inp.value = '');
+      customerForm.querySelectorAll('input, select').forEach(field => field.value = '');
       adminOverrideCheckbox.checked = false;
       overrideSection.style.display = 'none';
       modalAlert.innerHTML = '';
     }
 
-    async function loadCustomers(query = '') {
+    function buildPagination(total) {
+      if (!customersPagination) {
+        return;
+      }
+
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const buttons = [];
+
+      buttons.push(`<span style="color:var(--muted);">Page ${currentPage} of ${totalPages}</span>`);
+      buttons.push(`<span style="color:var(--muted);">${sortLabels[sortSelect.value] || 'Full name'}</span>`);
+      buttons.push(`<div style="display:flex; gap:8px; flex-wrap:wrap; margin-left:auto;">`);
+      buttons.push(`<button type="button" id="prevPageBtn" ${currentPage <= 1 ? 'disabled' : ''}>Previous</button>`);
+      buttons.push(`<button type="button" id="nextPageBtn" ${currentPage >= totalPages ? 'disabled' : ''}>Next</button>`);
+      buttons.push(`</div>`);
+
+      customersPagination.innerHTML = buttons.join('');
+
+      const prevPageBtn = document.getElementById('prevPageBtn');
+      const nextPageBtn = document.getElementById('nextPageBtn');
+      if (prevPageBtn) {
+        prevPageBtn.addEventListener('click', () => {
+          if (currentPage > 1) {
+            currentPage -= 1;
+            loadCustomers(currentSearch, currentPage);
+          }
+        });
+      }
+      if (nextPageBtn) {
+        nextPageBtn.addEventListener('click', () => {
+          if (currentPage < totalPages) {
+            currentPage += 1;
+            loadCustomers(currentSearch, currentPage);
+          }
+        });
+      }
+    }
+
+    async function loadCustomers(query = '', page = 1) {
       try {
         customersLoading.style.display = 'block';
         customersTable.style.display = 'none';
 
-        const params = new URLSearchParams({ action: 'list', q: query, offset: '0', limit: '200' });
+        currentSearch = query;
+        currentPage = Math.max(1, page);
+
+        const params = new URLSearchParams({
+          action: 'list',
+          q: query,
+          page: String(currentPage),
+          limit: String(pageSize),
+          sort: sortSelect ? sortSelect.value : 'full_name'
+        });
         const resp = await fetch(`customers_api.php?${params}`);
         if (!resp.ok) throw new Error('Failed to load customers');
         const json = await resp.json();
         const customers = json.customers || [];
         const total = Number(json.total || 0);
         populateTable(customers);
+        buildPagination(total);
 
         if (total === 0) {
           resultCount.textContent = query ? 'No customers found for current search.' : 'No customers found.';
         } else {
+          const startRow = ((currentPage - 1) * pageSize) + 1;
+          const endRow = Math.min(currentPage * pageSize, total);
           resultCount.textContent = query
-            ? `Showing ${customers.length} of ${total} matching customers`
-            : `Showing ${customers.length} of ${total} customers`;
+            ? `Showing ${startRow}-${endRow} of ${total} matching customers`
+            : `Showing ${startRow}-${endRow} of ${total} customers`;
         }
       } catch (err) {
         showAlert(alertContainer, 'Error: ' + err.message, 'error');
         resultCount.textContent = 'Failed to load customers.';
+        if (customersPagination) {
+          customersPagination.innerHTML = '';
+        }
       } finally {
         customersLoading.style.display = 'none';
       }
@@ -524,7 +643,7 @@ $settings = get_customer_field_settings();
     function populateTable(customers) {
       customersTableBody.innerHTML = '';
       if (customers.length === 0) {
-        customersTableBody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--muted);">No customers yet</td></tr>';
+        customersTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted);">No customers yet</td></tr>';
         customersTable.style.display = 'table';
         return;
       }
@@ -534,12 +653,30 @@ $settings = get_customer_field_settings();
         row.innerHTML = `
           <td>${escapeHtml(c.full_name)}</td>
           <td>${escapeHtml(c.date_of_birth || '-')}</td>
+          <td>${escapeHtml(formatGender(c.gender))}</td>
           <td>${escapeHtml(c.email || '-')}</td>
           <td>${escapeHtml(c.mobile || '-')}</td>
+          <td>${escapeHtml(formatDateTime(c.date_added || c.created_at || '-'))}</td>
         `;
         customersTableBody.appendChild(row);
       });
       customersTable.style.display = 'table';
+    }
+
+    function formatGender(value) {
+      const raw = String(value || '').trim();
+      if (!raw) return '-';
+      return raw.charAt(0).toUpperCase() + raw.slice(1);
+    }
+
+    function formatDateTime(value) {
+      const raw = String(value || '').trim();
+      if (!raw || raw === '-') return '-';
+      const parsed = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T'));
+      if (Number.isNaN(parsed.getTime())) {
+        return raw;
+      }
+      return parsed.toLocaleString();
     }
 
     function escapeHtml(text) {
@@ -605,21 +742,28 @@ $settings = get_customer_field_settings();
     });
 
     searchBtn.addEventListener('click', () => {
-      loadCustomers(searchInput.value.trim());
+      loadCustomers(searchInput.value.trim(), 1);
     });
 
     clearBtn.addEventListener('click', () => {
       searchInput.value = '';
-      loadCustomers('');
+      currentSearch = '';
+      loadCustomers('', 1);
     });
+
+    if (sortSelect) {
+      sortSelect.addEventListener('change', () => {
+        loadCustomers(searchInput.value.trim(), 1);
+      });
+    }
 
     searchInput.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') {
-        loadCustomers(searchInput.value.trim());
+        loadCustomers(searchInput.value.trim(), 1);
       }
     });
 
-    loadCustomers();
+    loadCustomers('', 1);
   </script>
 </body>
 </html>

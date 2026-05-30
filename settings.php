@@ -2,6 +2,30 @@
 require_once __DIR__ . '/functions.php';
 init_session();
 require_login();
+
+if (!function_exists('normalize_booking_calendar_height_setting')) {
+  function normalize_booking_calendar_height_setting($value)
+  {
+    $raw = strtolower(trim((string) ($value ?? '')));
+    if ($raw === '') {
+      return 1800;
+    }
+
+    if ($raw === 'auto') {
+      return 'auto';
+    }
+
+    if (preg_match('/^(\d+)(?:px)?$/', $raw, $matches)) {
+      $height = (int) $matches[1];
+      if ($height >= 600 && $height <= 10000) {
+        return $height;
+      }
+    }
+
+    return 1800;
+  }
+}
+
 $user = $_SESSION['user'];
 
 // Load existing settings
@@ -42,6 +66,9 @@ $phone_max = (int) get_setting('booking_phone_max', '20');
 $dob_display = (int) get_setting('booking_dob_display', '1');
 $dob_required = (int) get_setting('booking_dob_required', '0');
 
+$gender_display = (int) get_setting('booking_gender_display', '1');
+$gender_required = (int) get_setting('booking_gender_required', '0');
+
 $booking_show_monday = (int) get_setting('booking_show_monday', '1');
 $booking_show_tuesday = (int) get_setting('booking_show_tuesday', '1');
 $booking_show_wednesday = (int) get_setting('booking_show_wednesday', '1');
@@ -51,7 +78,10 @@ $booking_show_saturday = (int) get_setting('booking_show_saturday', '0');
 $booking_show_sunday = (int) get_setting('booking_show_sunday', '0');
 $booking_start_time = get_setting('booking_start_time', '09:00');
 $booking_end_time = get_setting('booking_end_time', '21:00');
+$booking_calendar_height = normalize_booking_calendar_height_setting(get_setting('booking_calendar_height', '1800'));
 $booking_show_now_indicator = (int) get_setting('booking_show_now_indicator', '1');
+$booking_snap_minutes = (int) get_setting('booking_snap_minutes', '15');
+$booking_snap_options = [1, 2, 5, 10, 15, 20, 30, 40, 45, 60];
 $appointmentTypes = get_appointment_types();
 
 // PHPMailer/Gmail settings
@@ -215,6 +245,15 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
         </div>
       </fieldset>
 
+      <fieldset class="field-group">
+        <legend>Gender</legend>
+        <div class="field-controls">
+          <label><input type="checkbox" name="booking_gender_display" value="1" <?php echo $gender_display ? 'checked' : ''; ?>> Display</label>
+          <label><input type="checkbox" name="booking_gender_required" value="1" <?php echo $gender_required ? 'checked' : ''; ?>> Required</label>
+        </div>
+        <p style="font-size: 0.9em; color: #666;">Gender options are male, female, other, and unknown.</p>
+      </fieldset>
+
       <input type="hidden" name="tab" value="customer_registration">
       <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <button type="submit">Save Customer Registration</button>
@@ -239,12 +278,72 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
       </fieldset>
 
       <fieldset class="field-group">
+        <legend>Standard Breaks</legend>
+        <p style="font-size: 0.9em; color: #666; margin-bottom: 12px;">Choose a day to view or create recurring breaks. Leave it blank to work with everyday breaks.</p>
+        <div class="field-controls" style="align-items: end; gap: 12px;">
+          <label>
+            Day
+            <select id="breakDaySelect">
+              <option value="">Every day</option>
+              <option value="1">Monday</option>
+              <option value="2">Tuesday</option>
+              <option value="3">Wednesday</option>
+              <option value="4">Thursday</option>
+              <option value="5">Friday</option>
+              <option value="6">Saturday</option>
+              <option value="7">Sunday</option>
+            </select>
+          </label>
+          <label>Start time <input type="time" id="breakStartTime" value="12:00"></label>
+          <label>End time <input type="time" id="breakEndTime" value="13:00"></label>
+          <button type="button" id="createBreakBtn">Create Break</button>
+        </div>
+        <div id="breaksMsg" style="margin-top: 12px;"></div>
+        <div style="overflow-x:auto; margin-top: 12px;">
+          <table class="admin-table" style="min-width: 720px; margin-top: 0;">
+            <thead>
+              <tr>
+                <th style="width: 180px;">Day</th>
+                <th style="width: 160px;">Start</th>
+                <th style="width: 160px;">End</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="breaksTableBody">
+              <tr><td colspan="4">Loading breaks...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </fieldset>
+
+      <fieldset class="field-group">
         <legend>Visible Time Range</legend>
         <div class="field-controls">
+          <label>Booking deadline (hours) <input type="number" name="booking_deadline_hours" min="0" step="1" value="<?php echo htmlspecialchars($booking_deadline); ?>"></label>
           <label>Default start time <input type="time" name="booking_start_time" value="<?php echo htmlspecialchars($booking_start_time); ?>"></label>
           <label>Default end time <input type="time" name="booking_end_time" value="<?php echo htmlspecialchars($booking_end_time); ?>"></label>
         </div>
         <p style="font-size: 0.9em; color: #666;">The calendar will only render this time range in day and week views.</p>
+      </fieldset>
+
+      <fieldset class="field-group">
+        <legend>Calendar Height</legend>
+        <label for="booking_calendar_height">Calendar height</label>
+        <input id="booking_calendar_height" name="booking_calendar_height" type="text" value="<?php echo htmlspecialchars((string) $booking_calendar_height); ?>" placeholder="auto or 1800">
+        <p style="font-size: 0.9em; color: #666;">Use <strong>auto</strong> or a value between 600 and 10000 pixels.</p>
+      </fieldset>
+
+      <fieldset class="field-group">
+        <legend>Appointment Snap Window</legend>
+        <label for="booking_snap_minutes">Snap interval</label>
+        <select id="booking_snap_minutes" name="booking_snap_minutes">
+          <?php foreach ($booking_snap_options as $optionMinutes): ?>
+            <option value="<?php echo (int) $optionMinutes; ?>" <?php echo $booking_snap_minutes === (int) $optionMinutes ? 'selected' : ''; ?>>
+              <?php echo (int) $optionMinutes; ?> minute<?php echo (int) $optionMinutes === 1 ? '' : 's'; ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+        <p style="font-size: 0.9em; color: #666;">Calendar clicks and drag selection will snap to this interval. The default is 15 minutes.</p>
       </fieldset>
 
       <fieldset class="field-group">
@@ -672,6 +771,138 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', () => {
     if (btn.getAttribute('data-tab') === 'login_attempts') loadLoginAttempts(1);
   }));
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+  const breakDaySelect = document.getElementById('breakDaySelect');
+  const breakStartTime = document.getElementById('breakStartTime');
+  const breakEndTime = document.getElementById('breakEndTime');
+  const createBreakBtn = document.getElementById('createBreakBtn');
+  const breaksTableBody = document.getElementById('breaksTableBody');
+  const breaksMsg = document.getElementById('breaksMsg');
+  const bookingTokenInput = document.querySelector('#bookingForm input[name="csrf_token"]');
+
+  if (!breakDaySelect || !breakStartTime || !breakEndTime || !createBreakBtn || !breaksTableBody || !breaksMsg || !bookingTokenInput) {
+    return;
+  }
+
+  const dayLabels = {
+    '': 'Every day',
+    '1': 'Monday',
+    '2': 'Tuesday',
+    '3': 'Wednesday',
+    '4': 'Thursday',
+    '5': 'Friday',
+    '6': 'Saturday',
+    '7': 'Sunday'
+  };
+
+  function setBreakMessage(type, message) {
+    breaksMsg.innerHTML = message ? '<p class="' + (type === 'error' ? 'error-msg' : 'success-msg') + '">' + (type === 'error' ? '✗ ' : '✓ ') + message + '</p>' : '';
+  }
+
+  function renderBreakRows(rows) {
+    if (!rows || !rows.length) {
+      breaksTableBody.innerHTML = '<tr><td colspan="4">No standard breaks for this selection.</td></tr>';
+      return;
+    }
+
+    breaksTableBody.innerHTML = rows.map(function (row) {
+      const breakId = row.id;
+      const startTime = (row.start_time || '').slice(0, 5);
+      const endTime = (row.end_time || '').slice(0, 5);
+      const dayLabel = row.day_label || dayLabels[String(row.day_of_week ?? '')] || 'Every day';
+      return '<tr>' +
+        '<td>' + dayLabel + '</td>' +
+        '<td>' + startTime + '</td>' +
+        '<td>' + endTime + '</td>' +
+        '<td><button type="button" data-break-id="' + breakId + '" class="delete-break-btn">Delete</button></td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  async function loadBreaks() {
+    breaksTableBody.innerHTML = '<tr><td colspan="4">Loading breaks...</td></tr>';
+    const dayValue = breakDaySelect.value;
+    const url = 'settings_api.php?action=breaks&day=' + encodeURIComponent(dayValue);
+    const response = await fetch(url, { credentials: 'include' });
+    const data = await response.json();
+    if (!data.ok) {
+      throw new Error(data.error || 'Failed to load breaks');
+    }
+    renderBreakRows(data.breaks || []);
+  }
+
+  async function saveBreak(command, breakId) {
+    const payload = {
+      csrf_token: bookingTokenInput.value,
+      command: command,
+      day_of_week: breakDaySelect.value,
+      start_time: breakStartTime.value,
+      end_time: breakEndTime.value
+    };
+
+    if (command === 'delete') {
+      payload.break_id = breakId;
+    }
+
+    const response = await fetch('settings_api.php?action=breaks', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.ok) {
+      throw new Error(data.error || 'Failed to save break');
+    }
+
+    setBreakMessage('success', data.message || 'Break saved');
+    await loadBreaks();
+  }
+
+  breakDaySelect.addEventListener('change', async function () {
+    try {
+      setBreakMessage('', '');
+      await loadBreaks();
+    } catch (error) {
+      setBreakMessage('error', error.message);
+    }
+  });
+
+  createBreakBtn.addEventListener('click', async function () {
+    try {
+      setBreakMessage('', '');
+      await saveBreak('create');
+    } catch (error) {
+      setBreakMessage('error', error.message);
+    }
+  });
+
+  breaksTableBody.addEventListener('click', async function (event) {
+    const target = event.target;
+    if (!target || !target.classList.contains('delete-break-btn')) {
+      return;
+    }
+
+    const breakId = target.getAttribute('data-break-id');
+    if (!breakId || !window.confirm('Delete this break?')) {
+      return;
+    }
+
+    try {
+      setBreakMessage('', '');
+      await saveBreak('delete', breakId);
+    } catch (error) {
+      setBreakMessage('error', error.message);
+    }
+  });
+
+  loadBreaks().catch(function (error) {
+    setBreakMessage('error', error.message);
+    breaksTableBody.innerHTML = '<tr><td colspan="4">Failed to load breaks.</td></tr>';
+  });
 });
 
 function htmlspecialchars(str) {
