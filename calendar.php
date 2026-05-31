@@ -41,6 +41,17 @@ $customerFieldSettings = get_customer_field_settings();
 $serverTimezoneName = get_app_timezone_name();
 $serverNowIso = (new DateTimeImmutable('now', new DateTimeZone($serverTimezoneName)))->format(DateTimeInterface::ATOM);
 $appointmentEmailDeliveryReady = email_transport_is_ready();
+
+function render_customer_field_label(string $label, array $fieldSettings): string
+{
+  $safeLabel = htmlspecialchars($label, ENT_QUOTES, 'UTF-8');
+
+  if (!empty($fieldSettings['required'])) {
+    return $safeLabel . ' <span style="color:red;">*</span>';
+  }
+
+  return $safeLabel . ' <span style="color: #6b7280; font-weight: 600;">(optional)</span>';
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -559,6 +570,11 @@ $appointmentEmailDeliveryReady = email_transport_is_ready();
       background: #fff;
       box-sizing: border-box;
       font-size: 0.92rem;
+    }
+
+    .field-optional {
+      color: var(--muted);
+      font-weight: 600;
     }
 
 /* Fix the broken core input theme switcher */
@@ -1140,41 +1156,27 @@ $appointmentEmailDeliveryReady = email_transport_is_ready();
               <div class="customer-name-grid <?php echo ($showFirstNameField && $showLastNameField) ? '' : 'is-single-field'; ?>">
                 <?php if ($showFirstNameField): ?>
                 <div class="field">
-                  <label for="newCustomerFirstName">
-                    First name
-                    <?php if (!empty($firstNameFieldSettings['required'])): ?>
-                      <span style="color:red;">*</span>
-                    <?php endif; ?>
-                  </label>
+                  <label for="newCustomerFirstName"><?php echo render_customer_field_label('First name', $firstNameFieldSettings); ?></label>
                   <input id="newCustomerFirstName" name="new_customer_first_name" type="text" placeholder="First name">
                 </div>
                 <?php endif; ?>
                 <?php if ($showLastNameField): ?>
                 <div class="field">
-                  <label for="newCustomerLastName">
-                    Last name
-                    <?php if (!empty($lastNameFieldSettings['required'])): ?>
-                      <span style="color:red;">*</span>
-                    <?php endif; ?>
-                  </label>
+                  <label for="newCustomerLastName"><?php echo render_customer_field_label('Last name', $lastNameFieldSettings); ?></label>
                   <input id="newCustomerLastName" name="new_customer_last_name" type="text" placeholder="Last name">
                 </div>
                 <?php endif; ?>
               </div>
               <?php endif; ?>
-              <div class="field">
-                <label for="newCustomerDob">Date of Birth</label>
+              <?php $dobFieldSettings = $customerFieldSettings['date_of_birth'] ?? ['display' => true, 'required' => false]; ?>
+              <div class="field"<?php echo !empty($dobFieldSettings['display']) ? '' : ' style="display:none;"'; ?>>
+                <label for="newCustomerDob"><?php echo render_customer_field_label('Date of Birth', $dobFieldSettings); ?></label>
                 <input id="newCustomerDob" name="date_of_birth" type="date">
               </div>
               <?php $genderFieldSettings = $customerFieldSettings['gender'] ?? ['display' => false, 'required' => false]; ?>
               <?php if (!empty($genderFieldSettings['display'])): ?>
               <div class="field">
-                <label for="newCustomerGender">
-                  Gender
-                  <?php if (!empty($genderFieldSettings['required'])): ?>
-                    <span style="color:red;">*</span>
-                  <?php endif; ?>
-                </label>
+                <label for="newCustomerGender"><?php echo render_customer_field_label('Gender', $genderFieldSettings); ?></label>
                 <select id="newCustomerGender" name="customer_gender">
                   <option value="">Select gender</option>
                   <option value="male">Male</option>
@@ -1184,12 +1186,14 @@ $appointmentEmailDeliveryReady = email_transport_is_ready();
                 </select>
               </div>
               <?php endif; ?>
-              <div class="field">
-                <label for="newCustomerEmail">Email (optional)</label>
+              <?php $emailFieldSettings = $customerFieldSettings['email'] ?? ['display' => true, 'required' => false]; ?>
+              <div class="field"<?php echo !empty($emailFieldSettings['display']) ? '' : ' style="display:none;"'; ?>>
+                <label for="newCustomerEmail"><?php echo render_customer_field_label('Email', $emailFieldSettings); ?></label>
                 <input id="newCustomerEmail" name="new_customer_email" type="email" placeholder="customer@example.com">
               </div>
-              <div class="field">
-                <label for="newCustomerMobile">Mobile (optional)</label>
+              <?php $mobileFieldSettings = $customerFieldSettings['mobile'] ?? ['display' => true, 'required' => false]; ?>
+              <div class="field"<?php echo !empty($mobileFieldSettings['display']) ? '' : ' style="display:none;"'; ?>>
+                <label for="newCustomerMobile"><?php echo render_customer_field_label('Mobile', $mobileFieldSettings); ?></label>
                 <input id="newCustomerMobile" name="new_customer_mobile" type="text" placeholder="1234567890">
               </div>
             </div>
@@ -1284,6 +1288,7 @@ $appointmentEmailDeliveryReady = email_transport_is_ready();
         <p id="appointmentEmailWarning" class="appointment-email-warning" style="display:none;"></p>
       </div>
       <div class="booking-warning-card__footer">
+        <button type="button" id="appointmentEmailCancel" style="background: rgba(239, 68, 68, 0.1); color: #dc2626; border-color: rgba(239, 68, 68, 0.2);">Cancel Reschedule</button>
         <button type="button" id="appointmentEmailSkip">No, skip</button>
         <button type="button" id="appointmentEmailSend" class="primary">Yes, send email</button>
       </div>
@@ -1321,6 +1326,7 @@ $appointmentEmailDeliveryReady = email_transport_is_ready();
     const appointmentEmailWarning = document.getElementById('appointmentEmailWarning');
     const appointmentEmailSkip = document.getElementById('appointmentEmailSkip');
     const appointmentEmailSend = document.getElementById('appointmentEmailSend');
+    const appointmentEmailCancel = document.getElementById('appointmentEmailCancel');
     const bookingStart = document.getElementById('bookingStart');
     const bookingEnd = document.getElementById('bookingEnd');
     const closeBookingModalTop = document.getElementById('closeBookingModalTop');
@@ -2091,31 +2097,57 @@ eventClick: function(info) {
               return { ok: response.ok, data: data };
             });
           })
-          .then(async function(result) { // Changed to async to support the promise-based prompt
+          .then(async function(result) {
             if (!result.ok) {
               throw new Error(result.data.error || 'Failed to move appointment');
             }
 
-            // Extract the customer meta context straight out of the active event model
             const savedAppointmentId = Number(appointmentId);
             const savedCustomerEmail = String(event.extendedProps?.customer_email || '').trim();
             const savedCustomerName = String(event.extendedProps?.customer_name || 'this customer').trim();
 
-            // TRIGGER EMAIL MODAL: Prompt if email is configured and destination target is available
             if (savedAppointmentId > 0) {
-              const sendEmail = await showAppointmentEmailPrompt({
+              const promptResult = await showAppointmentEmailPrompt({
                 appointmentId: savedAppointmentId,
                 customerEmail: savedCustomerEmail,
                 customerName: savedCustomerName
               });
 
-              if (sendEmail) {
+              // Case A: User clicked the explicit "Cancel Reschedule" button or pressed Escape
+              if (promptResult === 'revert') {
+                // 1. Roll back the element position visually on the screen
+                info.revert(); 
+                
+                // 2. Fire a silent patch request to reverse the change inside the database
+                fetch('appointments_api.php?action=update', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    csrf_token: document.querySelector('input[name="csrf_token"]').value,
+                    appointment_id: appointmentId,
+                    selected_customer_id: customerId,
+                    provider_id: providerValue,
+                    appointment_type_id: appointmentTypeValue,
+                    start_time: formatServerClockDateTime(info.oldEvent.start),
+                    end_time: info.oldEvent.end ? formatServerClockDateTime(info.oldEvent.end) : formatServerClockDateTime(addMinutes(info.oldEvent.start, getSelectedDurationMinutes())),
+                    status: normalizeAppointmentStatus(event.extendedProps?.status || 'booked'),
+                    notes: event.extendedProps?.notes || ''
+                  })
+                }).then(() => calendar.refetchEvents());
+                
+                return;
+              }
+
+              // Case B: User clicked "Yes, send email" (returns true)
+              if (promptResult === true) {
                 try {
                   await sendAppointmentConfirmationEmail(savedAppointmentId);
                 } catch (emailErr) {
                   alert(emailErr.message || 'Failed to send confirmation email.');
                 }
               }
+              
+              // Note: Case C ("No, skip") returns false, so it intentionally does nothing and leaves the block moved.
             }
 
             return calendar.refetchEvents();
@@ -2229,7 +2261,7 @@ eventClick: function(info) {
         missing.push('email');
       }
       if (mobileRequired && !mobileValue) {
-        missing.push('mobile number');
+        missing.push('mobile');
       }
       if (dobRequired && !dobValue) {
         missing.push('date of birth');
@@ -2338,8 +2370,7 @@ eventClick: function(info) {
       }
       pendingEmailPromptContext = null;
     }
-
-    function showAppointmentEmailPrompt(context) {
+function showAppointmentEmailPrompt(context) {
       pendingEmailPromptContext = context;
       setAppointmentEmailPromptState(context);
 
@@ -2354,12 +2385,9 @@ eventClick: function(info) {
         }
 
         const cleanup = () => {
-          if (appointmentEmailSend) {
-            appointmentEmailSend.removeEventListener('click', handleSend);
-          }
-          if (appointmentEmailSkip) {
-            appointmentEmailSkip.removeEventListener('click', handleSkip);
-          }
+          if (appointmentEmailSend) appointmentEmailSend.removeEventListener('click', handleSend);
+          if (appointmentEmailSkip) appointmentEmailSkip.removeEventListener('click', handleSkip);
+          if (appointmentEmailCancel) appointmentEmailCancel.removeEventListener('click', handleRevert); // Clean up lookup
           appointmentEmailModal.removeEventListener('cancel', handleCancel);
         };
 
@@ -2371,17 +2399,15 @@ eventClick: function(info) {
 
         const handleSend = () => finish(true);
         const handleSkip = () => finish(false);
+        const handleRevert = () => finish('revert'); // FIX: Resolves to 'revert' when clicked
         const handleCancel = function(event) {
           event.preventDefault();
-          finish(false);
+          finish('revert'); // Also treat Escape key as a clean rollback
         };
 
-        if (appointmentEmailSend) {
-          appointmentEmailSend.addEventListener('click', handleSend, { once: true });
-        }
-        if (appointmentEmailSkip) {
-          appointmentEmailSkip.addEventListener('click', handleSkip, { once: true });
-        }
+        if (appointmentEmailSend) appointmentEmailSend.addEventListener('click', handleSend, { once: true });
+        if (appointmentEmailSkip) appointmentEmailSkip.addEventListener('click', handleSkip, { once: true });
+        if (appointmentEmailCancel) appointmentEmailCancel.addEventListener('click', handleRevert, { once: true }); // Bind handler
         appointmentEmailModal.addEventListener('cancel', handleCancel, { once: true });
 
         if (typeof appointmentEmailModal.showModal === 'function') {

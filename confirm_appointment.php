@@ -70,8 +70,9 @@ $statusLabel = $appointment ? str_replace('_', ' ', (string) ($appointment['stat
   <title>Confirm Appointment - <?php echo htmlspecialchars($siteName); ?></title>
   <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@1.*/css/pico.min.css">
   <style>
+    /* allow global theme to control page background */
     body {
-      background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
+      background: none;
     }
 
     main.container {
@@ -122,13 +123,13 @@ $statusLabel = $appointment ? str_replace('_', ' ', (string) ($appointment['stat
 
     .appointment-summary dt {
       font-weight: 700;
-      color: #334155;
       margin-top: 0.35rem;
+      color: inherit;
     }
 
     .appointment-summary dd {
       margin: 0.15rem 0 0;
-      color: #0f172a;
+      color: inherit;
     }
 
     .actions {

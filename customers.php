@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+
 require_once __DIR__ . '/functions.php';
 init_session();
 require_login();
@@ -14,6 +15,18 @@ if ($role !== 'admin') {
 }
 
 $settings = get_customer_field_settings();
+
+// FIX: Moved the layout rendering helper safely into your PHP code processing block
+function render_customer_field_label(string $label, array $fieldSettings): string
+{
+    $safeLabel = htmlspecialchars($label, ENT_QUOTES, 'UTF-8');
+
+    if (!empty($fieldSettings['required'])) {
+        return $safeLabel . ' <span style="color:red;">*</span>';
+    }
+
+    return $safeLabel . ' <span style="color: #6b7280; font-weight: 600;">(optional)</span>';
+}
 ?>
 <!doctype html>
 <html lang="en">
@@ -327,59 +340,66 @@ $settings = get_customer_field_settings();
 <body>
   <?php $current_page = 'customers.php'; include __DIR__ . '/assets/nav.html'; ?>
 
-  <div class="admin-container">
-    <div class="admin-header">
+  <div class="page-shell">
+    <div class="hero">
       <div>
         <h1>Customer Management</h1>
         <p>Create and manage customer records for appointments.</p>
+      </div>
+      <div class="toolbar">
+        <button id="addCustomerBtn">+ Add Customer</button>
       </div>
     </div>
 
     <div id="alertContainer"></div>
 
-    <div class="admin-panel">
-      <button id="addCustomerBtn" style="height:40px; padding:8px 12px; flex-shrink: 0;">+ Add Customer</button>
-    </div>
-
-    <div class="admin-panel">
-      <h2>Search Customers</h2>
-      <div class="admin-toolbar">
-        <input type="text" id="searchInput" placeholder="Search by name, email, or mobile..." style="flex:1; min-width:200px;" />
-        <select id="sortSelect" style="min-width: 220px;">
-          <option value="full_name">Sort: Full name</option>
-          <option value="first_name">Sort: First name</option>
-          <option value="last_name">Sort: Last name</option>
-          <option value="mobile">Sort: Mobile</option>
-          <option value="email">Sort: Email</option>
-          <option value="date_added_desc">Sort: Date added (newest)</option>
-          <option value="date_added_asc">Sort: Date added (oldest)</option>
-          <option value="gender">Sort: Gender</option>
-        </select>
-        <button type="button" id="searchBtn">Search</button>
-        <button type="button" id="clearBtn">Clear</button>
+    <div class="panel">
+      <div class="panel-header">
+        <small>Search & Filter Options</small>
       </div>
-      <div id="resultCount" style="color: var(--muted); font-size: 0.9rem; margin-top: 12px;">Loading...</div>
+      <div class="panel-body">
+        <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+          <input type="text" id="searchInput" placeholder="Search by name, email, or mobile..." style="flex:1; min-width:200px; margin-bottom:0;" />
+          <select id="sortSelect" style="min-width: 220px; width:auto; margin-bottom:0;">
+            <option value="full_name">Sort: Full name</option>
+            <option value="first_name">Sort: First name</option>
+            <option value="last_name">Sort: Last name</option>
+            <option value="mobile">Sort: Mobile</option>
+            <option value="email">Sort: Email</option>
+            <option value="date_added_desc">Sort: Date added (newest)</option>
+            <option value="date_added_asc">Sort: Date added (oldest)</option>
+            <option value="gender">Sort: Gender</option>
+          </select>
+          <button type="button" id="searchBtn" style="margin-bottom:0; width:auto;">Search</button>
+          <button type="button" id="clearBtn" class="secondary" style="margin-bottom:0; width:auto;">Clear</button>
+        </div>
+        <div id="resultCount" style="color: var(--muted); font-size: 0.9rem; margin-top: 12px;">Loading...</div>
+      </div>
     </div>
 
-    <div class="admin-panel">
-      <h2>All Customers</h2>
-      <div id="customersLoading" style="text-align:center; color:var(--muted); padding:20px;">Loading customers...</div>
-      <table class="admin-table" id="customersTable" style="display:none;">
-        <thead>
-          <tr>
-            <th>Full Name</th>
-            <th>Date of Birth</th>
-            <th>Gender</th>
-            <th>Email</th>
-            <th>Mobile</th>
-            <th>Date Added</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="customersTableBody">
-        </tbody>
-      </table>
-      <div id="customersPagination" style="display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-top: 14px;"></div>
+    <div class="panel">
+      <div class="panel-header">
+        <small>Customer Registry</small>
+      </div>
+      <div class="panel-body">
+        <div id="customersLoading" style="text-align:center; color:var(--muted); padding:20px;">Loading customers...</div>
+        <table class="customers-table" id="customersTable" style="display:none;">
+          <thead>
+            <tr>
+              <th>Full Name</th>
+              <th>Date of Birth</th>
+              <th>Gender</th>
+              <th>Email</th>
+              <th>Mobile</th>
+              <th>Date Added</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="customersTableBody">
+          </tbody>
+        </table>
+        <div id="customersPagination" style="display:flex; gap:8px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-top: 14px;"></div>
+      </div>
     </div>
   </div>
 
@@ -392,61 +412,37 @@ $settings = get_customer_field_settings();
         <div id="modalAlert"></div>
 
         <div id="customerForm">
-          <?php if ($settings['first_name']['display']): ?>
+          <?php if (!empty($settings['first_name']['display'])): ?>
             <div class="field">
-              <label for="firstName">
-                First Name
-                <?php if ($settings['first_name']['required']): ?>
-                  <span style="color:red;">*</span>
-                <?php endif; ?>
-              </label>
+              <label for="firstName"><?php echo render_customer_field_label('First Name', $settings['first_name']); ?></label>
               <input id="firstName" name="first_name" type="text" placeholder="John" />
             </div>
           <?php endif; ?>
 
-          <?php if ($settings['last_name']['display']): ?>
+          <?php if (!empty($settings['last_name']['display'])): ?>
             <div class="field">
-              <label for="lastName">
-                Last Name
-                <?php if ($settings['last_name']['required']): ?>
-                  <span style="color:red;">*</span>
-                <?php endif; ?>
-              </label>
+              <label for="lastName"><?php echo render_customer_field_label('Last Name', $settings['last_name']); ?></label>
               <input id="lastName" name="last_name" type="text" placeholder="Doe" />
             </div>
           <?php endif; ?>
 
-          <?php if ($settings['middle_name']['display']): ?>
+          <?php if (!empty($settings['middle_name']['display'])): ?>
             <div class="field">
-              <label for="middleName">
-                Middle Name
-                <?php if ($settings['middle_name']['required']): ?>
-                  <span style="color:red;">*</span>
-                <?php endif; ?>
-              </label>
+              <label for="middleName"><?php echo render_customer_field_label('Middle Name', $settings['middle_name']); ?></label>
               <input id="middleName" name="middle_name" type="text" placeholder="Michael" />
             </div>
           <?php endif; ?>
 
-          <div class="field">
-            <label for="dateOfBirth">
-              Date of Birth
-              <?php if (!empty($settings['date_of_birth']['required'])): ?>
-                <span style="color:red;">*</span>
-              <?php endif; ?>
-            </label>
+          <?php $dobFieldSettings = $settings['date_of_birth'] ?? ['display' => true, 'required' => false]; ?>
+          <div class="field"<?php echo !empty($dobFieldSettings['display']) ? '' : ' style="display:none;"'; ?>>
+            <label for="dateOfBirth"><?php echo render_customer_field_label('Date of Birth', $dobFieldSettings); ?></label>
             <input id="dateOfBirth" name="date_of_birth" type="date" />
           </div>
 
           <?php $genderFieldSettings = $settings['gender'] ?? ['display' => true, 'required' => false]; ?>
           <?php if (!empty($genderFieldSettings['display'])): ?>
             <div class="field">
-              <label for="gender">
-                Gender
-                <?php if (!empty($genderFieldSettings['required'])): ?>
-                  <span style="color:red;">*</span>
-                <?php endif; ?>
-              </label>
+              <label for="gender"><?php echo render_customer_field_label('Gender', $genderFieldSettings); ?></label>
               <select id="gender" name="gender">
                 <option value="">Select gender</option>
                 <option value="male">Male</option>
@@ -457,26 +453,16 @@ $settings = get_customer_field_settings();
             </div>
           <?php endif; ?>
 
-          <?php if ($settings['email']['display']): ?>
+          <?php if (!empty($settings['email']['display'])): ?>
             <div class="field">
-              <label for="email">
-                Email
-                <?php if ($settings['email']['required']): ?>
-                  <span style="color:red;">*</span>
-                <?php endif; ?>
-              </label>
+              <label for="email"><?php echo render_customer_field_label('Email', $settings['email']); ?></label>
               <input id="email" name="email" type="email" placeholder="john@example.com" />
             </div>
           <?php endif; ?>
 
-          <?php if ($settings['mobile']['display']): ?>
+          <?php if (!empty($settings['mobile']['display'])): ?>
             <div class="field">
-              <label for="mobile">
-                Mobile Number
-                <?php if ($settings['mobile']['required']): ?>
-                  <span style="color:red;">*</span>
-                <?php endif; ?>
-              </label>
+              <label for="mobile"><?php echo render_customer_field_label('Mobile Number', $settings['mobile']); ?></label>
               <input id="mobile" name="mobile" type="text" placeholder="1234567890" />
             </div>
           <?php endif; ?>
@@ -488,13 +474,13 @@ $settings = get_customer_field_settings();
             <p style="margin: 6px 0 0;">Some required fields are missing. As an admin, you can create this customer anyway. This option is not available to regular users.</p>
           </div>
           <label style="display:flex; align-items:center; gap:8px; font-weight:normal; cursor:pointer;">
-            <input type="checkbox" id="adminOverrideCheckbox" />
+            <input type="checkbox" id="adminOverrideCheckbox" style="margin-bottom:0;" />
             Yes, create this customer
           </label>
         </div>
       </div>
       <div class="modal-card__footer">
-        <button type="button" id="cancelButton">Cancel</button>
+        <button type="button" id="cancelButton" class="secondary">Cancel</button>
         <button type="button" id="submitButton" class="primary">Create Customer</button>
       </div>
     </div>
@@ -667,7 +653,7 @@ $settings = get_customer_field_settings();
           <td>${escapeHtml(c.email || '-')}</td>
           <td>${escapeHtml(c.mobile || '-')}</td>
           <td>${escapeHtml(formatDateTime(c.date_added || c.created_at || '-'))}</td>
-          <td><button type="button" class="secondary customer-edit-btn">Edit</button></td>
+          <td><button type="button" class="secondary customer-edit-btn" style="padding:4px 8px; font-size:0.85rem; margin-bottom:0;">Edit</button></td>
         `;
         const editButton = row.querySelector('.customer-edit-btn');
         if (editButton) {
@@ -770,14 +756,12 @@ $settings = get_customer_field_settings();
         const json = await resp.json();
 
         if (!resp.ok) {
-          // Check if it's a "missing required fields" error
           if (json.error === 'missing_required_fields' && !adminOverride) {
             showAlert(modalAlert, 'Required fields are missing. Check the option below if you want to override.', 'error');
             overrideSection.style.display = 'block';
             return;
           }
 
-          // Validation error
           if (json.error === 'validation_error' || json.errors) {
             const errorLines = Object.values(json.errors || {}).join('\n');
             showAlert(modalAlert, errorLines, 'error');
