@@ -39,6 +39,7 @@ function get_db(): PDO
     $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
     ensure_customer_schema($pdo);
     ensure_breaks_schema($pdo);
+    ensure_verification_schema($pdo);
     ensure_appointment_schema($pdo);
     return $pdo;
 }
@@ -135,6 +136,11 @@ function ensure_appointment_schema(PDO $db): void
     $checked = true;
 
     try {
+        $hasCustomerIdNullable = (bool) $db->query("SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'appointments' AND COLUMN_NAME = 'customer_id' AND IS_NULLABLE = 'YES'")->fetch();
+        if (!$hasCustomerIdNullable) {
+            $db->exec("ALTER TABLE appointments MODIFY customer_id INT UNSIGNED NULL");
+        }
+
         $hasNotes = (bool) $db->query("SHOW COLUMNS FROM appointments LIKE 'notes'")->fetch();
         if (!$hasNotes) {
             $db->exec("ALTER TABLE appointments ADD COLUMN notes TEXT NULL AFTER status");
@@ -150,6 +156,62 @@ function ensure_appointment_schema(PDO $db): void
             foreach ($rows as $row) {
                 $update->execute([bin2hex(random_bytes(32)), (int) ($row['id'] ?? 0)]);
             }
+        }
+
+        // Legacy booking_* snapshot columns have been removed from schema.
+        // No-op here to avoid attempting to drop columns that no longer exist.
+    } catch (Throwable $e) {
+        // Ignore schema bootstrap failures so the app can continue running.
+    }
+}
+
+function ensure_verification_schema(PDO $db): void
+{
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
+    try {
+        $tableExists = (bool) $db->query("SHOW TABLES LIKE 'verification'")->fetch();
+        if (!$tableExists) {
+            $db->exec("CREATE TABLE `verification` (
+  `id` INT UNSIGNED AUTO_INCREMENT,
+  `user_id` INT UNSIGNED NULL,
+  `appointment_id` INT UNSIGNED NULL,
+  `code` VARCHAR(64) NOT NULL,
+  `task` VARCHAR(32) NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `expires_at` TIMESTAMP NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_verification_code` (`code`),
+  UNIQUE KEY `idx_verification_appointment_task` (`appointment_id`, `task`),
+  KEY `idx_verification_user_task` (`user_id`, `task`),
+  CONSTRAINT `fk_verification_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_verification_appointment` FOREIGN KEY (`appointment_id`) REFERENCES `appointments` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            return;
+        }
+
+        $hasAppointmentId = (bool) $db->query("SHOW COLUMNS FROM verification LIKE 'appointment_id'")->fetch();
+        if (!$hasAppointmentId) {
+            $db->exec("ALTER TABLE verification ADD COLUMN appointment_id INT UNSIGNED NULL AFTER user_id");
+        }
+
+        $userIdNullable = (bool) $db->query("SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'verification' AND COLUMN_NAME = 'user_id' AND IS_NULLABLE = 'YES'")->fetch();
+        if (!$userIdNullable) {
+            $db->exec("ALTER TABLE verification MODIFY user_id INT UNSIGNED NULL");
+        }
+
+        $hasAppointmentIndex = (bool) $db->query("SHOW INDEX FROM verification WHERE Key_name = 'idx_verification_appointment_task'")->fetch();
+        if (!$hasAppointmentIndex) {
+            $db->exec("CREATE UNIQUE INDEX idx_verification_appointment_task ON verification (appointment_id, task)");
+        }
+
+        $hasAppointmentFk = (bool) $db->query("SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'verification' AND COLUMN_NAME = 'appointment_id' AND REFERENCED_TABLE_NAME = 'appointments' LIMIT 1")->fetch();
+        if (!$hasAppointmentFk) {
+            $db->exec("ALTER TABLE verification ADD CONSTRAINT fk_verification_appointment FOREIGN KEY (appointment_id) REFERENCES appointments (id) ON DELETE CASCADE ON UPDATE CASCADE");
         }
     } catch (Throwable $e) {
         // Ignore schema bootstrap failures so the app can continue running.
@@ -839,6 +901,47 @@ function delete_verification_token(string $code): void
     $stmt->execute([$code]);
 }
 
+function create_appointment_verification_token(int $appointmentId, int $expiry_minutes = 60): string
+{
+    $db = get_db();
+    $code = bin2hex(random_bytes(32));
+    $expiresAt = date('Y-m-d H:i:s', time() + (max(1, $expiry_minutes) * 60));
+
+    $stmt = $db->prepare('DELETE FROM verification WHERE appointment_id = ? AND task = ?');
+    $stmt->execute([$appointmentId, 'appointment_booking']);
+
+    $stmt = $db->prepare('INSERT INTO verification (appointment_id, code, task, expires_at) VALUES (?, ?, ?, ?)');
+    $stmt->execute([$appointmentId, $code, 'appointment_booking', $expiresAt]);
+
+    return $code;
+}
+
+function get_appointment_verification_by_code(string $code): ?array
+{
+    try {
+        $db = get_db();
+        $stmt = $db->prepare('SELECT id, user_id, appointment_id, code, task, created_at, expires_at FROM verification WHERE code = ? AND task = ? AND (expires_at IS NULL OR expires_at > NOW()) LIMIT 1');
+        $stmt->execute([$code, 'appointment_booking']);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function get_appointment_verification_by_appointment_id(int $appointmentId): ?array
+{
+    try {
+        $db = get_db();
+        $stmt = $db->prepare('SELECT id, user_id, appointment_id, code, task, created_at, expires_at FROM verification WHERE appointment_id = ? AND task = ? LIMIT 1');
+        $stmt->execute([$appointmentId, 'appointment_booking']);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
 // Collect email / SMTP diagnostics without attempting to send
 function email_diagnostics(string $to_email, string $subject): array
 {
@@ -1149,10 +1252,6 @@ function send_appointment_confirmation_email(int $appointmentId): array
     }
 
     $customer = get_customer_by_id((int) ($appointment['customer_id'] ?? 0));
-    if (!$customer) {
-        return ['ok' => false, 'error' => 'Customer not found'];
-    }
-
     $customerEmail = trim((string) ($customer['email'] ?? ''));
     if ($customerEmail === '') {
         return ['ok' => false, 'error' => 'Email not recorded for this customer'];
@@ -1416,7 +1515,7 @@ function get_customer_missing_required_fields(array $data): array
 
     return $missing;
 }
-
+                    $customerEmail = trim((string) ($customer['email'] ?? ''));
 function normalize_customer_date_of_birth(?string $value): ?string
 {
     $raw = trim((string) ($value ?? ''));
@@ -1429,8 +1528,8 @@ function normalize_customer_date_of_birth(?string $value): ?string
     if (!$date || ($errors['warning_count'] ?? 0) > 0 || ($errors['error_count'] ?? 0) > 0) {
         return null;
     }
-
-    return $date->format('Y-m-d');
+                    $customerName = trim((string) ($customer['full_name'] ?? ''));
+                    $customerMobile = trim((string) ($customer['mobile'] ?? ''));
 }
 
 function normalize_customer_gender(?string $value): ?string
@@ -1545,6 +1644,36 @@ function get_customer_by_id(int $id): ?array
         }
     } catch (Throwable $e) {
         return null;
+    }
+}
+
+function get_customers_by_exact_contact(string $email, string $mobile): array
+{
+    try {
+        $email = trim($email);
+        $mobile = trim($mobile);
+        if ($email === '' || $mobile === '') {
+            return [];
+        }
+
+        $db = get_db();
+        $stmt = $db->prepare('SELECT id, email, mobile, full_name, date_of_birth, gender, date_added FROM customers WHERE email = ? AND mobile = ? ORDER BY full_name ASC, id ASC');
+        $stmt->execute([$email, $mobile]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function get_active_booking_providers(): array
+{
+    try {
+        $db = get_db();
+        // Include active users who are providers or admins so admins can be selectable as providers.
+        $stmt = $db->query("SELECT id, email, full_name, role, is_active FROM users WHERE role IN ('provider','admin') AND is_active = 1 ORDER BY full_name ASC, id ASC");
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return [];
     }
 }
 
@@ -1703,7 +1832,7 @@ function find_overlapping_appointment(int $providerId, DateTimeImmutable $startD
     }
 }
 
-function create_appointment(int $customerId, int $providerId, int $appointmentTypeId, string $startTime, ?string $status = null, ?string $endTime = null, ?string $notes = null): ?array
+function create_appointment(?int $customerId, int $providerId, int $appointmentTypeId, string $startTime, ?string $status = null, ?string $endTime = null, ?string $notes = null): ?array
 {
     try {
         $appointmentType = get_appointment_type_by_id($appointmentTypeId);

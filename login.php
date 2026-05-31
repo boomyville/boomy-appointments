@@ -14,6 +14,11 @@ init_session();
 <main class="container">
   <article>
     <h1>Sign in</h1>
+    <p style="margin-bottom: 16px;">
+      <a href="booking.php" role="button" class="secondary" style="display:inline-flex; align-items:center; gap:0.35rem; font-size:0.92rem; padding:0.45rem 0.8rem;">
+        🗓️ Book an appointment
+      </a>
+    </p>
     <?php if (can_register_admin()): ?>
       <p><a href="register.php">Create an admin account</a></p>
     <?php endif; ?>

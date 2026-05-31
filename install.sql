@@ -44,15 +44,18 @@ CREATE TABLE `users` (
 -- 2B. VERIFICATION TOKENS
 CREATE TABLE `verification` (
   `id` INT UNSIGNED AUTO_INCREMENT,
-  `user_id` INT UNSIGNED NOT NULL,
+  `user_id` INT UNSIGNED NULL,
+  `appointment_id` INT UNSIGNED NULL,
   `code` VARCHAR(64) NOT NULL,
   `task` VARCHAR(32) NOT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `expires_at` TIMESTAMP NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_verification_code` (`code`),
+  UNIQUE KEY `idx_verification_appointment_task` (`appointment_id`,`task`),
   KEY `idx_verification_user_task` (`user_id`, `task`),
-  CONSTRAINT `fk_verification_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  CONSTRAINT `fk_verification_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  CONSTRAINT `fk_verification_appointment` FOREIGN KEY (`appointment_id`) REFERENCES `appointments` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2C. LOGIN ATTEMPTS
@@ -117,7 +120,7 @@ CREATE TABLE `breaks` (
 -- 7. APPOINTMENTS
 CREATE TABLE `appointments` (
   `id` INT UNSIGNED AUTO_INCREMENT,
-  `customer_id` INT UNSIGNED NOT NULL,
+  `customer_id` INT UNSIGNED NULL,
   `provider_id` INT UNSIGNED NOT NULL,
   `appointment_type_id` INT UNSIGNED NOT NULL,
   `start_time` DATETIME NOT NULL,
