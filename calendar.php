@@ -2039,7 +2039,7 @@ eventClick: function(info) {
             alert('Could not load appointment details');
           });
       },
-     eventDrop: function(info) {
+      eventDrop: function(info) {
         const event = info.event;
 
         // NEW LOGIC: If moving our new draft block, just update the temporary values
@@ -2091,10 +2091,33 @@ eventClick: function(info) {
               return { ok: response.ok, data: data };
             });
           })
-          .then(function(result) {
+          .then(async function(result) { // Changed to async to support the promise-based prompt
             if (!result.ok) {
               throw new Error(result.data.error || 'Failed to move appointment');
             }
+
+            // Extract the customer meta context straight out of the active event model
+            const savedAppointmentId = Number(appointmentId);
+            const savedCustomerEmail = String(event.extendedProps?.customer_email || '').trim();
+            const savedCustomerName = String(event.extendedProps?.customer_name || 'this customer').trim();
+
+            // TRIGGER EMAIL MODAL: Prompt if email is configured and destination target is available
+            if (savedAppointmentId > 0) {
+              const sendEmail = await showAppointmentEmailPrompt({
+                appointmentId: savedAppointmentId,
+                customerEmail: savedCustomerEmail,
+                customerName: savedCustomerName
+              });
+
+              if (sendEmail) {
+                try {
+                  await sendAppointmentConfirmationEmail(savedAppointmentId);
+                } catch (emailErr) {
+                  alert(emailErr.message || 'Failed to send confirmation email.');
+                }
+              }
+            }
+
             return calendar.refetchEvents();
           })
           .catch(function(err) {
