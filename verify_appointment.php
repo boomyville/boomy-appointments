@@ -227,7 +227,7 @@ if ($siteName === '') {
   <main class="shell">
     <section class="hero">
       <h1>Verify customer details</h1>
-      <p>Use this page to finish a booking that could not be resolved automatically because multiple customer profiles share the same email and mobile combination.</p>
+      <p>Please review and confirm your identity options below to finalize your booking assignment securely.</p>
     </section>
 
     <section class="card" id="pageStateCard">
@@ -240,11 +240,17 @@ if ($siteName === '') {
           </div>
           <aside class="card" style="padding:18px; box-shadow:none; background: color-mix(in srgb, var(--panel-strong) 90%, transparent);">
             <h3 style="margin-top:0;">Customer selection</h3>
-            <p style="margin:0 0 12px; color:var(--muted); line-height:1.6;">Choose one of the matching customer profiles or create a new profile with a different name.</p>
+            <p style="margin:0 0 12px; color:var(--muted); line-height:1.6;">Choose one of the matching customer profiles or create a new profile identity variant.</p>
             <div id="matchesList" class="match-list"></div>
-            <div class="field">
-              <label for="newCustomerName">New customer name</label>
-              <input id="newCustomerName" type="text" placeholder="Enter a new full name">
+            <div class="field" style="grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px;">
+              <div>
+                <label for="newFirstName" style="display: block; font-weight: 650; margin-bottom: 8px;">First name *</label>
+                <input id="newFirstName" type="text" placeholder="First name" style="width: 100%; border: 1px solid var(--border); background: var(--panel-strong); color: var(--text); border-radius: 16px; padding: 13px 14px; outline: none;" disabled>
+              </div>
+              <div>
+                <label for="newLastName" style="display: block; font-weight: 650; margin-bottom: 8px;">Last name *</label>
+                <input id="newLastName" type="text" placeholder="Last name" style="width: 100%; border: 1px solid var(--border); background: var(--panel-strong); color: var(--text); border-radius: 16px; padding: 13px 14px; outline: none;" disabled>
+              </div>
             </div>
           </aside>
         </div>
@@ -258,153 +264,255 @@ if ($siteName === '') {
   </main>
 
   <script>
-    const BOOMY = {
-      csrfToken: <?php echo json_encode($csrfToken); ?>,
-      token: <?php echo json_encode($token); ?>,
-      requestUrl: 'booking_api.php?action=request',
-      verifyUrl: 'booking_api.php?action=verify'
-    };
+  const BOOMY = {
+    csrfToken: <?php echo json_encode($csrfToken); ?>,
+    token: <?php echo json_encode($token); ?>,
+    requestUrl: 'booking_api.php?action=request',
+    verifyUrl: 'booking_api.php?action=verify'
+  };
 
-    const els = {
-      loadingNotice: document.getElementById('loadingNotice'),
-      requestArea: document.getElementById('requestArea'),
-      requestSummary: document.getElementById('requestSummary'),
-      requestNotice: document.getElementById('requestNotice'),
-      matchesList: document.getElementById('matchesList'),
-      newCustomerName: document.getElementById('newCustomerName'),
-      cancelBtn: document.getElementById('cancelBtn'),
-      confirmBtn: document.getElementById('confirmBtn'),
-      resultArea: document.getElementById('resultArea')
-    };
+  const els = {
+    loadingNotice: document.getElementById('loadingNotice'),
+    requestArea: document.getElementById('requestArea'),
+    requestSummary: document.getElementById('requestSummary'),
+    requestNotice: document.getElementById('requestNotice'),
+    matchesList: document.getElementById('matchesList'),
+    newFirstName: document.getElementById('newFirstName'),
+    newLastName: document.getElementById('newLastName'),
+    cancelBtn: document.getElementById('cancelBtn'),
+    confirmBtn: document.getElementById('confirmBtn'),
+    resultArea: document.getElementById('resultArea')
+  };
 
-    function escapeHtml(value) {
-      return String(value ?? '').replace(/[&<>"]/g, (char) => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;'
-      }[char]));
-    }
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"]/g, (char) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;'
+    }[char]));
+  }
 
-    function setNotice(text, warning = true) {
-      els.requestNotice.textContent = text || '';
-      els.requestNotice.classList.toggle('hidden', !text);
-      els.requestNotice.classList.toggle('is-warning', warning);
-      els.requestNotice.classList.toggle('is-error', !warning);
-    }
+  function setNotice(text, warning = true) {
+    els.requestNotice.textContent = text || '';
+    els.requestNotice.classList.toggle('hidden', !text);
+    els.requestNotice.classList.toggle('is-warning', warning);
+    els.requestNotice.classList.toggle('is-error', !warning);
+  }
 
-    async function fetchJson(url, options = {}) {
-      const response = await fetch(url, {
-        credentials: 'same-origin',
-        ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(options.headers || {})
-        }
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const error = new Error(data.error || data.message || 'Request failed');
-        error.response = response;
-        error.data = data;
-        throw error;
+  async function fetchJson(url, options = {}) {
+    const response = await fetch(url, {
+      credentials: 'same-origin',
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {})
       }
-      return data;
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(data.error || data.message || 'Request failed');
+      error.response = response;
+      error.data = data;
+      throw error;
+    }
+    return data;
+  }
+
+  function renderSummary(appointment, provider, appointmentType, matches) {
+    // 1. Render core appointment details
+    const bookedCustomerName = appointment.customer ? (appointment.customer.full_name || appointment.customer.email || '-') : '-';
+    
+    els.requestSummary.innerHTML = [
+      ['Appointment type', appointmentType ? appointmentType.name : '-'],
+      ['Provider', provider ? (provider.full_name || provider.email || '-') : '-'],
+      ['Start time', appointment.start_time || '-'],
+      ['Name on Booking', bookedCustomerName]
+    ].map((row) => {
+      return '<div class="summary-item"><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1]) + '</strong></div>';
+    }).join('');
+
+    // 2. Clear out list layout
+    els.matchesList.innerHTML = '';
+
+    if (matches && matches.length > 0) {
+      matches.forEach((profile) => {
+        const div = document.createElement('div');
+        div.className = 'match-item';
+        div.style.marginBottom = '8px';
+        
+        const isMatch = profile.full_name === appointment.customer?.full_name;
+
+        div.innerHTML = `
+          <label class="match-choice">
+            <input type="radio" name="selected_customer_id" value="${escapeHtml(profile.id)}" ${isMatch ? 'checked' : ''}>
+            <div>
+              <strong>${escapeHtml(profile.full_name)}</strong>
+              <small>${escapeHtml(profile.email)} ${profile.mobile ? ' / ' + escapeHtml(profile.mobile) : ''}</small>
+            </div>
+          </label>
+        `;
+        els.matchesList.appendChild(div);
+      });
+      
+      setNotice('Multiple profiles share this contact info. Please select the correct identity or create a new profile.');
+    } else {
+      // Clean baseline profile fallback option
+      const defaultDiv = document.createElement('div');
+      defaultDiv.className = 'match-item';
+      defaultDiv.style.marginBottom = '8px';
+      defaultDiv.innerHTML = `
+        <label class="match-choice">
+          <input type="radio" name="selected_customer_id" value="current" checked>
+          <div>
+            <strong>Use name from booking (${escapeHtml(bookedCustomerName)})</strong>
+            <small>Finalize the appointment with the exact details provided.</small>
+          </div>
+        </label>
+      `;
+      els.matchesList.appendChild(defaultDiv);
+      setNotice('Review your appointment details below, then confirm to finalize the booking.');
     }
 
-    function renderSummary(appointment, provider, appointmentType, matches) {
-      els.requestSummary.innerHTML = [
-        ['Appointment type', appointmentType ? appointmentType.name : '-'],
-        ['Provider', provider ? (provider.full_name || provider.email || '-') : '-'],
-        ['Start time', appointment.start_time || '-'],
-        ['Customer', appointment.customer ? (appointment.customer.full_name || appointment.customer.email || '-') : '-']
-      ].map((row) => {
-        return '<div class="summary-item"><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1]) + '</strong></div>';
-      }).join('');
+    // Always render the option to create a newly modified identity profile variant
+    const newProfileDiv = document.createElement('div');
+    newProfileDiv.className = 'match-item';
+    newProfileDiv.innerHTML = `
+      <label class="match-choice">
+        <input type="radio" name="selected_customer_id" value="new">
+        <div>
+          <strong>Create a new profile instead</strong>
+          <small>Select this if you need to register under a different first and last name configuration.</small>
+        </div>
+      </label>
+    `;
+    els.matchesList.appendChild(newProfileDiv);
 
-      els.matchesList.innerHTML = '<div class="match-item"><strong>No additional action required</strong><small>Confirming this booking will finalize the appointment for the selected customer.</small></div>';
-      setNotice('Review the appointment details below, then confirm to finalize the booking.');
+    // 3. Dynamic input enabling toggle engine
+    const radios = document.querySelectorAll('input[name="selected_customer_id"]');
+    const toggleInputField = () => {
+      const selectedRadio = document.querySelector('input[name="selected_customer_id"]:checked');
+      if (selectedRadio && selectedRadio.value === 'new') {
+        els.newFirstName.disabled = false;
+        els.newLastName.disabled = false;
+        els.newFirstName.focus();
+      } else {
+        els.newFirstName.disabled = true;
+        els.newLastName.disabled = true;
+        els.newFirstName.value = '';
+        els.newLastName.value = '';
+      }
+    };
+
+    radios.forEach(radio => radio.addEventListener('change', toggleInputField));
+    toggleInputField();
+  }
+
+  function renderResult(result) {
+    const pending = Boolean(result.pending);
+    const appointment = result.appointment || {};
+    const customer = result.customer || {};
+    const verifyUrl = result.verify_url || '';
+
+    els.requestArea.classList.add('hidden');
+    els.resultArea.classList.remove('hidden');
+    els.resultArea.innerHTML = [
+      '<div class="notice ' + (pending ? 'is-warning' : '') + '"><strong>' + escapeHtml(pending ? 'Verification link sent' : 'Appointment confirmed') + '</strong><br>' + escapeHtml(pending ? 'The customer will receive a verification link by email before the appointment is created.' : 'The appointment has been created and the confirmation email was sent.') + '</div>',
+      '<div class="summary-grid" style="margin-top:18px;">',
+      '<div class="summary-item"><span>Customer</span><strong>' + escapeHtml(customer.full_name || 'Pending verification') + '</strong></div>',
+      '<div class="summary-item"><span>Start time</span><strong>' + escapeHtml(appointment.start_time || '-') + '</strong></div>',
+      '<div class="summary-item"><span>Status</span><strong>' + escapeHtml(pending ? 'Pending verification' : (appointment.status || 'booked')) + '</strong></div>',
+      '<div class="summary-item"><span>Contact</span><strong>' + escapeHtml((customer.email || '') + (customer.mobile ? ' / ' + customer.mobile : '')) + '</strong></div>',
+      '</div>',
+      pending && verifyUrl ? '<div class="actions"><a class="btn primary" href="' + escapeHtml(verifyUrl) + '">Open verification link</a></div>' : '<div class="actions"><a class="btn" href="booking.php">Book another appointment</a></div>'
+    ].join('');
+  }
+
+  async function loadRequest() {
+    if (!BOOMY.token) {
+      els.loadingNotice.textContent = 'Missing verification token.';
+      els.loadingNotice.classList.add('is-error');
+      return;
     }
 
-    function renderResult(result) {
-      const pending = Boolean(result.pending);
-      const appointment = result.appointment || {};
-      const customer = result.customer || {};
-      const verifyUrl = result.verify_url || '';
+    const url = new URL(BOOMY.requestUrl, window.location.href);
+    url.searchParams.set('token', BOOMY.token);
+    const data = await fetchJson(url.toString(), { method: 'GET' });
+    const appointment = data.appointment || {};
+    const provider = data.provider || null;
+    const appointmentType = data.appointment_type || null;
+    const matches = data.matches || [];
 
+    els.loadingNotice.classList.add('hidden');
+    els.requestArea.classList.remove('hidden');
+    renderSummary(appointment, provider, appointmentType, matches);
+
+    if ((appointment.status || 'pending') !== 'unconfirmed') {
       els.requestArea.classList.add('hidden');
       els.resultArea.classList.remove('hidden');
-      els.resultArea.innerHTML = [
-        '<div class="notice ' + (pending ? 'is-warning' : '') + '"><strong>' + escapeHtml(pending ? 'Verification link sent' : 'Appointment confirmed') + '</strong><br>' + escapeHtml(pending ? 'The customer will receive a verification link by email before the appointment is created.' : 'The appointment has been created and the confirmation email was sent.') + '</div>',
-        '<div class="summary-grid" style="margin-top:18px;">',
-        '<div class="summary-item"><span>Customer</span><strong>' + escapeHtml(customer.full_name || 'Pending verification') + '</strong></div>',
-        '<div class="summary-item"><span>Start time</span><strong>' + escapeHtml(appointment.start_time || '-') + '</strong></div>',
-        '<div class="summary-item"><span>Status</span><strong>' + escapeHtml(pending ? 'Pending verification' : (appointment.status || 'booked')) + '</strong></div>',
-        '<div class="summary-item"><span>Contact</span><strong>' + escapeHtml((customer.email || '') + (customer.mobile ? ' / ' + customer.mobile : '')) + '</strong></div>',
-        '</div>',
-        pending && verifyUrl ? '<div class="actions"><a class="btn primary" href="' + escapeHtml(verifyUrl) + '">Open verification link</a></div>' : '<div class="actions"><a class="btn" href="booking.php">Book another appointment</a></div>'
-      ].join('');
+      els.resultArea.innerHTML = '<div class="notice">This appointment is already ' + escapeHtml(appointment.status || 'completed') + '.</div>';
+      return;
+    }
+  }
+
+  async function submitVerification() {
+    const selectedRadio = document.querySelector('input[name="selected_customer_id"]:checked');
+    if (!selectedRadio) {
+      alert('Please select a customer profile option before confirming.');
+      return;
     }
 
-    async function loadRequest() {
-      if (!BOOMY.token) {
-        els.loadingNotice.textContent = 'Missing verification token.';
-        els.loadingNotice.classList.add('is-error');
+    const customerSelection = selectedRadio.value;
+    const firstName = els.newFirstName.value.trim();
+    const lastName = els.newLastName.value.trim();
+
+    if (customerSelection === 'new') {
+      if (firstName === '') {
+        alert('First name is required.');
+        els.newFirstName.focus();
         return;
       }
-
-      const url = new URL(BOOMY.requestUrl, window.location.href);
-      url.searchParams.set('token', BOOMY.token);
-      const data = await fetchJson(url.toString(), { method: 'GET' });
-      const appointment = data.appointment || {};
-      const provider = data.provider || null;
-      const appointmentType = data.appointment_type || null;
-      const matches = data.matches || [];
-
-      els.loadingNotice.classList.add('hidden');
-      els.requestArea.classList.remove('hidden');
-      renderSummary(appointment, provider, appointmentType, matches);
-
-      if ((appointment.status || 'pending') !== 'unconfirmed') {
-        els.requestArea.classList.add('hidden');
-        els.resultArea.classList.remove('hidden');
-        els.resultArea.innerHTML = '<div class="notice">This appointment is already ' + escapeHtml(appointment.status || 'completed') + '.</div>';
+      if (lastName === '') {
+        alert('Last name is required.');
+        els.newLastName.focus();
         return;
       }
     }
 
-    async function submitVerification() {
-      els.confirmBtn.disabled = true;
-      els.confirmBtn.textContent = 'Processing...';
+    els.confirmBtn.disabled = true;
+    els.confirmBtn.textContent = 'Processing...';
 
-      try {
-        const payload = {
-          csrf_token: BOOMY.csrfToken,
-          token: BOOMY.token,
-        };
+    try {
+      const payload = {
+        csrf_token: BOOMY.csrfToken,
+        token: BOOMY.token,
+        customer_option: customerSelection, 
+        first_name: customerSelection === 'new' ? firstName : null,
+        last_name: customerSelection === 'new' ? lastName : null
+      };
 
-        const result = await fetchJson(BOOMY.verifyUrl, {
-          method: 'POST',
-          body: JSON.stringify(payload)
-        });
-        renderResult(result);
-      } catch (error) {
-        alert(error.message || 'Unable to confirm the booking.');
-      } finally {
-        els.confirmBtn.disabled = false;
-        els.confirmBtn.textContent = 'Confirm customer and book';
-      }
+      const result = await fetchJson(BOOMY.verifyUrl, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      renderResult(result);
+    } catch (error) {
+      alert(error.message || 'Unable to confirm the booking.');
+    } finally {
+      els.confirmBtn.disabled = false;
+      els.confirmBtn.textContent = 'Confirm customer and book';
     }
+  }
 
-    els.cancelBtn.addEventListener('click', () => {
-      window.location.href = 'booking.php';
-    });
-    els.confirmBtn.addEventListener('click', submitVerification);
+  els.cancelBtn.addEventListener('click', () => {
+    window.location.href = 'booking.php';
+  });
+  els.confirmBtn.addEventListener('click', submitVerification);
 
-    loadRequest().catch((error) => {
-      els.loadingNotice.textContent = error.message || 'Unable to load verification link.';
-      els.loadingNotice.classList.add('is-error');
-    });
-  </script>
+  loadRequest().catch((error) => {
+    els.loadingNotice.textContent = error.message || 'Unable to load verification link.';
+    els.loadingNotice.classList.add('is-error');
+  });
+</script>
 </body>
 </html>

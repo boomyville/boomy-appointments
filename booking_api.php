@@ -488,7 +488,6 @@ try {
         $mode = strtolower(trim((string) ($data['customer_mode'] ?? 'new')));
         $email = trim((string) ($data['customer_email'] ?? ''));
         $mobile = trim((string) ($data['customer_mobile'] ?? ''));
-        $name = booking_compose_customer_name($data);
 
         if ($email === '' || $mobile === '') {
             booking_api_response(['error' => 'email and mobile are required'], 422);
@@ -518,10 +517,10 @@ try {
         booking_api_response([
             'ok' => true,
             'customer_mode' => 'new',
-            'match_count' => $matchCount,
-            'duplicate_contact' => $matchCount > 0,
-            'can_continue' => $matchCount > 0,
-            'matches' => $matches,
+            'match_count' => 0,
+            'duplicate_contact' => false,
+            'can_continue' => true,
+            'matches' => [],
         ]);
     }
 
@@ -601,7 +600,8 @@ try {
         $matches = booking_find_exact_customer_matches($customerEmail, $customerMobile);
         $matchCount = count($matches);
         $notesValue = $notes !== '' ? $notes : null;
-        $needsVerification = $matchCount > 1;
+        
+        $needsVerification = ($matchCount > 0); 
         $resolvedCustomerName = booking_resolve_customer_name($data, $customerEmail);
 
         if ($customerMode === 'existing') {
@@ -612,66 +612,53 @@ try {
             if ($customerEmail === '' || $customerMobile === '') {
                 booking_api_response(['error' => 'email and mobile are required'], 422);
             }
-            if ($matchCount > 0 && !$allowDuplicate) {
-                booking_api_response([
-                    'error' => 'This email and mobile combination already exists',
-                    'duplicate_contact' => true,
-                    'match_count' => $matchCount,
-                    'matches' => $matches,
-                    'can_continue' => true,
-                    'can_use_existing' => true,
-                ], 409);
-            }
-            if ($matchCount > 0) {
-                $needsVerification = true;
-            }
         }
 
         if ($needsVerification) {
-                $customer = null;
-                if ($customerMode === 'existing') {
-                    $customer = $matches[0] ?? null;
-                } else {
-                    $customerId = create_customer($resolvedCustomerName, $customerEmail ?: null, $customerMobile ?: null, $customerDob !== '' ? $customerDob : null, $customerGender !== '' ? $customerGender : null);
-                    if (!$customerId) {
-                        booking_api_response(['error' => 'Failed to create customer'], 500);
-                    }
-                    $customer = get_customer_by_id($customerId);
+            $customer = null;
+            if ($customerMode === 'existing') {
+                $customer = $matches[0] ?? null;
+            } else {
+                $customerId = create_customer($resolvedCustomerName, $customerEmail ?: null, $customerMobile ?: null, $customerDob !== '' ? $customerDob : null, $customerGender !== '' ? $customerGender : null);
+                if (!$customerId) {
+                    booking_api_response(['error' => 'Failed to create customer'], 500);
                 }
+                $customer = get_customer_by_id($customerId);
+            }
 
-                if (!$customer) {
-                    booking_api_response(['error' => 'Failed to load customer'], 500);
-                }
+            if (!$customer) {
+                booking_api_response(['error' => 'Failed to load customer'], 500);
+            }
 
-                $appointment = create_appointment(
-                    (int) $customer['id'],
-                    $providerId,
-                    $appointmentTypeId,
-                    $startDate->format('Y-m-d H:i:s'),
-                    'unconfirmed',
-                    null,
-                    $notesValue
-                );
+            $appointment = create_appointment(
+                (int) $customer['id'],
+                $providerId,
+                $appointmentTypeId,
+                $startDate->format('Y-m-d H:i:s'),
+                'unconfirmed',
+                null,
+                $notesValue
+            );
 
-                if (!$appointment) {
-                    booking_api_response(['error' => 'Failed to create appointment'], 500);
-                }
+            if (!$appointment) {
+                booking_api_response(['error' => 'Failed to create appointment'], 500);
+            }
 
-                $verificationCode = create_appointment_verification_token((int) $appointment['id']);
-                if ($verificationCode === '') {
-                    booking_api_response(['error' => 'Failed to create verification token'], 500);
-                }
+            $verificationCode = create_appointment_verification_token((int) $appointment['id']);
+            if ($verificationCode === '') {
+                booking_api_response(['error' => 'Failed to create verification token'], 500);
+            }
 
-                $emailSent = booking_send_verification_email($appointment, $provider, $appointmentType, $matches);
+            $emailSent = booking_send_verification_email($appointment, $provider, $appointmentType, $matches);
+            
             booking_api_response([
                 'ok' => true,
                 'pending' => true,
                 'requires_verification' => true,
                 'appointment' => $appointment,
-                'matches' => $matches,
                 'verification_email_sent' => $emailSent,
                 'verify_url' => build_app_url('verify_appointment.php', ['token' => $verificationCode]),
-                'message' => 'Appointment created. Customer verification is required before the appointment can be confirmed.',
+                'message' => 'Appointment request received. Please check your email to verify your details and complete the booking.',
             ]);
         }
 
@@ -741,8 +728,53 @@ try {
             booking_api_response(['error' => 'request not found'], 404);
         }
 
+        $customerOption = trim((string) ($data['customer_option'] ?? 'current'));
+        $inputFirstName = trim((string) ($data['first_name'] ?? ''));
+        $inputLastName  = trim((string) ($data['last_name'] ?? ''));
+
+        $originalCustomerId = (int) ($appointmentRow['customer_id'] ?? 0);
+        $originalCustomer   = get_customer_by_id($originalCustomerId);
+        if (!$originalCustomer) {
+            booking_api_response(['error' => 'Original booking customer details could not be found'], 422);
+        }
+
+        $customerIdToAssign = $originalCustomerId;
+
+        if ($customerOption === 'new') {
+            if ($inputFirstName === '') {
+                booking_api_response(['error' => 'First name is required.'], 422);
+            }
+            if ($inputLastName === '') {
+                booking_api_response(['error' => 'Last name is required.'], 422);
+            }
+
+            $resolvedName = trim($inputFirstName . ' ' . $inputLastName);
+
+            $customerEmail  = !empty($originalCustomer['email']) ? (string) $originalCustomer['email'] : null;
+            $customerMobile = !empty($originalCustomer['mobile']) ? (string) $originalCustomer['mobile'] : null;
+            $customerDob    = !empty($originalCustomer['date_of_birth']) ? (string) $originalCustomer['date_of_birth'] : null;
+            $customerGender = !empty($originalCustomer['gender']) ? (string) $originalCustomer['gender'] : null;
+
+            $newCustomerId = create_customer(
+                $resolvedName,
+                $customerEmail,
+                $customerMobile,
+                $customerDob,
+                $customerGender
+            );
+
+            if (!$newCustomerId) {
+                booking_api_response(['error' => 'Failed to build an isolated customer profile entity'], 500);
+            }
+
+            $customerIdToAssign = (int) $newCustomerId;
+
+        } else if (is_numeric($customerOption)) {
+            $customerIdToAssign = (int) $customerOption;
+        }
+
         if ((string) ($appointmentRow['status'] ?? '') !== 'unconfirmed') {
-            $customer = !empty($appointmentRow['customer_id']) ? get_customer_by_id((int) $appointmentRow['customer_id']) : null;
+            $customer = get_customer_by_id($customerIdToAssign);
             booking_api_response([
                 'ok' => true,
                 'status' => (string) ($appointmentRow['status'] ?? 'booked'),
@@ -759,7 +791,7 @@ try {
 
         $appointment = update_appointment(
             (int) $appointmentRow['id'],
-            (int) $appointmentRow['customer_id'],
+            $customerIdToAssign, 
             (int) $appointmentRow['provider_id'],
             (int) $appointmentRow['appointment_type_id'],
             (string) $appointmentRow['start_time'],
@@ -767,6 +799,7 @@ try {
             'booked',
             !empty($appointmentRow['notes']) ? (string) $appointmentRow['notes'] : null
         );
+        
         if (!$appointment) {
             booking_api_response(['error' => 'Failed to finalize appointment'], 500);
         }
