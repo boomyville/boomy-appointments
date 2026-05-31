@@ -17,7 +17,7 @@ try {
   $db = get_db();
 
   try {
-    $stmt = $db->query("SELECT id, full_name, email, role FROM users WHERE role IS NOT NULL AND role <> '' AND role <> 'customer' ORDER BY full_name ASC, id ASC");
+    $stmt = $db->query("SELECT id, full_name, email, role, is_active FROM users WHERE role IS NOT NULL AND role <> '' AND role <> 'customer' ORDER BY full_name ASC, id ASC");
     $providers = $stmt->fetchAll(PDO::FETCH_ASSOC);
   } catch (Throwable $e) {
     $providers = [];
@@ -34,7 +34,16 @@ try {
   $appointmentTypes = [];
 }
 
-$defaultProviderId = !empty($providers) ? (int) $providers[0]['id'] : null;
+$defaultProviderId = null;
+foreach ($providers as $providerRow) {
+  if ((int) ($providerRow['is_active'] ?? 0) === 1) {
+    $defaultProviderId = (int) $providerRow['id'];
+    break;
+  }
+}
+if ($defaultProviderId === null && !empty($providers)) {
+  $defaultProviderId = (int) $providers[0]['id'];
+}
 $defaultAppointmentTypeId = !empty($appointmentTypes) ? (int) $appointmentTypes[0]['id'] : null;
 $bookingCalendarSettings = get_booking_calendar_settings();
 $customerFieldSettings = get_customer_field_settings();
@@ -1223,10 +1232,13 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
             <label for="providerSelect">Which provider?</label>
             <select id="providerSelect" name="provider_id">
               <?php foreach ($providers as $index => $provider): ?>
-                <option value="<?php echo (int) $provider['id']; ?>" <?php echo $index === 0 ? 'selected' : ''; ?>>
+                <option value="<?php echo (int) $provider['id']; ?>" <?php echo ((int) ($provider['is_active'] ?? 0) === 1 && $defaultProviderId === (int) $provider['id']) ? 'selected' : ''; ?> <?php echo ((int) ($provider['is_active'] ?? 0) !== 1) ? 'disabled' : ''; ?>>
                   <?php echo htmlspecialchars($provider['full_name'] ?: $provider['email']); ?>
                   <?php if (!empty($provider['role'])): ?>
                     (<?php echo htmlspecialchars($provider['role']); ?>)
+                  <?php endif; ?>
+                  <?php if ((int) ($provider['is_active'] ?? 0) !== 1): ?>
+                    (disabled)
                   <?php endif; ?>
                 </option>
               <?php endforeach; ?>

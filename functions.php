@@ -60,12 +60,41 @@ function ensure_customer_schema(PDO $db): void
         }
 
         $hasGender = (bool) $db->query("SHOW COLUMNS FROM customers LIKE 'gender'")->fetch();
+            
         if (!$hasGender) {
+            ensure_customer_schema($pdo);
+            ensure_user_schema($pdo);
             $db->exec("ALTER TABLE customers ADD COLUMN gender ENUM('male','female','other','unknown') NOT NULL DEFAULT 'unknown' AFTER date_added");
         }
     } catch (Throwable $e) {
         // Keep the app running even if the schema cannot be updated automatically.
     }
+        function ensure_user_schema(PDO $db): void
+        {
+            static $checked = false;
+            if ($checked) {
+                return;
+            }
+            $checked = true;
+
+            try {
+                $tableExists = (bool) $db->query("SHOW TABLES LIKE 'users'")->fetch();
+                if (!$tableExists) {
+                    return;
+                }
+
+                $columns = ['first_name' => "ALTER TABLE users ADD COLUMN first_name VARCHAR(64) NULL AFTER full_name", 'last_name' => "ALTER TABLE users ADD COLUMN last_name VARCHAR(64) NULL AFTER first_name", 'phone' => "ALTER TABLE users ADD COLUMN phone VARCHAR(32) NULL AFTER last_name", 'role' => "ALTER TABLE users ADD COLUMN role ENUM('admin','provider') NOT NULL DEFAULT 'provider' AFTER phone", 'is_active' => "ALTER TABLE users ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1"];
+
+                foreach ($columns as $column => $sql) {
+                    $hasColumn = (bool) $db->query("SHOW COLUMNS FROM users LIKE '" . $column . "'")->fetch();
+                    if (!$hasColumn) {
+                        $db->exec($sql);
+                    }
+                }
+            } catch (Throwable $e) {
+                // Ignore schema bootstrap failures so the app can continue running.
+            }
+        }
 }
 
 function ensure_breaks_schema(PDO $db): void
