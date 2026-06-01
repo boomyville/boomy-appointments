@@ -35,6 +35,7 @@ CREATE TABLE `users` (
   `role` ENUM('admin','provider') NOT NULL DEFAULT 'provider',
   `working_plan` JSON NULL,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `bookable` TINYINT(1) NOT NULL DEFAULT 1,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),

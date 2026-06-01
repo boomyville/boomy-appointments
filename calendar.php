@@ -17,7 +17,7 @@ try {
   $db = get_db();
 
   try {
-    $stmt = $db->query("SELECT id, full_name, email, role, is_active FROM users WHERE role IS NOT NULL AND role <> '' AND role <> 'customer' ORDER BY full_name ASC, id ASC");
+    $stmt = $db->query("SELECT id, full_name, email, role, is_active, bookable FROM users WHERE role IS NOT NULL AND role <> '' AND role <> 'customer' ORDER BY full_name ASC, id ASC");
     $providers = $stmt->fetchAll(PDO::FETCH_ASSOC);
   } catch (Throwable $e) {
     $providers = [];
@@ -167,6 +167,55 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+    }
+
+    .calendar-provider-filters {
+      display: grid;
+      gap: 8px;
+      min-width: min(560px, 100%);
+      max-width: 100%;
+    }
+
+    .calendar-provider-filters__row {
+      display: grid;
+      grid-template-columns: 96px minmax(220px, 1fr);
+      align-items: center;
+      gap: 10px;
+    }
+
+    .calendar-provider-filters__row label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .calendar-provider-filters__row select {
+      width: 100%;
+      border: 1px solid rgba(15, 23, 42, 0.15);
+      border-radius: 14px;
+      padding: 10px 12px;
+      font: inherit;
+      color: var(--text);
+      background: #fff;
+      box-sizing: border-box;
+      font-size: 0.92rem;
+    }
+
+    .calendar-provider-filters__row select:focus {
+      outline: 3px solid rgba(36, 87, 255, 0.14);
+      border-color: rgba(36, 87, 255, 0.5);
+    }
+
+    .fc .fc-timegrid-event-harness.provider-split-left {
+      left: 0% !important;
+      right: 50% !important;
+    }
+
+    .fc .fc-timegrid-event-harness.provider-split-right {
+      left: 50% !important;
+      right: 0% !important;
     }
 
     .panel-header-row h2 {
@@ -1041,6 +1090,16 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     }
 
     @media (max-width: 760px) {
+      .calendar-provider-filters {
+        width: 100%;
+        min-width: 0;
+      }
+
+      .calendar-provider-filters__row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
       .booking-grid,
       .booking-meta {
         grid-template-columns: 1fr;
@@ -1090,7 +1149,31 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
 
     <div class="admin-panel">
       <div class="panel-header-row">
-        <h2>Schedule Board</h2>
+        <div class="calendar-provider-filters" aria-label="Calendar provider filters">
+          <div class="calendar-provider-filters__row">
+            <label for="calendarProviderPrimary">Provider</label>
+            <select id="calendarProviderPrimary" name="calendar_provider_primary">
+              <?php foreach ($providers as $provider): ?>
+                <?php $providerListLabel = trim((string) ($provider['full_name'] ?? '')) !== '' ? (string) $provider['full_name'] : (string) ($provider['email'] ?? ''); ?>
+                <option value="<?php echo (int) $provider['id']; ?>" <?php echo ($defaultProviderId === (int) $provider['id']) ? 'selected' : ''; ?>>
+                  <?php echo htmlspecialchars($providerListLabel, ENT_QUOTES, 'UTF-8'); ?>
+                  <?php if (!empty($provider['role'])): ?>
+                    (<?php echo htmlspecialchars((string) $provider['role'], ENT_QUOTES, 'UTF-8'); ?>)
+                  <?php endif; ?>
+                  <?php if ((int) ($provider['is_active'] ?? 0) !== 1): ?>
+                    (inactive)
+                  <?php endif; ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="calendar-provider-filters__row" id="calendarProviderSecondaryWrap" style="display:none;">
+            <label for="calendarProviderSecondary">Compare</label>
+            <select id="calendarProviderSecondary" name="calendar_provider_secondary">
+              <option value="">None</option>
+            </select>
+          </div>
+        </div>
         <div class="server-clock" aria-live="polite">
           <span>Server time</span>
           <strong id="serverClockValue"></strong>
@@ -1234,7 +1317,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
                     (<?php echo htmlspecialchars($provider['role']); ?>)
                   <?php endif; ?>
                   <?php if ((int) ($provider['is_active'] ?? 0) !== 1): ?>
-                    (disabled)
+                    (inactive)
                   <?php endif; ?>
                 </option>
               <?php endforeach; ?>
@@ -1306,6 +1389,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
   <script>
     const isStaff = <?php echo json_encode($isStaff); ?>;
+    const currentUserRole = <?php echo json_encode($role); ?>;
     const providerId = <?php echo json_encode($providerId); ?>;
     const providers = <?php echo json_encode($providers, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
     const appointmentTypes = <?php echo json_encode($appointmentTypes, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE); ?>;
@@ -1343,6 +1427,9 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
 
     const calendarEl = document.getElementById('calendar');
     const serverClockValue = document.getElementById('serverClockValue');
+    const calendarProviderPrimary = document.getElementById('calendarProviderPrimary');
+    const calendarProviderSecondary = document.getElementById('calendarProviderSecondary');
+    const calendarProviderSecondaryWrap = document.getElementById('calendarProviderSecondaryWrap');
     const bookingModal = document.getElementById('bookingModal');
     const closeBookingModal = document.getElementById('closeBookingModal');
     const selectedStartLabel = document.getElementById('selectedStartLabel');
@@ -1378,12 +1465,29 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     let currentEditingAppointmentStatus = 'booked';
     let currentBookingStartDate = null;
     let currentBookingEndDate = null;
+    let pendingDraftProviderId = null;
     let notesExpanded = false;
     let pendingEmailPromptContext = null;
     const appointmentStatusValues = ['booked', 'confirmed', 'present', 'completed', 'no show'];
     const appointmentEmailDeliveryReady = Boolean(<?php echo json_encode($appointmentEmailDeliveryReady); ?>);
 
     const fallbackDurationMinutes = appointmentTypes.length > 0 ? Number(appointmentTypes[0].duration_minutes || 30) : 30;
+
+    function getDefaultPrimaryProviderId() {
+      if (defaultProviderId && Number(defaultProviderId) > 0) {
+        return Number(defaultProviderId);
+      }
+      if (providerId && Number(providerId) > 0) {
+        return Number(providerId);
+      }
+      if (providers.length > 0) {
+        return Number(providers[0].id);
+      }
+      return null;
+    }
+
+    let selectedPrimaryProviderId = getDefaultPrimaryProviderId();
+    let selectedSecondaryProviderId = null;
 
     const visibleDaysOfWeek = [];
     if (bookingCalendarSettings.show_sunday) visibleDaysOfWeek.push(0);
@@ -1671,6 +1775,146 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackDurationMinutes;
     }
 
+    function isThreeDayOrDayView() {
+      const currentViewType = calendar && calendar.view ? calendar.view.type : '';
+      return currentViewType === 'timeGridThreeDay' || currentViewType === 'timeGridDay';
+    }
+
+    function isDualProviderSplitEnabled() {
+      return isThreeDayOrDayView() && Number(selectedSecondaryProviderId || 0) > 0;
+    }
+
+    function formatProviderOptionLabel(provider) {
+      if (!provider) {
+        return 'Unknown provider';
+      }
+
+      const baseName = String(provider.full_name || provider.email || ('User #' + provider.id));
+      const roleLabel = provider.role ? ' (' + provider.role + ')' : '';
+      const inactiveLabel = Number(provider.is_active || 0) === 1 ? '' : ' (inactive)';
+      return baseName + roleLabel + inactiveLabel;
+    }
+
+    function rebuildSecondaryProviderOptions() {
+      if (!calendarProviderSecondary) {
+        return;
+      }
+
+      const previousSelection = String(calendarProviderSecondary.value || '');
+      calendarProviderSecondary.innerHTML = '';
+
+      const noneOption = document.createElement('option');
+      noneOption.value = '';
+      noneOption.textContent = 'None';
+      calendarProviderSecondary.appendChild(noneOption);
+
+      providers.forEach(function(provider) {
+        const numericProviderId = Number(provider.id || 0);
+        if (!numericProviderId || numericProviderId === Number(selectedPrimaryProviderId || 0)) {
+          return;
+        }
+
+        const option = document.createElement('option');
+        option.value = String(numericProviderId);
+        option.textContent = formatProviderOptionLabel(provider);
+        calendarProviderSecondary.appendChild(option);
+      });
+
+      if (previousSelection && calendarProviderSecondary.querySelector('option[value="' + previousSelection + '"]')) {
+        calendarProviderSecondary.value = previousSelection;
+      } else {
+        calendarProviderSecondary.value = '';
+      }
+
+      selectedSecondaryProviderId = calendarProviderSecondary.value ? Number(calendarProviderSecondary.value) : null;
+    }
+
+    function syncProviderFilterVisibility() {
+      if (!calendarProviderSecondaryWrap) {
+        return;
+      }
+
+      if (isThreeDayOrDayView()) {
+        calendarProviderSecondaryWrap.style.display = '';
+      } else {
+        calendarProviderSecondaryWrap.style.display = 'none';
+        if (calendarProviderSecondary) {
+          calendarProviderSecondary.value = '';
+        }
+        selectedSecondaryProviderId = null;
+      }
+    }
+
+    function applyDraftProviderSelection() {
+      if (!providerSelect) {
+        pendingDraftProviderId = null;
+        return;
+      }
+
+      let targetProviderId = Number(pendingDraftProviderId || 0);
+      if (!targetProviderId) {
+        targetProviderId = Number(selectedPrimaryProviderId || getDefaultPrimaryProviderId() || 0);
+      }
+
+      if (targetProviderId) {
+        const activeOption = providerSelect.querySelector('option[value="' + targetProviderId + '"]:not([disabled])');
+        const fallbackOption = providerSelect.querySelector('option[value="' + targetProviderId + '"]');
+        if (activeOption || fallbackOption) {
+          providerSelect.value = String(targetProviderId);
+        }
+      }
+
+      pendingDraftProviderId = null;
+    }
+
+    function getDateClickSide(info) {
+      if (!isDualProviderSplitEnabled() || !info || !info.jsEvent) {
+        return null;
+      }
+
+      const clickedElement = info.jsEvent.target;
+      const col = clickedElement && typeof clickedElement.closest === 'function'
+        ? clickedElement.closest('.fc-timegrid-col')
+        : null;
+      const referenceElement = col || info.dayEl || null;
+
+      if (!referenceElement || typeof referenceElement.getBoundingClientRect !== 'function') {
+        return null;
+      }
+
+      const rect = referenceElement.getBoundingClientRect();
+      if (!rect || rect.width <= 0) {
+        return null;
+      }
+
+      const relativeX = Number(info.jsEvent.clientX || 0) - rect.left;
+      return relativeX < (rect.width / 2) ? 'left' : 'right';
+    }
+
+    function getFilteredCalendarEvents(rawEvents) {
+      const eventsArray = Array.isArray(rawEvents) ? rawEvents : [];
+      const primaryId = Number(selectedPrimaryProviderId || 0);
+      const secondaryId = Number(selectedSecondaryProviderId || 0);
+      const dualEnabled = isThreeDayOrDayView() && secondaryId > 0;
+
+      return eventsArray.filter(function(event) {
+        if (!event || event.display === 'background') {
+          return true;
+        }
+
+        const providerValue = Number((event.extendedProps && event.extendedProps.provider_id) || event.provider_id || 0);
+        if (!providerValue) {
+          return false;
+        }
+
+        if (dualEnabled) {
+          return providerValue === primaryId || providerValue === secondaryId;
+        }
+
+        return primaryId > 0 ? providerValue === primaryId : true;
+      });
+    }
+
     function addMinutes(date, minutes) {
       return new Date(date.getTime() + minutes * 60000);
     }
@@ -1808,9 +2052,9 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       }
 
       if (defaultProviderId && !providerSelect.value) {
-        providerSelect.value = String(defaultProviderId);
-      } else if (providerId && providerSelect.querySelector(`option[value="${providerId}"]`)) {
-        providerSelect.value = String(providerId);
+        applyDraftProviderSelection();
+      } else if (mode === 'draft') {
+        applyDraftProviderSelection();
       }
 
       if (defaultAppointmentTypeId && !appointmentTypeSelect.value) {
@@ -1980,27 +2224,73 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
           arg.el.classList.add('server-today');
         }
       },
+      datesSet: function() {
+        syncProviderFilterVisibility();
+        calendar.refetchEvents();
+      },
       selectConstraint: 'businessHours',
       headerToolbar: {
         left: 'prev,next today',
         center: 'title',
         right: 'dayGridMonth,timeGridWeek,timeGridThreeDay,timeGridDay'
       },
-      events: {
-        url: 'calendar_api.php',
-        method: 'GET',
-        extraParams: function() {
-          const params = {};
-          if (providerId) {
-            params.provider_id = providerId;
-          }
-          return params;
-        },
-        failure: () => alert('Could not load appointments')
+      events: function(fetchInfo, successCallback, failureCallback) {
+        const params = new URLSearchParams();
+        params.set('start', fetchInfo.startStr);
+        params.set('end', fetchInfo.endStr);
+
+        if (currentUserRole === 'provider' && providerId) {
+          params.set('provider_id', String(providerId));
+        }
+
+        fetch('calendar_api.php?' + params.toString(), { credentials: 'same-origin' })
+          .then(function(response) {
+            if (!response.ok) {
+              throw new Error('Could not load appointments');
+            }
+            return response.json();
+          })
+          .then(function(rawEvents) {
+            successCallback(getFilteredCalendarEvents(rawEvents));
+          })
+          .catch(function(err) {
+            failureCallback(err);
+            alert('Could not load appointments');
+          });
+      },
+      eventDidMount: function(arg) {
+        if (arg.event.display === 'background') {
+          return;
+        }
+
+        const harness = arg.el.closest('.fc-timegrid-event-harness');
+        if (!harness) {
+          return;
+        }
+
+        harness.classList.remove('provider-split-left', 'provider-split-right');
+
+        if (!isDualProviderSplitEnabled()) {
+          return;
+        }
+
+        const eventProviderId = Number(arg.event.extendedProps.provider_id || 0);
+        if (eventProviderId === Number(selectedPrimaryProviderId || 0)) {
+          harness.classList.add('provider-split-left');
+        } else if (eventProviderId === Number(selectedSecondaryProviderId || 0)) {
+          harness.classList.add('provider-split-right');
+        }
       },
       dateClick: function(info) {
         const oldDraft = calendar.getEventById('booking-draft-placeholder');
         if (oldDraft) { oldDraft.remove(); }
+
+        const clickSide = getDateClickSide(info);
+        if (clickSide === 'right' && Number(selectedSecondaryProviderId || 0) > 0) {
+          pendingDraftProviderId = Number(selectedSecondaryProviderId);
+        } else {
+          pendingDraftProviderId = Number(selectedPrimaryProviderId || 0) || getDefaultPrimaryProviderId();
+        }
 
         const roundedStart = roundDateToSnap(info.date, bookingSnapMinutes);
         const fixedEnd = addMinutes(roundedStart, bookingSnapMinutes);
@@ -2168,6 +2458,33 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
     });
 
     window.calendarInstance = calendar;
+
+    if (calendarProviderPrimary) {
+      const preferredPrimary = Number(calendarProviderPrimary.value || 0) || getDefaultPrimaryProviderId();
+      if (preferredPrimary) {
+        selectedPrimaryProviderId = Number(preferredPrimary);
+        calendarProviderPrimary.value = String(preferredPrimary);
+      }
+    }
+
+    rebuildSecondaryProviderOptions();
+
+    if (calendarProviderPrimary) {
+      calendarProviderPrimary.addEventListener('change', function() {
+        selectedPrimaryProviderId = Number(calendarProviderPrimary.value || 0) || getDefaultPrimaryProviderId();
+        rebuildSecondaryProviderOptions();
+        calendar.refetchEvents();
+      });
+    }
+
+    if (calendarProviderSecondary) {
+      calendarProviderSecondary.addEventListener('change', function() {
+        selectedSecondaryProviderId = calendarProviderSecondary.value ? Number(calendarProviderSecondary.value) : null;
+        calendar.refetchEvents();
+      });
+    }
+
+    syncProviderFilterVisibility();
     calendar.render();
 
     (function addHourLines() {
@@ -3105,6 +3422,7 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
     function checkTimeSlotConflicts() {
       const startIso = bookingStart.value.trim();
       const endIso = bookingEnd.value.trim();
+      const selectedBookingProviderId = Number(providerSelect && providerSelect.value ? providerSelect.value : 0);
       
       if (!startIso || !endIso) return false;
 
@@ -3118,8 +3436,14 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       const hasTimeConflict = window.calendarInstance.getEvents().some(function(event) {
         if (event.id === 'booking-draft-placeholder') return false;
         if (event.extendedProps?.isDraftPlaceholder) return false;
+        if (event.display === 'background') return false;
         
         if (currentEditingAppointmentId && String(event.id) === String(currentEditingAppointmentId)) {
+          return false;
+        }
+
+        const eventProviderId = Number(event.extendedProps?.provider_id || 0);
+        if (selectedBookingProviderId > 0 && eventProviderId > 0 && eventProviderId !== selectedBookingProviderId) {
           return false;
         }
 

@@ -48,6 +48,11 @@ function normalize_user_status_value($value): ?int
     return null;
 }
 
+function normalize_user_bookable_value($value): ?int
+{
+    return normalize_user_status_value($value);
+}
+
 function build_user_payload(array $row): array
 {
     return [
@@ -59,6 +64,7 @@ function build_user_payload(array $row): array
         'phone' => (string) ($row['phone'] ?? ''),
         'role' => (string) ($row['role'] ?? ''),
         'is_active' => (int) ($row['is_active'] ?? 0),
+        'bookable' => (int) ($row['bookable'] ?? 0),
         'created_at' => $row['created_at'] ?? null,
         'updated_at' => $row['updated_at'] ?? null,
     ];
@@ -80,6 +86,7 @@ function save_user_record(array $data, bool $isUpdate = false): array
     $phone = trim((string) ($data['phone'] ?? ''));
     $role = normalize_user_role_value($data['role'] ?? null);
     $isActive = normalize_user_status_value($data['is_active'] ?? null);
+    $bookable = normalize_user_bookable_value($data['bookable'] ?? null);
 
     $errors = [];
 
@@ -109,6 +116,10 @@ function save_user_record(array $data, bool $isUpdate = false): array
         $errors['is_active'] = 'Status must be active or disabled';
     }
 
+    if ($bookable === null) {
+        $errors['bookable'] = 'Bookable must be bookable or not bookable';
+    }
+
     if (!empty($errors)) {
         return [
             'ok' => false,
@@ -136,8 +147,8 @@ function save_user_record(array $data, bool $isUpdate = false): array
             return ['ok' => false, 'status' => 409, 'error' => 'Email already exists'];
         }
 
-        $stmt = $db->prepare('UPDATE users SET email = ?, full_name = ?, first_name = ?, last_name = ?, phone = ?, role = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-        $stmt->execute([$email, $fullName, $firstName, $lastName, $phone, $role, $isActive, $userId]);
+        $stmt = $db->prepare('UPDATE users SET email = ?, full_name = ?, first_name = ?, last_name = ?, phone = ?, role = ?, is_active = ?, bookable = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+        $stmt->execute([$email, $fullName, $firstName, $lastName, $phone, $role, $isActive, $bookable, $userId]);
 
         $updatedUser = get_user_by_id($userId);
         if (!$updatedUser) {
@@ -156,7 +167,7 @@ function save_user_record(array $data, bool $isUpdate = false): array
     }
 
     $tempPassword = bin2hex(random_bytes(16));
-    $newUserId = create_user_with_active($email, $tempPassword, $fullName, $role, $isActive, $firstName, $lastName, $phone);
+    $newUserId = create_user_with_active($email, $tempPassword, $fullName, $role, $isActive, $firstName, $lastName, $phone, $bookable);
     $createdUser = get_user_by_id($newUserId);
     if (!$createdUser) {
         return ['ok' => false, 'status' => 500, 'error' => 'Failed to create user'];

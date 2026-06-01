@@ -406,7 +406,7 @@ try {
 
     if ($action === 'init' && $method === 'GET') {
         $appointmentTypes = get_appointment_types(true);
-        $providers = get_active_booking_providers();
+        $providers = get_public_booking_providers();
         $settings = get_booking_calendar_settings();
 
         booking_api_response([
@@ -433,7 +433,7 @@ try {
         }
 
         $provider = get_user_by_id($providerId);
-        if (!$provider || (int) ($provider['is_active'] ?? 0) !== 1 || !in_array((string) ($provider['role'] ?? ''), ['provider', 'admin'], true)) {
+        if (!$provider || (int) ($provider['bookable'] ?? 0) !== 1 || !in_array((string) ($provider['role'] ?? ''), ['provider', 'admin'], true)) {
             booking_api_response(['error' => 'provider not found'], 404);
         }
 
@@ -458,7 +458,7 @@ try {
         }
 
         $provider = get_user_by_id($providerId);
-        if (!$provider || (int) ($provider['is_active'] ?? 0) !== 1 || !in_array((string) ($provider['role'] ?? ''), ['provider', 'admin'], true)) {
+        if (!$provider || (int) ($provider['bookable'] ?? 0) !== 1 || !in_array((string) ($provider['role'] ?? ''), ['provider', 'admin'], true)) {
             booking_api_response(['error' => 'provider not found'], 404);
         }
 
@@ -573,7 +573,7 @@ try {
         }
 
         $provider = get_user_by_id($providerId);
-        if (!$provider || (int) ($provider['is_active'] ?? 0) !== 1 || !in_array((string) ($provider['role'] ?? ''), ['provider', 'admin'], true)) {
+        if (!$provider || (int) ($provider['bookable'] ?? 0) !== 1 || !in_array((string) ($provider['role'] ?? ''), ['provider', 'admin'], true)) {
             booking_api_response(['error' => 'provider not found'], 404);
         }
 

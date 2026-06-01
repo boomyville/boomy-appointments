@@ -567,6 +567,7 @@ if ($role !== 'admin') {
             <th>Phone</th>
             <th>Role</th>
             <th>Status</th>
+            <th>Bookable</th>
             <th>Created</th>
             <th>Actions</th>
           </tr>
@@ -629,6 +630,14 @@ if ($role !== 'admin') {
               <option value="0">Disabled</option>
             </select>
           </div>
+
+          <div class="field full-width">
+            <label for="isBookable">Bookable</label>
+            <select id="isBookable" name="bookable" required>
+              <option value="1">Bookable</option>
+              <option value="0">Not bookable</option>
+            </select>
+          </div>
         </div>
       </div>
       <div class="modal-card__footer">
@@ -662,6 +671,7 @@ if ($role !== 'admin') {
     const phoneInput = document.getElementById('phone');
     const roleInput = document.getElementById('role');
     const isActiveInput = document.getElementById('isActive');
+    const isBookableInput = document.getElementById('isBookable');
     const saveUserBtn = document.getElementById('saveUserBtn');
     const cancelUserBtn = document.getElementById('cancelUserBtn');
     const closeUserModalTop = document.getElementById('closeUserModalTop');
@@ -730,6 +740,7 @@ if ($role !== 'admin') {
         phoneInput.value = user.phone || '';
         roleInput.value = user.role || 'provider';
         isActiveInput.value = String(user.is_active ? 1 : 0);
+        isBookableInput.value = String(user.bookable ? 1 : 0);
         saveUserBtn.textContent = 'Save Changes';
       } else {
         modalTitle.textContent = 'Create New User';
@@ -738,6 +749,7 @@ if ($role !== 'admin') {
         userForm.reset();
         roleInput.value = 'provider';
         isActiveInput.value = '1';
+        isBookableInput.value = '1';
         saveUserBtn.textContent = 'Create User';
       }
 
@@ -787,7 +799,7 @@ if ($role !== 'admin') {
       usersTableBody.innerHTML = '';
 
       if (users.length === 0) {
-        usersTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted);">No users found</td></tr>';
+        usersTableBody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:var(--muted);">No users found</td></tr>';
         usersTable.style.display = 'table';
         resultCount.textContent = total > 0 ? `Showing 0 of ${total} results` : 'No users found';
         return;
@@ -797,6 +809,8 @@ if ($role !== 'admin') {
         const row = document.createElement('tr');
         const isActive = u.is_active ? 'active' : 'disabled';
         const activeText = u.is_active ? 'Active' : 'Disabled';
+        const isBookable = u.bookable ? 'active' : 'disabled';
+        const bookableText = u.bookable ? 'Bookable' : 'Not bookable';
 
         row.innerHTML = `
           <td>${escapeHtml(getUserDisplayName(u))}</td>
@@ -804,6 +818,7 @@ if ($role !== 'admin') {
           <td>${escapeHtml(u.phone || '-')}</td>
           <td><span class="role-badge">${escapeHtml(u.role)}</span></td>
           <td><span class="user-badge ${isActive}">${activeText}</span></td>
+          <td><span class="user-badge ${isBookable}">${bookableText}</span></td>
           <td>${formatDate(u.created_at)}</td>
           <td class="actions-cell"><button type="button" class="action-btn primary" data-action="edit" data-user-id="${u.id}">Edit</button></td>
         `;
@@ -863,6 +878,7 @@ if ($role !== 'admin') {
         phone: phoneInput.value.trim(),
         role: roleInput.value,
         is_active: isActiveInput.value,
+        bookable: isBookableInput.value,
       };
 
       const action = currentMode === 'edit' ? 'update' : 'create';
