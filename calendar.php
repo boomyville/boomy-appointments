@@ -439,7 +439,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       backdrop-filter: blur(4px);
     }
 
-/* Fix: Bind the animation directly to the container layer being updated by the script */
     .booking-card.is-invalid-time {
       box-shadow: inset 0 0 0 6px #ef4444, var(--shadow) !important;
       animation: flashRedBorder 1.2s ease-in-out infinite !important;
@@ -586,23 +585,20 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       font-weight: 600;
     }
 
-/* Fix the broken core input theme switcher */
     html[data-theme="dark"] .field input,
     html[data-theme="dark"] .field select,
     html[data-theme="dark"] .field textarea {
       background: rgba(15, 23, 42, 0.5) !important;
       border-color: rgba(226, 232, 240, 0.12) !important;
-      color: #f8fafc !important; /* Forces clean off-white text in dark mode */
+      color: #f8fafc !important;
     }
 
-    /* Target the meta block time inputs specifically so they invert cleanly */
     html[data-theme="dark"] .meta-inline-inputs input {
       background: rgba(15, 23, 42, 0.6) !important;
       border-color: rgba(255, 255, 255, 0.14) !important;
       color: #f8fafc !important;
     }
 
-    /* Optional enhancement: Style the native browser clock icon to be visible in dark mode */
     html[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator {
       filter: invert(1);
     }
@@ -1321,6 +1317,30 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     const serverTimezoneName = <?php echo json_encode($serverTimezoneName); ?>;
     let serverNowIso = <?php echo json_encode($serverNowIso); ?>;
 
+    /**
+     * Resolves layout formats cleanly across views by tracking token index rules
+     */
+    const calendarDisplayFormat = (function(phpFormatString) {
+      const format = String(phpFormatString || 'd/m/Y H:i').trim();
+      
+      const dayIndex = format.indexOf('d') !== -1 ? format.indexOf('d') : format.indexOf('j');
+      const monthIndex = format.indexOf('m') !== -1 ? format.indexOf('m') : format.indexOf('n');
+      const yearIndex = format.indexOf('Y') !== -1 ? format.indexOf('Y') : format.indexOf('y');
+
+      let title = { year: 'numeric', month: 'long' };
+      let column = { month: 'numeric', day: 'numeric' };
+
+      if (yearIndex !== -1 && monthIndex !== -1 && yearIndex < monthIndex) {
+        title = { year: 'numeric', month: 'long' };
+        column = { month: 'numeric', day: 'numeric' }; 
+      } else if (dayIndex !== -1 && monthIndex !== -1 && dayIndex < monthIndex) {
+        title = { month: 'long', year: 'numeric' };
+        column = { day: 'numeric', month: 'numeric' }; 
+      }
+
+      return { title, column };
+    })(bookingCalendarSettings.date_format);
+
     const calendarEl = document.getElementById('calendar');
     const serverClockValue = document.getElementById('serverClockValue');
     const bookingModal = document.getElementById('bookingModal');
@@ -1700,7 +1720,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       if (bookingEndTimeInput) {
         bookingEndTimeInput.value = getServerTimePartFromDateTime(bookingEnd.value).slice(0, 5);
       }
-      // FIX: Force validation to run every time draft values sync up
       setTimeout(checkTimeSlotConflicts, 100);
     }
 
@@ -1744,7 +1763,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
         selectedEndLabel.textContent = formatCalendarDate(calendar, derivedEndDate);
         bookingStart.value = formatServerClockDateTime(startDate);
         bookingEnd.value = formatServerClockDateTime(derivedEndDate);
-        // populate visible time inputs
         if (bookingStartTimeInput) bookingStartTimeInput.value = getServerTimePartFromDateTime(bookingStart.value).slice(0,5);
         if (bookingEndTimeInput) bookingEndTimeInput.value = getServerTimePartFromDateTime(bookingEnd.value).slice(0,5);
         bookingEndOverrideActive = false;
@@ -1756,13 +1774,10 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
           currentEditingAppointmentId = appt.id;
           syncAppointmentStatusUI(appt.status || 'booked');
           syncBookingNotes(appt.notes || '');
-          // prefill customer
           if (cust && cust.id) {
-            // Set mode first (which may trigger a search that clears selection), then re-apply the selected customer
             setCustomerMode('existing');
             showSelectedCustomer({ id: cust.id, full_name: cust.full_name || ((cust.first_name || '') + ' ' + (cust.last_name || '')), email: cust.email || '', mobile: cust.mobile || '' });
           } else {
-            // populate create customer fields
             if (newCustomerFirstName) newCustomerFirstName.value = cust.first_name || '';
             if (newCustomerLastName) newCustomerLastName.value = cust.last_name || '';
             if (newCustomerEmail) newCustomerEmail.value = cust.email || '';
@@ -1772,7 +1787,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
             setCustomerMode('create');
           }
 
-          // provider & type
           if (appt.provider_id) {
             providerSelect.value = String(appt.provider_id);
           }
@@ -1780,13 +1794,12 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
             appointmentTypeSelect.value = String(appt.appointment_type_id);
           }
 
-          // determine if end time was overridden (end != default duration)
           const opt = appointmentTypeSelect.options[appointmentTypeSelect.selectedIndex];
           const duration = Number(opt?.dataset?.duration || fallbackDurationMinutes);
           const start = new Date(appt.start_time + 'Z');
           const defaultEnd = addMinutes(start, duration);
           const actualEnd = new Date(appt.end_time + 'Z');
-          if (Math.abs((actualEnd.getTime() - defaultEnd.getTime())) > 60000) { // more than 1 minute
+          if (Math.abs((actualEnd.getTime() - defaultEnd.getTime())) > 60000) { 
             bookingEndOverrideActive = true;
           } else {
             bookingEndOverrideActive = false;
@@ -1807,21 +1820,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
         }
       }
 
-      if (typeof bookingModal.showModal === 'function') {
-        bookingModal.showModal();
-      } else {
-        bookingModal.setAttribute('open', 'open');
-      }
-
-      if (defaultAppointmentTypeId && !appointmentTypeSelect.value) {
-        appointmentTypeSelect.value = String(defaultAppointmentTypeId);
-        if (mode === 'draft') {
-          syncBookingDraftTimes();
-        }
-      }
-
-      // RUN CONFLICT MAP VERIFICATIONS ON MODAL LOAD
-      // Wrapping in a brief timeout ensures hidden inputs have finished syncing dates
       setTimeout(checkTimeSlotConflicts, 50);
 
       if (typeof bookingModal.showModal === 'function') {
@@ -1830,8 +1828,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
         bookingModal.setAttribute('open', 'open');
       }
     }
-  
-
+    
 const calendar = new FullCalendar.Calendar(calendarEl, {
       now: getServerClockDate(getServerNowDate()),
       initialView: isStaff ? 'timeGridWeek' : 'timeGridDay',
@@ -1840,29 +1837,50 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       expandRows: true,
       forceEventDuration: true,   
       nowIndicator: Boolean(bookingCalendarSettings.show_now_indicator),
-      selectable: false, // Disable default click-and-drag selection to implement custom fixed-duration selection
+      selectable: false, 
       slotDuration: '00:30:00',
       snapDuration: minutesToDuration(bookingSnapMinutes),
-      // FIX: Dynamically change the calendar height settings on the fly during view switches
+      
+      // 1. FORCE DAY-FIRST LOCALE SO BROWSER ENGINES EXPECT D/M BY DEFAULT
+      locale: 'en-au', 
+
+      // 2. APPLY YOUR DYNAMIC DB FORMAT TO THE MAIN TOOLBAR TITLE
+      titleFormat: calendarDisplayFormat.title,
+
       viewDidMount: function(arg) {
         if (arg.view.type === 'dayGridMonth') {
-          // Force the calendar engine to drop the 1800px layout limits entirely for Month view
           calendar.setOption('height', 'auto');
           calendar.setOption('contentHeight', 'auto');
           calendar.setOption('expandRows', false);
         } else {
-          // Instantly restore your tall columns when going back to Week or Day views
           calendar.setOption('height', calendarHeight);
           calendar.setOption('contentHeight', null);
           calendar.setOption('expandRows', true);
         }
       },
-      // FIX: Add view-specific overrides for the Month view
+
+      // 3. EXPLICITLY OVERRIDE COLUMN HEADERS PER VIEW TYPE TO FORCE YOUR DB FORMAT
       views: {
         dayGridMonth: {
-          height: 'auto',        // Clears the master height constraint
-          contentHeight: 'auto', // FIX: Forces the inner table structure to collapse tightly
-          expandRows: false      // Stops the day grid cells from stretching out empty
+          height: 'auto',        
+          contentHeight: 'auto', 
+          expandRows: false,
+          dayHeaderFormat: { weekday: 'short' } // Just "Mon", "Tue"
+        },
+        timeGridWeek: {
+          // Combines "Mon" + your format ("1/6" or "6/1") explicitly
+          dayHeaderFormat: Object.assign({ weekday: 'short' }, calendarDisplayFormat.column)
+        },
+        timeGridDay: {
+          // Combines "Monday" + your format explicitly
+          dayHeaderFormat: Object.assign({ weekday: 'long' }, calendarDisplayFormat.column)
+        },
+        timeGridThreeDay: {
+          type: 'timeGrid',
+          duration: { days: 3 },
+          buttonText: '3 day',
+          // Combines "Mon" + your format explicitly
+          dayHeaderFormat: Object.assign({ weekday: 'short' }, calendarDisplayFormat.column)
         }
       },
 
@@ -1875,7 +1893,7 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       unselectAuto: true,
       hiddenDays: [0, 1, 2, 3, 4, 5, 6].filter(function(day) {
         return visibleDaysOfWeek.indexOf(day) === -1;
-      }),
+      }), 
       slotMinTime: getEffectiveSlotRange().slotMinTime,
       slotMaxTime: getEffectiveSlotRange().slotMaxTime,
       scrollTime: getEffectiveSlotRange().slotMinTime,
@@ -1929,23 +1947,17 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
         const rawStatus = String(arg.event.extendedProps.status || 'booked').trim().toLowerCase().replace(/_/g, '-');
         return ['appointment-status-' + rawStatus];
       },
-      // 2. CRITICAL CHANGE: Force the visual mirror box to stay a fixed length (15 mins) while dragging
       selectAllow: function(selectInfo) {
-        // Calculate the snap duration in milliseconds
         const durationMs = bookingSnapMinutes * 60000; 
         
         if (selectInfo.end - selectInfo.start !== durationMs) {
-          // If the user drags up or down, shift the selection window to a fixed block size
           if (selectInfo.end > currentBookingEndDate || selectInfo.start > currentBookingStartDate) {
-            // Dragging Down: Lock duration from the current drag endpoint
             selectInfo.end = new Date(selectInfo.start.getTime() + durationMs);
           } else {
-            // Dragging Up: Lock duration up from the drag endpoint
             selectInfo.start = new Date(selectInfo.end.getTime() - durationMs);
           }
         }
 
-        // Keep your existing background collision prevention logic here
         return !calendar.getEvents().some(function(event) {
           if (event.display !== 'background') return false;
           return event.start < selectInfo.end && (event.end || event.start) > selectInfo.start;
@@ -1972,7 +1984,7 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       headerToolbar: {
         left: 'prev,next today',
         center: 'title',
-        right: 'dayGridMonth,timeGridWeek,timeGridDay'
+        right: 'dayGridMonth,timeGridWeek,timeGridThreeDay,timeGridDay'
       },
       events: {
         url: 'calendar_api.php',
@@ -1986,42 +1998,37 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
         },
         failure: () => alert('Could not load appointments')
       },
-     dateClick: function(info) {
-        // Remove any previous unconfirmed draft events sitting on the board
+      dateClick: function(info) {
         const oldDraft = calendar.getEventById('booking-draft-placeholder');
         if (oldDraft) { oldDraft.remove(); }
 
         const roundedStart = roundDateToSnap(info.date, bookingSnapMinutes);
         const fixedEnd = addMinutes(roundedStart, bookingSnapMinutes);
 
-        // Instantly generate a visual event block that can be cleanly dragged around
-        const draftEvent = calendar.addEvent({
+        calendar.addEvent({
           id: 'booking-draft-placeholder',
           title: '🆕 Creating Draft...',
           start: roundedStart,
           end: fixedEnd,
-          color: '#2457ff', // Accent theme color
+          color: '#2457ff', 
           editable: true,
           extendedProps: { isDraftPlaceholder: true }
         });
 
-        // Track initial coordinates in case you release immediately
         currentBookingStartDate = roundedStart;
         currentBookingEndDate = fixedEnd;
       },
       select: function(info) {
         const roundedStart = roundDateToSnap(info.start, bookingSnapMinutes);
-        // Force the final appointment size to be exactly your snap minutes (15 mins)
         const fixedEnd = addMinutes(roundedStart, bookingSnapMinutes); 
         
         openBookingModal(roundedStart, fixedEnd);
-        calendar.unselect(); // Clear the highlighted mirror selection box from the UI
+        calendar.unselect(); 
       },
       editable: isStaff,
-eventClick: function(info) {
+      eventClick: function(info) {
         const event = info.event;
 
-        // FIX: If clicking the interactive draft placeholder, just open the modal workspace
         if (event.extendedProps?.isDraftPlaceholder || event.id === 'booking-draft-placeholder') {
           currentBookingStartDate = event.start;
           currentBookingEndDate = event.end ? event.end : addMinutes(event.start, bookingSnapMinutes);
@@ -2030,7 +2037,6 @@ eventClick: function(info) {
           return;
         }
 
-        // --- EXISTING REAL APPOINTMENT LOOKUP LOGIC ---
         const appointmentId = event.id;
         if (!appointmentId) return;
         
@@ -2060,15 +2066,11 @@ eventClick: function(info) {
       eventDrop: function(info) {
         const event = info.event;
 
-        // NEW LOGIC: If moving our new draft block, just update the temporary values
         if (event.extendedProps?.isDraftPlaceholder) {
           currentBookingStartDate = event.start;
           currentBookingEndDate = event.end ? event.end : addMinutes(event.start, bookingSnapMinutes);
           
-          // Instantly trigger your modal workspace to pop open at the new dragged coordinates
           openBookingModal(currentBookingStartDate, currentBookingEndDate);
-          
-          // RUN VALIDATIONS THE INSTANT ACCIDENT-DROPS LAND
           setTimeout(checkTimeSlotConflicts, 50);
           return;
         }
@@ -2125,12 +2127,9 @@ eventClick: function(info) {
                 customerName: savedCustomerName
               });
 
-              // Case A: User clicked the explicit "Cancel Reschedule" button or pressed Escape
               if (promptResult === 'revert') {
-                // 1. Roll back the element position visually on the screen
                 info.revert(); 
                 
-                // 2. Fire a silent patch request to reverse the change inside the database
                 fetch('appointments_api.php?action=update', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
@@ -2150,7 +2149,6 @@ eventClick: function(info) {
                 return;
               }
 
-              // Case B: User clicked "Yes, send email" (returns true)
               if (promptResult === true) {
                 try {
                   await sendAppointmentConfirmationEmail(savedAppointmentId);
@@ -2158,8 +2156,6 @@ eventClick: function(info) {
                   alert(emailErr.message || 'Failed to send confirmation email.');
                 }
               }
-              
-              // Note: Case C ("No, skip") returns false, so it intentionally does nothing and leaves the block moved.
             }
 
             return calendar.refetchEvents();
@@ -2174,7 +2170,6 @@ eventClick: function(info) {
     window.calendarInstance = calendar;
     calendar.render();
 
-    // Add horizontal hour lines for visible timegrid slots (if data-time attribute exists)
     (function addHourLines() {
       try {
         const slots = calendarEl.querySelectorAll('[data-time]');
@@ -2185,7 +2180,7 @@ eventClick: function(info) {
           }
         });
       } catch (e) {
-        // fallback: nothing
+        // fallback
       }
     })();
 
@@ -2382,7 +2377,8 @@ eventClick: function(info) {
       }
       pendingEmailPromptContext = null;
     }
-function showAppointmentEmailPrompt(context) {
+
+    function showAppointmentEmailPrompt(context) {
       pendingEmailPromptContext = context;
       setAppointmentEmailPromptState(context);
 
@@ -2399,7 +2395,7 @@ function showAppointmentEmailPrompt(context) {
         const cleanup = () => {
           if (appointmentEmailSend) appointmentEmailSend.removeEventListener('click', handleSend);
           if (appointmentEmailSkip) appointmentEmailSkip.removeEventListener('click', handleSkip);
-          if (appointmentEmailCancel) appointmentEmailCancel.removeEventListener('click', handleRevert); // Clean up lookup
+          if (appointmentEmailCancel) appointmentEmailCancel.removeEventListener('click', handleRevert); 
           appointmentEmailModal.removeEventListener('cancel', handleCancel);
         };
 
@@ -2411,15 +2407,15 @@ function showAppointmentEmailPrompt(context) {
 
         const handleSend = () => finish(true);
         const handleSkip = () => finish(false);
-        const handleRevert = () => finish('revert'); // FIX: Resolves to 'revert' when clicked
+        const handleRevert = () => finish('revert'); 
         const handleCancel = function(event) {
           event.preventDefault();
-          finish('revert'); // Also treat Escape key as a clean rollback
+          finish('revert'); 
         };
 
         if (appointmentEmailSend) appointmentEmailSend.addEventListener('click', handleSend, { once: true });
         if (appointmentEmailSkip) appointmentEmailSkip.addEventListener('click', handleSkip, { once: true });
-        if (appointmentEmailCancel) appointmentEmailCancel.addEventListener('click', handleRevert, { once: true }); // Bind handler
+        if (appointmentEmailCancel) appointmentEmailCancel.addEventListener('click', handleRevert, { once: true }); 
         appointmentEmailModal.addEventListener('cancel', handleCancel, { once: true });
 
         if (typeof appointmentEmailModal.showModal === 'function') {
@@ -2736,36 +2732,28 @@ function showAppointmentEmailPrompt(context) {
         return;
       }
 
-      // RE-VERIFY FOR SAFETY ONE LAST TIME
       if (checkTimeSlotConflicts()) {
-        return; // Halt if background loop reports conflict track hits
+        return; 
       }
 
-      // 1. CRITICAL CONFLICT CHECK: Parse active draft bounds
       const draftStart = new Date(bookingStart.value + 'Z');
       const draftEnd = new Date(bookingEnd.value + 'Z');
 
-      // Scan active background break tracks for overlapping bounds
       const hasTimeConflict = window.calendarInstance.getEvents().some(function(event) {
         if (event.display !== 'background') return false;
         
         const breakStart = event.start;
         const breakEnd = event.end || event.start;
         
-        // Mathematical check for overlapping date windows
         return breakStart < draftEnd && breakEnd > draftStart;
       });
 
-      // 2. TRIGGER RED FLASH IF LOCKED OUT BY BREAK TIMES
       if (hasTimeConflict) {
         bookingModal.classList.add('is-invalid-time');
         setBookingAlert('🚨 This appointment cannot be booked because it overlaps with an unavailable or break time slot.', true);
-        
-        // Shake or vibrate device slightly if supported
         if (navigator.vibrate) navigator.vibrate(100);
         return; 
       } else {
-        // Clear warning states if coordinates slide out onto safe tracks
         bookingModal.classList.remove('is-invalid-time');
       }
 
@@ -2911,11 +2899,9 @@ function showAppointmentEmailPrompt(context) {
 
     setCustomerMode('create');
 
-function setDraftMode() {
-      // FIX: Clean the border status indicators off your inner layout node elements cleanly
+    function setDraftMode() {
       const cardElement = bookingModal.querySelector('.booking-card');
       if (cardElement) cardElement.classList.remove('is-invalid-time');
-      // ADD THIS LINE: Automatically clear the placeholder event from the screen on cancel/close
       const draft = window.calendarInstance?.getEventById('booking-draft-placeholder');
       if (draft) { draft.remove(); }
 
@@ -2943,7 +2929,6 @@ function setDraftMode() {
       setCustomerMode('create');
     }
 
-    // Close modal
     if (closeBookingModalTop) {
       closeBookingModalTop.addEventListener('click', () => {
         if (typeof bookingModal.close === 'function') {
@@ -3013,8 +2998,7 @@ function setDraftMode() {
       });
     }
 
-    // Appointment type change updates duration and validates immediately
-      appointmentTypeSelect.addEventListener('change', function() {
+    appointmentTypeSelect.addEventListener('change', function() {
       if (bookingModal.getAttribute('data-mode') === 'draft') {
         syncBookingDraftTimes();
         return;
@@ -3024,14 +3008,11 @@ function setDraftMode() {
         bookingEndOverrideActive = false;
       }
       applyVisibleTimeInputsToHidden();
-      
-      // Re-run validations when the duration shifts in edit mode
       checkTimeSlotConflicts();
     });
 
     if (bookingStartTimeInput) {
       bookingStartTimeInput.addEventListener('change', function() {
-        // changing start time cancels any end override and recomputes
         bookingEndOverrideActive = false;
         applyVisibleTimeInputsToHidden();
       });
@@ -3039,7 +3020,6 @@ function setDraftMode() {
 
     if (bookingEndTimeInput) {
       bookingEndTimeInput.addEventListener('change', function() {
-        // manual change indicates override
         bookingEndOverrideActive = true;
         applyVisibleTimeInputsToHidden();
       });
@@ -3095,12 +3075,10 @@ function setDraftMode() {
           const endTimePart = (bookingEndTimeInput && bookingEndTimeInput.value) ? bookingEndTimeInput.value + ':00' : getServerTimePartFromDateTime(bookingEnd.value) || startTimePart;
           bookingEnd.value = datePart + ' ' + (endTimePart.length === 8 ? endTimePart : endTimePart + ':00');
         } else {
-          // compute default end from selected type
           const opt = appointmentTypeSelect.options[appointmentTypeSelect.selectedIndex];
           const duration = Number(opt?.dataset?.duration || fallbackDurationMinutes);
           const startDate = new Date(newStart + 'Z');
           const endDate = addMinutes(startDate, duration);
-          // format endDate into server format
           const yyyy = endDate.getUTCFullYear();
           const mm = String(endDate.getUTCMonth() + 1).padStart(2, '0');
           const dd = String(endDate.getUTCDate()).padStart(2, '0');
@@ -3111,14 +3089,12 @@ function setDraftMode() {
           if (bookingEndTimeInput) bookingEndTimeInput.value = `${hh}:${mi}`;
         }
 
-        // update labels
         const calendar = window.calendarInstance;
         const sd = new Date(bookingStart.value + 'Z');
         const ed = new Date(bookingEnd.value + 'Z');
         selectedStartLabel.textContent = formatCalendarDate(calendar, sd);
         selectedEndLabel.textContent = formatCalendarDate(calendar, ed);
 
-        // RUN CONFLICT VERIFICATIONS AFTER RECOMPUTING NEW HIDDEN BOUNDARIES
         setTimeout(checkTimeSlotConflicts, 100);
         
       } catch (e) {
@@ -3132,7 +3108,6 @@ function setDraftMode() {
       
       if (!startIso || !endIso) return false;
 
-      // Safe date formatting translation parsing
       const draftStart = new Date(startIso.replace(' ', 'T') + 'Z');
       const draftEnd = new Date(endIso.replace(' ', 'T') + 'Z');
 
@@ -3140,13 +3115,10 @@ function setDraftMode() {
         return false; 
       }
 
-      // Scan calendar cache for ANY overlapping elements
       const hasTimeConflict = window.calendarInstance.getEvents().some(function(event) {
-        // 1. Ignore our own temporary visual draft placeholder block
         if (event.id === 'booking-draft-placeholder') return false;
         if (event.extendedProps?.isDraftPlaceholder) return false;
         
-        // 2. Ignore the actual appointment block we are currently editing
         if (currentEditingAppointmentId && String(event.id) === String(currentEditingAppointmentId)) {
           return false;
         }
@@ -3154,13 +3126,9 @@ function setDraftMode() {
         const checkStart = event.start;
         const checkEnd = event.end || event.start;
         
-        // 3. Math check: Does our draft track slip inside this event's window bounds?
-        const overlaps = checkStart < draftEnd && checkEnd > draftStart;
-        
-        return overlaps;
+        return checkStart < draftEnd && checkEnd > draftStart;
       });
 
-      // Target the card element for the animation wrapper
       const cardElement = bookingModal.querySelector('.booking-card');
 
       if (hasTimeConflict) {

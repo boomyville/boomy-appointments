@@ -35,6 +35,7 @@ if ($role !== 'admin') {
       --accent-2: #10b981;
       --shadow: 0 24px 70px rgba(15, 23, 42, 0.12);
       --input-bg: #ffffff;
+      --input-text: #0f172a;
     }
 
     @media (prefers-color-scheme: dark) {
@@ -49,6 +50,7 @@ if ($role !== 'admin') {
         --accent-2: #10b981;
         --shadow: 0 24px 70px rgba(0, 0, 0, 0.4);
         --input-bg: #1e293b;
+        --input-text: #f8fafc;
       }
     }
 
@@ -154,8 +156,8 @@ if ($role !== 'admin') {
       border-radius: 16px;
       padding: 13px 14px;
       font: inherit;
-      color: var(--text);
-      background: var(--input-bg);
+      color: var(--input-text) !important;
+      background: var(--input-bg) !important;
     }
 
     .search-box input:focus {
@@ -288,9 +290,13 @@ if ($role !== 'admin') {
       border-radius: 16px;
       padding: 13px 14px;
       font: inherit;
-      color: var(--text);
-      background: var(--input-bg);
+      color: var(--input-text) !important;
+      background: var(--input-bg) !important;
       box-sizing: border-box;
+    }
+
+    .search-row input::placeholder {
+      color: var(--muted);
     }
 
     .search-row input:focus {
@@ -451,11 +457,15 @@ if ($role !== 'admin') {
       border-radius: 14px;
       padding: 12px;
       font: inherit;
-      color: var(--text) !important;
+      color: var(--input-text) !important;
       background: var(--input-bg) !important;
       box-sizing: border-box;
       font-size: 0.95rem;
       margin-bottom: 0;
+    }
+
+    .field input::placeholder {
+      color: var(--muted);
     }
 
     .field input:focus,
@@ -920,4 +930,3 @@ if ($role !== 'admin') {
   </script>
 </body>
 </html>
-

@@ -387,12 +387,12 @@ $csrfToken = csrf_token();
 
     .day-mark {
       position: absolute;
-      bottom: 6px;
-      width: 6px;
-      height: 6px;
+      inset: 0;
       border-radius: 999px;
-      background: currentColor;
-      opacity: 0.72;
+      background: rgba(6, 118, 71, 0.12);
+      border: 1.5px solid rgba(6, 118, 71, 0.35);
+      pointer-events: none;
+      z-index: -1;
     }
 
     .slots-card { padding: 18px; position: sticky; top: 18px; }
@@ -543,7 +543,7 @@ $csrfToken = csrf_token();
 
     .toast {
       position: fixed;
-      right: 18px;
+      left: 18px;
       bottom: 18px;
       max-width: min(420px, calc(100vw - 36px));
       background: var(--panel-strong);
@@ -588,7 +588,7 @@ $csrfToken = csrf_token();
     <section class="hero">
       <div class="eyebrow"><?php echo htmlspecialchars($siteName, ENT_QUOTES, 'UTF-8'); ?> booking</div>
       <h1>Book a visit in four simple steps.</h1>
-      <p>Choose a service and provider, pick a day and time from the custom monthly calendar, then enter customer details and confirm the booking. If we detect multiple customer profiles for the same email and mobile, we will send a verification link instead of creating the appointment immediately.</p>
+      <p>Choose a service and provider, pick a time, enter your details and confirm the booking.</p>
     </section>
 
     <div class="stepper" aria-label="Booking progress">
@@ -602,7 +602,7 @@ $csrfToken = csrf_token();
       <div class="panel-head">
         <div>
           <h2>Appointment details</h2>
-          <p>Select the appointment type and provider first. All providers are assumed to support all appointment types for now.</p>
+          <p>Select the appointment type and provider first.</p>
         </div>
       </div>
       <div class="grid-2">
