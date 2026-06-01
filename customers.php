@@ -387,7 +387,9 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
           <thead>
             <tr>
               <th>Full Name</th>
-              <th>Date of Birth</th>
+              <?php if (!empty($settings['date_of_birth']['display'])): ?>
+                <th>Date of Birth</th>
+              <?php endif; ?>
               <th>Gender</th>
               <th>Email</th>
               <th>Mobile</th>
@@ -534,6 +536,9 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       container.appendChild(alert);
     }
 
+    // Safely reads visibility metrics to avoid JavaScript array length calculation mismatches
+    const isDobColumnVisible = Boolean(settings.date_of_birth && settings.date_of_birth.display);
+
     function getFormData() {
       const data = {};
       const fields = customerForm.querySelectorAll('input, select');
@@ -639,22 +644,30 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     function populateTable(customers) {
       customersTableBody.innerHTML = '';
       if (customers.length === 0) {
-        customersTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted);">No customers yet</td></tr>';
+        // Calculate dynamic colspan based on whether DOB is enabled
+        const activeColspan = isDobColumnVisible ? 7 : 6;
+        customersTableBody.innerHTML = `<tr><td colspan="${activeColspan}" style="text-align:center; color:var(--muted);">No customers yet</td></tr>`;
         customersTable.style.display = 'table';
         return;
       }
 
       customers.forEach(c => {
         const row = document.createElement('tr');
-        row.innerHTML = `
-          <td>${escapeHtml(c.full_name)}</td>
-          <td>${escapeHtml(c.date_of_birth || '-')}</td>
+        
+        // FIX: Build cell tracks sequentially to respect the display settings config variables
+        let rowHtml = `<td>${escapeHtml(c.full_name)}</td>`;
+        if (isDobColumnVisible) {
+          rowHtml += `<td>${escapeHtml(c.date_of_birth || '-')}</td>`;
+        }
+        rowHtml += `
           <td>${escapeHtml(formatGender(c.gender))}</td>
           <td>${escapeHtml(c.email || '-')}</td>
           <td>${escapeHtml(c.mobile || '-')}</td>
           <td>${escapeHtml(formatDateTime(c.date_added || c.created_at || '-'))}</td>
           <td><button type="button" class="secondary customer-edit-btn" style="padding:4px 8px; font-size:0.85rem; margin-bottom:0;">Edit</button></td>
         `;
+        
+        row.innerHTML = rowHtml;
         const editButton = row.querySelector('.customer-edit-btn');
         if (editButton) {
           editButton.addEventListener('click', () => openCustomerModal('edit', c));

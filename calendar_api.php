@@ -26,8 +26,6 @@ try {
     $end = $_GET['end'] ?? null;
 
     if (!$start || !$end) {
-        // FullCalendar will often request with ISO8601 dates; we accept broader input.
-        // If absent, return an empty array rather than an error.
         echo json_encode([]);
         exit;
     }
@@ -39,9 +37,9 @@ try {
     $rangeStart = $rangeStartDate->format('Y-m-d H:i:s');
     $rangeEnd = $rangeEndDate->format('Y-m-d H:i:s');
 
-    // Updated SELECT query to pull contact fields, notes, and prevent index errors
+    // Build base SELECT query for real appointments
     $sql = "SELECT a.id, a.customer_id, a.provider_id, a.appointment_type_id, a.start_time, a.end_time, a.status, a.notes,
-                   c.full_name AS customer_name, c.email AS customer_email, c.mobile AS customer_mobile, t.name AS type_name, t.color_hex
+                    c.full_name AS customer_name, c.email AS customer_email, c.mobile AS customer_mobile, t.name AS type_name, t.color_hex
             FROM appointments a
             LEFT JOIN customers c ON c.id = a.customer_id
             LEFT JOIN appointment_types t ON t.id = a.appointment_type_id
@@ -49,13 +47,36 @@ try {
 
     $params = [$rangeEnd, $rangeStart];
 
+    // Determine target provider IDs context safely
+    $targetProviderIds = [];
+
     if ($isStaff && $role === 'provider') {
         $sql .= ' AND a.provider_id = ?';
         $params[] = (int)$user['id'];
-    } elseif (isset($_GET['provider_id']) && is_numeric($_GET['provider_id']) && $role === 'admin') {
-        $sql .= ' AND a.provider_id = ?';
-        $params[] = (int)$_GET['provider_id'];
+        $targetProviderIds[] = (int)$user['id'];
+    } elseif (!empty($_GET['provider_id'])) {
+        // Explode handles single integers ("2") and dynamic split combinations ("2,4") smoothly
+        $rawIds = explode(',', (string)$_GET['provider_id']);
+        $cleanIds = array_filter(array_map('intval', $rawIds));
+        
+        if (!empty($cleanIds)) {
+            $placeholders = implode(',', array_fill(0, count($cleanIds), '?'));
+            $sql .= " AND a.provider_id IN ($placeholders)";
+            foreach ($cleanIds as $id) {
+                $params[] = $id;
+                $targetProviderIds[] = $id;
+            }
+        }
     }
+    // If no specific providers targeted, load all active providers for unavailability events
+if (empty($targetProviderIds)) {
+    try {
+        $allStmt = $db->query("SELECT id FROM users WHERE role IN ('admin','provider') AND is_active = 1");
+        $targetProviderIds = array_map('intval', $allStmt->fetchAll(PDO::FETCH_COLUMN));
+    } catch (Throwable $e) {
+        $targetProviderIds = [];
+    }
+}
 
     $stmt = $db->prepare($sql);
     $stmt->execute($params);
@@ -66,7 +87,6 @@ try {
         $title = $r['customer_name'] ? $r['customer_name'] : 'Appt #' . $r['id'];
         $color = $r['color_hex'] ?: '#3498db';
 
-        // CRITICAL FIX: Convert "YYYY-MM-DD HH:MM:SS" into standard ISO8601 "YYYY-MM-DDTHH:MM:SSZ"
         $isoStart = str_replace(' ', 'T', $r['start_time']) . 'Z';
         $isoEnd = str_replace(' ', 'T', $r['end_time']) . 'Z';
 
@@ -91,8 +111,80 @@ try {
         ];
     }
 
+    // Append global background breaks
     $breakEvents = get_standard_break_events($rangeStartDate, $rangeEndDate);
     $events = array_merge($events, $breakEvents);
+
+    // =======================================================================
+    // NEW BLOCK: EXTRACT AND INTEGRATE CUSTOM PROVIDER LOCKOUT CONSTRAINTS
+    // REPLACED INTEGRATION BLOCK: FIXING PROVIDER ID MATCHING
+    // =======================================================================
+    if (!empty($targetProviderIds)) {
+        // Convert array to a string of placeholders for the IN clause
+        $placeholders = implode(',', array_fill(0, count($targetProviderIds), '?'));
+
+        // 1. Fetch Single Unavailabilities
+        $stmt = $db->prepare("
+            SELECT id, provider_id, start_datetime, end_datetime, reason 
+            FROM unavailabilities 
+            WHERE type = 'single' AND provider_id IN ($placeholders)
+            AND start_datetime < ? AND end_datetime > ?
+        ");
+        $paramsSingle = array_merge($targetProviderIds, [$rangeEnd, $rangeStart]);
+        $stmt->execute($paramsSingle);
+        
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $events[] = [
+                'id' => 'unavail-single-' . $row['id'],
+                'title' => $row['reason'] ?: 'Unavailable',
+                'start' => str_replace(' ', 'T', $row['start_datetime']) . 'Z',
+                'end' => str_replace(' ', 'T', $row['end_datetime']) . 'Z',
+                'display' => 'background',
+                'classNames' => ['unavail-event'], // <--- ADD THIS
+                'backgroundColor' => 'transparent', // Let the CSS handle the stripes
+                'extendedProps' => ['provider_id' => (int)$row['provider_id'], 'type' => 'unavailability']
+            ];
+        }
+
+        // 2. Fetch Recurring Unavailabilities
+        $stmt = $db->prepare("
+            SELECT id, provider_id, day_of_week, start_time, end_time, reason, rolling_start_date, rolling_end_date 
+            FROM unavailabilities 
+            WHERE type = 'recurring' AND provider_id IN ($placeholders)
+            AND rolling_start_date <= ? 
+            AND (rolling_end_date IS NULL OR rolling_end_date >= ?)
+        ");
+        $paramsRecurring = array_merge($targetProviderIds, [$rangeEndDate->format('Y-m-d'), $rangeStartDate->format('Y-m-d')]);
+        $stmt->execute($paramsRecurring);
+        $recurringRules = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // ... (keep your existing cursor loop logic below here, just ensure $recurringRules is passed)
+        if (!empty($recurringRules)) {
+            $cursor = $rangeStartDate->setTime(0, 0, 0);
+            while ($cursor <= $rangeEndDate) {
+                $currentDayOfWeek = (int) $cursor->format('N');
+                $currentDateStr = $cursor->format('Y-m-d');
+                foreach ($recurringRules as $rule) {
+                    if ((int)$rule['day_of_week'] !== $currentDayOfWeek) continue;
+                    if ($currentDateStr < $rule['rolling_start_date']) continue;
+                    if ($rule['rolling_end_date'] && $currentDateStr > $rule['rolling_end_date']) continue;
+
+                    $events[] = [
+                        'id' => 'unavail-recurring-' . $rule['id'] . '-' . $currentDateStr,
+                        'title' => $rule['reason'] ?: 'Unavailable',
+                        'start' => $currentDateStr . 'T' . $rule['start_time'] . 'Z',
+                        'end' => $currentDateStr . 'T' . $rule['end_time'] . 'Z',
+                        'display' => 'background',
+                        'classNames' => ['unavail-event'], // <--- ADD THIS
+                        'backgroundColor' => 'transparent', // Let the CSS handle the stripes
+                        'extendedProps' => ['provider_id' => $rule['provider_id'], 'type' => 'unavailability']
+                    ];
+                }
+                $cursor = $cursor->modify('+1 day');
+            }
+        }
+    }
+    // =======================================================================
 
     echo json_encode($events);
     exit;

@@ -35,7 +35,6 @@ CREATE TABLE `users` (
   `role` ENUM('admin','provider') NOT NULL DEFAULT 'provider',
   `working_plan` JSON NULL,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
-  `bookable` TINYINT(1) NOT NULL DEFAULT 1,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -45,18 +44,15 @@ CREATE TABLE `users` (
 -- 2B. VERIFICATION TOKENS
 CREATE TABLE `verification` (
   `id` INT UNSIGNED AUTO_INCREMENT,
-  `user_id` INT UNSIGNED NULL,
-  `appointment_id` INT UNSIGNED NULL,
+  `user_id` INT UNSIGNED NOT NULL,
   `code` VARCHAR(64) NOT NULL,
   `task` VARCHAR(32) NOT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   `expires_at` TIMESTAMP NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_verification_code` (`code`),
-  UNIQUE KEY `idx_verification_appointment_task` (`appointment_id`,`task`),
   KEY `idx_verification_user_task` (`user_id`, `task`),
-  CONSTRAINT `fk_verification_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-  CONSTRAINT `fk_verification_appointment` FOREIGN KEY (`appointment_id`) REFERENCES `appointments` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  CONSTRAINT `fk_verification_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2C. LOGIN ATTEMPTS
@@ -121,7 +117,7 @@ CREATE TABLE `breaks` (
 -- 7. APPOINTMENTS
 CREATE TABLE `appointments` (
   `id` INT UNSIGNED AUTO_INCREMENT,
-  `customer_id` INT UNSIGNED NULL,
+  `customer_id` INT UNSIGNED NOT NULL,
   `provider_id` INT UNSIGNED NOT NULL,
   `appointment_type_id` INT UNSIGNED NOT NULL,
   `start_time` DATETIME NOT NULL,
@@ -143,11 +139,26 @@ CREATE TABLE `appointments` (
 CREATE TABLE `unavailabilities` (
   `id` INT UNSIGNED AUTO_INCREMENT,
   `provider_id` INT UNSIGNED NULL,
-  `start_time` DATETIME NOT NULL,
-  `end_time` DATETIME NOT NULL,
-  `reason` VARCHAR(255) NULL,
+  `type` ENUM('single', 'recurring') NOT NULL DEFAULT 'single',
+  
+  -- Used ONLY when type = 'single' (One-off events)
+  `start_datetime` DATETIME NULL DEFAULT NULL,
+  `end_datetime` DATETIME NULL DEFAULT NULL,
+  
+  -- Used ONLY when type = 'recurring' (Rolling patterns)
+  `day_of_week` TINYINT UNSIGNED NULL DEFAULT NULL, -- 1 = Monday, 7 = Sunday (ISO 8601)
+  `start_time` TIME NULL DEFAULT NULL,
+  `end_time` TIME NULL DEFAULT NULL,
+  `rolling_start_date` DATE NULL DEFAULT NULL,
+  `rolling_end_date` DATE NULL DEFAULT NULL,      -- NULL means infinite/indefinite rolling
+  
+  `reason` VARCHAR(255) NULL DEFAULT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  
   PRIMARY KEY (`id`),
-  KEY `idx_unavail_chronology` (`provider_id`,`start_time`,`end_time`),
+  KEY `idx_unavail_provider_type` (`provider_id`, `type`),
+  KEY `idx_unavail_single_dates` (`start_datetime`, `end_datetime`),
+  KEY `idx_unavail_recurring_rules` (`day_of_week`, `start_time`, `end_time`),
   CONSTRAINT `fk_unavail_provider` FOREIGN KEY (`provider_id`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

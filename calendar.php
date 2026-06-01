@@ -208,6 +208,37 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       border-color: rgba(36, 87, 255, 0.5);
     }
 
+    /* Fix: Use precise class targeting */.fc-bg-event.unavail-event {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(245, 158, 11, 0.2),
+    rgba(245, 158, 11, 0.2) 10px,
+    rgba(239, 68, 68, 0.3) 10px,
+    rgba(239, 68, 68, 0.3) 20px
+  ) !important;
+  opacity: 1 !important;
+  isolation: isolate;
+}
+
+.fc-bg-event.unavail-event::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--fc-page-bg-color, #fff);
+  z-index: -1;
+}
+
+.fc-bg-event.standard-break-event {
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(245, 158, 11, 0.2),
+    rgba(245, 158, 11, 0.2) 10px,
+    rgba(239, 68, 68, 0.3) 10px,
+    rgba(239, 68, 68, 0.3) 20px
+  ) !important;
+  opacity: 1 !important;
+}
+
     .fc .fc-timegrid-event-harness.provider-split-left {
       left: 0% !important;
       right: 50% !important;
@@ -1892,28 +1923,40 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     }
 
     function getFilteredCalendarEvents(rawEvents) {
-      const eventsArray = Array.isArray(rawEvents) ? rawEvents : [];
-      const primaryId = Number(selectedPrimaryProviderId || 0);
-      const secondaryId = Number(selectedSecondaryProviderId || 0);
-      const dualEnabled = isThreeDayOrDayView() && secondaryId > 0;
+  const eventsArray = Array.isArray(rawEvents) ? rawEvents : [];
+  const primaryId = Number(selectedPrimaryProviderId || 0);
+  const secondaryId = Number(selectedSecondaryProviderId || 0);
+  const dualEnabled = isThreeDayOrDayView() && secondaryId > 0;
 
-      return eventsArray.filter(function(event) {
-        if (!event || event.display === 'background') {
-          return true;
-        }
+  return eventsArray.filter(function(event) {
+    if (!event) return false;
 
-        const providerValue = Number((event.extendedProps && event.extendedProps.provider_id) || event.provider_id || 0);
-        if (!providerValue) {
-          return false;
-        }
+    // Breaks have no provider_id — always show them
+    if (event.display === 'background') {
+      const eventProviderId = Number(
+        (event.extendedProps && event.extendedProps.provider_id) || 0
+      );
+      if (!eventProviderId) return true; // global breaks, always show
 
-        if (dualEnabled) {
-          return providerValue === primaryId || providerValue === secondaryId;
-        }
-
-        return primaryId > 0 ? providerValue === primaryId : true;
-      });
+      // Provider-scoped unavailabilities — filter by selected provider(s)
+      if (dualEnabled) {
+        return eventProviderId === primaryId || eventProviderId === secondaryId;
+      }
+      return primaryId > 0 ? eventProviderId === primaryId : true;
     }
+
+    // Regular appointments
+    const providerValue = Number(
+      (event.extendedProps && event.extendedProps.provider_id) || event.provider_id || 0
+    );
+    if (!providerValue) return false;
+
+    if (dualEnabled) {
+      return providerValue === primaryId || providerValue === secondaryId;
+    }
+    return primaryId > 0 ? providerValue === primaryId : true;
+  });
+}
 
     function addMinutes(date, minutes) {
       return new Date(date.getTime() + minutes * 60000);
@@ -2318,8 +2361,9 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       editable: isStaff,
       eventClick: function(info) {
         const event = info.event;
+if (event.display === 'background') return;
 
-        if (event.extendedProps?.isDraftPlaceholder || event.id === 'booking-draft-placeholder') {
+  if (event.extendedProps?.isDraftPlaceholder || event.id === 'booking-draft-placeholder') {
           currentBookingStartDate = event.start;
           currentBookingEndDate = event.end ? event.end : addMinutes(event.start, bookingSnapMinutes);
           
@@ -2866,15 +2910,19 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       notesExpanded = !notesExpanded;
       syncNotesVisibility();
     }
+function isAppointmentInPast(startTimeValue) {
+  const raw = String(startTimeValue || '').trim();
+  if (!raw) return false;
 
-    function isAppointmentInPast(startTimeValue) {
-      const startDate = parseDateValue(startTimeValue);
-      if (Number.isNaN(startDate.getTime())) {
-        return false;
-      }
+  // Parse as server local time, not UTC
+  const normalized = raw.replace(' ', 'T');
+  const serverClockDate = new Date(normalized + 'Z');
+  const instant = serverClockDateToInstant(serverClockDate);
 
-      return startDate.getTime() < getServerNowDate().getTime();
-    }
+  if (Number.isNaN(instant.getTime())) return false;
+
+  return instant.getTime() < getServerNowDate().getTime();
+}
 
     function isBookingWithinDeadline(startTimeValue) {
       const startDate = parseDateValue(startTimeValue);
@@ -3032,6 +3080,7 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       const selectedCustomerValue = selectedCustomerId.value.trim();
       const firstNameValue = newCustomerFirstName ? newCustomerFirstName.value.trim() : '';
       const lastNameValue = newCustomerLastName ? newCustomerLastName.value.trim() : '';
+      const customerId = selectedCustomerId.value.trim(); // This is the hidden input field
       const customerDob = newCustomerDob.value.trim();
       const customerGender = newCustomerGender ? newCustomerGender.value.trim() : '';
       const customerEmail = newCustomerEmail.value.trim();
@@ -3050,12 +3099,25 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       }
 
       if (checkTimeSlotConflicts()) {
+        setBookingAlert('🚨 This time slot is unavailable due to a break, existing appointment, or lockout.', true);
         return; 
       }
 
       const draftStart = new Date(bookingStart.value + 'Z');
       const draftEnd = new Date(bookingEnd.value + 'Z');
 
+      const hasBackgroundConflict = window.calendarInstance.getEvents().some(function(event) {
+      if (event.display === 'background') {
+          return event.start < draftEnd && (event.end || event.start) > draftStart;
+        }
+        return false;
+      });
+      if (hasBackgroundConflict) {
+        bookingModal.classList.add('is-invalid-time');
+        setBookingAlert('🚨 You are trying to book over a break or an unavailable time slot.', true);
+        if (navigator.vibrate) navigator.vibrate(100);
+        return;
+      }
       const hasTimeConflict = window.calendarInstance.getEvents().some(function(event) {
         if (event.display !== 'background') return false;
         
@@ -3088,7 +3150,7 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       if (isAppointmentInPast(startTime)) {
         confirmationQueue.push('This appointment is in the past.');
       } else if (isBookingWithinDeadline(startTime)) {
-        confirmationQueue.push('This booking is within the ' + bookingDeadlineHours + '-hour booking deadline.');
+        confirmationQueue.push('This booking is within the ' + bookingDeadlineHours + '-hour booking deadline or.');
       }
       if (isBookingOutsideDisplayTime()) {
         confirmationQueue.push('This booking is outside the configured display time (' + visibleStartTime.slice(0, 5) + ' to ' + visibleEndTime.slice(0, 5) + ').');
@@ -3419,52 +3481,57 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       }
     }
 
-    function checkTimeSlotConflicts() {
-      const startIso = bookingStart.value.trim();
-      const endIso = bookingEnd.value.trim();
-      const selectedBookingProviderId = Number(providerSelect && providerSelect.value ? providerSelect.value : 0);
-      
-      if (!startIso || !endIso) return false;
+  function checkTimeSlotConflicts() {
+  const startIso = bookingStart.value.trim();
+  const endIso = bookingEnd.value.trim();
+  const selectedBookingProviderId = Number(providerSelect?.value || 0);
+  
+  if (!startIso || !endIso) return false;
 
-      const draftStart = new Date(startIso.replace(' ', 'T') + 'Z');
-      const draftEnd = new Date(endIso.replace(' ', 'T') + 'Z');
+  const draftStart = new Date(startIso.replace(' ', 'T') + 'Z');
+  const draftEnd = new Date(endIso.replace(' ', 'T') + 'Z');
 
-      if (Number.isNaN(draftStart.getTime()) || Number.isNaN(draftEnd.getTime())) {
-        return false; 
+  if (Number.isNaN(draftStart.getTime())) return false;
+
+  const hasTimeConflict = window.calendarInstance.getEvents().some(function(event) {
+    if (event.id === 'booking-draft-placeholder' || event.extendedProps?.isDraftPlaceholder) return false;
+    if (currentEditingAppointmentId && String(event.id) === String(currentEditingAppointmentId)) return false;
+
+    // CHECK BACKGROUND EVENTS (Breaks and Unavailabilities)
+    if (event.display === 'background') {
+      // Only conflict if it has a specific identifier
+      if (event.classNames.includes('unavail-event') || event.classNames.includes('standard-break-event')) {
+         return event.start < draftEnd && (event.end || event.start) > draftStart;
       }
-
-      const hasTimeConflict = window.calendarInstance.getEvents().some(function(event) {
-        if (event.id === 'booking-draft-placeholder') return false;
-        if (event.extendedProps?.isDraftPlaceholder) return false;
-        if (event.display === 'background') return false;
-        
-        if (currentEditingAppointmentId && String(event.id) === String(currentEditingAppointmentId)) {
-          return false;
-        }
-
-        const eventProviderId = Number(event.extendedProps?.provider_id || 0);
-        if (selectedBookingProviderId > 0 && eventProviderId > 0 && eventProviderId !== selectedBookingProviderId) {
-          return false;
-        }
-
-        const checkStart = event.start;
-        const checkEnd = event.end || event.start;
-        
-        return checkStart < draftEnd && checkEnd > draftStart;
-      });
-
-      const cardElement = bookingModal.querySelector('.booking-card');
-
-      if (hasTimeConflict) {
-        if (cardElement) cardElement.classList.add('is-invalid-time'); 
-        if (makeBookingBtn) makeBookingBtn.disabled = true;
-        return true;
-      } else {
-        if (cardElement) cardElement.classList.remove('is-invalid-time'); 
-        if (makeBookingBtn) makeBookingBtn.disabled = false;
-        return false;
-      }
+      return false; // Ignore general business hours background
     }
+
+    // CHECK APPOINTMENTS
+    const eventProviderId = Number(event.extendedProps?.provider_id || 0);
+    if (selectedBookingProviderId > 0 && eventProviderId > 0 && eventProviderId !== selectedBookingProviderId) {
+      return false;
+    }
+
+    return event.start < draftEnd && (event.end || event.start) > draftStart;
+  });
+
+  const cardElement = bookingModal.querySelector('.booking-card');
+  if (hasTimeConflict) {
+    if (cardElement) cardElement.classList.add('is-invalid-time'); 
+    if (makeBookingBtn) {
+        makeBookingBtn.disabled = true;
+        setBookingAlert('🚨 Selected time overlaps with an appointment, break, or unavailability.', true);
+    }
+    return true;
+  } else {
+    if (cardElement) cardElement.classList.remove('is-invalid-time'); 
+    if (makeBookingBtn) {
+        makeBookingBtn.disabled = false;
+        setBookingAlert('');
+    }
+    return false;
+  }
+}
   </script>
 
   <script src="assets/js/global.js"></script>

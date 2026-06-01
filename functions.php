@@ -7,6 +7,7 @@ require_once __DIR__ . '/config.php';
 function init_session(): void
 {
     if (session_status() === PHP_SESSION_NONE) {
+        // Harden session cookie params
         $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
         session_set_cookie_params([
             'lifetime' => 0,
@@ -37,13 +38,34 @@ function get_db(): PDO
 
     $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
     ensure_customer_schema($pdo);
-    ensure_user_schema($pdo); // Fixed scope pipeline
     ensure_breaks_schema($pdo);
-    ensure_verification_schema($pdo);
+    ensure_user_schema($pdo);
     ensure_appointment_schema($pdo);
     return $pdo;
 }
+function ensure_user_schema(PDO $db): void
+{
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
 
+    try {
+        $tableExists = (bool) $db->query("SHOW TABLES LIKE 'users'")->fetch();
+        if (!$tableExists) {
+            return;
+        }
+
+        // Checks for the bookable column layout flag, adding it if missing
+        $hasBookable = (bool) $db->query("SHOW COLUMNS FROM users LIKE 'bookable'")->fetch();
+        if (!$hasBookable) {
+            $db->exec("ALTER TABLE users ADD COLUMN bookable TINYINT(1) NOT NULL DEFAULT 1");
+        }
+    } catch (Throwable $e) {
+        // Safe execution catch
+    }
+}
 function ensure_customer_schema(PDO $db): void
 {
     static $checked = false;
@@ -65,41 +87,7 @@ function ensure_customer_schema(PDO $db): void
             $db->exec("ALTER TABLE customers ADD COLUMN gender ENUM('male','female','other','unknown') NOT NULL DEFAULT 'unknown' AFTER date_added");
         }
     } catch (Throwable $e) {
-        // Safe fallback tracking
-    }
-}
-
-function ensure_user_schema(PDO $db): void
-{
-    static $checked = false;
-    if ($checked) {
-        return;
-    }
-    $checked = true;
-
-    try {
-        $tableExists = (bool) $db->query("SHOW TABLES LIKE 'users'")->fetch();
-        if (!$tableExists) {
-            return;
-        }
-
-        $columns = [
-            'first_name' => "ALTER TABLE users ADD COLUMN first_name VARCHAR(64) NULL AFTER full_name", 
-            'last_name'  => "ALTER TABLE users ADD COLUMN last_name VARCHAR(64) NULL AFTER first_name", 
-            'phone'      => "ALTER TABLE users ADD COLUMN phone VARCHAR(32) NULL AFTER last_name", 
-            'role'       => "ALTER TABLE users ADD COLUMN role ENUM('admin','provider') NOT NULL DEFAULT 'provider' AFTER phone", 
-            'is_active'  => "ALTER TABLE users ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1", 
-            'bookable'   => "ALTER TABLE users ADD COLUMN bookable TINYINT(1) NOT NULL DEFAULT 1 AFTER is_active"
-        ];
-
-        foreach ($columns as $column => $sql) {
-            $hasColumn = (bool) $db->query("SHOW COLUMNS FROM users LIKE '" . $column . "'")->fetch();
-            if (!$hasColumn) {
-                $db->exec($sql);
-            }
-        }
-    } catch (Throwable $e) {
-        // Ignore fallback
+        // Keep the app running even if the schema cannot be updated automatically.
     }
 }
 
@@ -115,20 +103,20 @@ function ensure_breaks_schema(PDO $db): void
         $tableExists = (bool) $db->query("SHOW TABLES LIKE 'breaks'")->fetch();
         if (!$tableExists) {
             $db->exec("CREATE TABLE `breaks` (
-              `id` INT UNSIGNED AUTO_INCREMENT,
-              `day_of_week` TINYINT UNSIGNED NULL,
-              `start_time` TIME NOT NULL,
-              `end_time` TIME NOT NULL,
-              `is_active` TINYINT(1) NOT NULL DEFAULT 1,
-              `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-              `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-              PRIMARY KEY (`id`),
-              KEY `idx_breaks_day_time` (`day_of_week`,`start_time`,`end_time`),
-              KEY `idx_breaks_active` (`is_active`)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+  `id` INT UNSIGNED AUTO_INCREMENT,
+  `day_of_week` TINYINT UNSIGNED NULL,
+  `start_time` TIME NOT NULL,
+  `end_time` TIME NOT NULL,
+  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_breaks_day_time` (`day_of_week`,`start_time`,`end_time`),
+  KEY `idx_breaks_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         }
     } catch (Throwable $e) {
-        // Ignore fallback
+        // Ignore schema bootstrap failures so the app can continue running.
     }
 }
 
@@ -141,11 +129,6 @@ function ensure_appointment_schema(PDO $db): void
     $checked = true;
 
     try {
-        $hasCustomerIdNullable = (bool) $db->query("SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'appointments' AND COLUMN_NAME = 'customer_id' AND IS_NULLABLE = 'YES'")->fetch();
-        if (!$hasCustomerIdNullable) {
-            $db->exec("ALTER TABLE appointments MODIFY customer_id INT UNSIGNED NULL");
-        }
-
         $hasNotes = (bool) $db->query("SHOW COLUMNS FROM appointments LIKE 'notes'")->fetch();
         if (!$hasNotes) {
             $db->exec("ALTER TABLE appointments ADD COLUMN notes TEXT NULL AFTER status");
@@ -163,60 +146,7 @@ function ensure_appointment_schema(PDO $db): void
             }
         }
     } catch (Throwable $e) {
-        // Ignore fallback
-    }
-}
-
-function ensure_verification_schema(PDO $db): void
-{
-    static $checked = false;
-    if ($checked) {
-        return;
-    }
-    $checked = true;
-
-    try {
-        $tableExists = (bool) $db->query("SHOW TABLES LIKE 'verification'")->fetch();
-        if (!$tableExists) {
-            $db->exec("CREATE TABLE `verification` (
-              `id` INT UNSIGNED AUTO_INCREMENT,
-              `user_id` INT UNSIGNED NULL,
-              `appointment_id` INT UNSIGNED NULL,
-              `code` VARCHAR(64) NOT NULL,
-              `task` VARCHAR(32) NOT NULL,
-              `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-              `expires_at` TIMESTAMP NULL,
-              PRIMARY KEY (`id`),
-              UNIQUE KEY `idx_verification_code` (`code`),
-              UNIQUE KEY `idx_verification_appointment_task` (`appointment_id`, `task`),
-              KEY `idx_verification_user_task` (`user_id`, `task`),
-              CONSTRAINT `fk_verification_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-              CONSTRAINT `fk_verification_appointment` FOREIGN KEY (`appointment_id`) REFERENCES `appointments` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
-            return;
-        }
-
-        $hasAppointmentId = (bool) $db->query("SHOW COLUMNS FROM verification LIKE 'appointment_id'")->fetch();
-        if (!$hasAppointmentId) {
-            $db->exec("ALTER TABLE verification ADD COLUMN appointment_id INT UNSIGNED NULL AFTER user_id");
-        }
-
-        $userIdNullable = (bool) $db->query("SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'verification' AND COLUMN_NAME = 'user_id' AND IS_NULLABLE = 'YES'")->fetch();
-        if (!$userIdNullable) {
-            $db->exec("ALTER TABLE verification MODIFY user_id INT UNSIGNED NULL");
-        }
-
-        $hasAppointmentIndex = (bool) $db->query("SHOW INDEX FROM verification WHERE Key_name = 'idx_verification_appointment_task'")->fetch();
-        if (!$hasAppointmentIndex) {
-            $db->exec("CREATE UNIQUE INDEX idx_verification_appointment_task ON verification (appointment_id, task)");
-        }
-
-        $hasAppointmentFk = (bool) $db->query("SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'verification' AND COLUMN_NAME = 'appointment_id' AND REFERENCED_TABLE_NAME = 'appointments' LIMIT 1")->fetch();
-        if (!$hasAppointmentFk) {
-            $db->exec("ALTER TABLE verification ADD CONSTRAINT fk_verification_appointment FOREIGN KEY (appointment_id) REFERENCES appointments (id) ON DELETE CASCADE ON UPDATE CASCADE");
-        }
-    } catch (Throwable $e) {
-        // Ignore fallback
+        // Ignore schema bootstrap failures so the app can continue running.
     }
 }
 
@@ -228,8 +158,13 @@ function normalize_break_day_of_week(?string $value): ?int
     }
 
     $dayMap = [
-        'monday' => 1, 'tuesday' => 2, 'wednesday' => 3, 'thursday' => 4,
-        'friday' => 5, 'saturday' => 6, 'sunday' => 7,
+        'monday' => 1,
+        'tuesday' => 2,
+        'wednesday' => 3,
+        'thursday' => 4,
+        'friday' => 5,
+        'saturday' => 6,
+        'sunday' => 7,
     ];
 
     if (isset($dayMap[$raw])) {
@@ -249,8 +184,14 @@ function normalize_break_day_of_week(?string $value): ?int
 function format_break_day_label(?int $dayOfWeek): string
 {
     return match ($dayOfWeek) {
-        1 => 'Monday', 2 => 'Tuesday', 3 => 'Wednesday', 4 => 'Thursday',
-        5 => 'Friday', 6 => 'Saturday', 7 => 'Sunday', default => 'Every day',
+        1 => 'Monday',
+        2 => 'Tuesday',
+        3 => 'Wednesday',
+        4 => 'Thursday',
+        5 => 'Friday',
+        6 => 'Saturday',
+        7 => 'Sunday',
+        default => 'Every day',
     };
 }
 
@@ -456,10 +397,11 @@ function get_standard_break_events(DateTimeImmutable $rangeStart, DateTimeImmuta
     }
 }
 
+// User helpers
 function get_user_by_email(string $email): ?array
 {
     $db = get_db();
-    $stmt = $db->prepare('SELECT id, email, password_hash, full_name, first_name, last_name, phone, role, is_active, bookable FROM users WHERE email = ? LIMIT 1');
+    $stmt = $db->prepare('SELECT id, email, password_hash, full_name, first_name, last_name, phone, role, is_active FROM users WHERE email = ? LIMIT 1');
     $stmt->execute([$email]);
     $row = $stmt->fetch();
     return $row ?: null;
@@ -469,17 +411,18 @@ function create_user(string $email, string $password, string $full_name, string 
 {
     $db = get_db();
     $hash = password_hash($password, PASSWORD_DEFAULT);
-    $stmt = $db->prepare('INSERT INTO users (email, password_hash, full_name, first_name, last_name, phone, role, is_active, bookable) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    $stmt->execute([$email, $hash, $full_name, $first_name, $last_name, $phone, $role, 1, 1]);
+    $stmt = $db->prepare('INSERT INTO users (email, password_hash, full_name, first_name, last_name, phone, role, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt->execute([$email, $hash, $full_name, $first_name, $last_name, $phone, $role, 1]);
     return (int)$db->lastInsertId();
 }
 
-function create_user_with_active(string $email, string $password, string $full_name, string $role = 'admin', int $is_active = 1, ?string $first_name = null, ?string $last_name = null, ?string $phone = null, int $bookable = 1): int
+// Create user with explicit is_active flag
+function create_user_with_active(string $email, string $password, string $full_name, string $role = 'admin', int $is_active = 1, ?string $first_name = null, ?string $last_name = null, ?string $phone = null): int
 {
     $db = get_db();
     $hash = password_hash($password, PASSWORD_DEFAULT);
-    $stmt = $db->prepare('INSERT INTO users (email, password_hash, full_name, first_name, last_name, phone, role, is_active, bookable) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    $stmt->execute([$email, $hash, $full_name, $first_name, $last_name, $phone, $role, $is_active, $bookable]);
+    $stmt = $db->prepare('INSERT INTO users (email, password_hash, full_name, first_name, last_name, phone, role, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt->execute([$email, $hash, $full_name, $first_name, $last_name, $phone, $role, $is_active]);
     return (int)$db->lastInsertId();
 }
 
@@ -504,6 +447,7 @@ function get_max_admin_users(): int
     if (defined('MAX_ADMIN_USERS')) {
         return max(1, (int) MAX_ADMIN_USERS);
     }
+
     return 1;
 }
 
@@ -537,17 +481,22 @@ function require_login(): void
     }
 }
 
+// Clear session and cookies to log the user out
 function logout_user(): void
 {
     init_session();
+    // Clear session array
     $_SESSION = [];
+    // Remove session cookie if used
     if (ini_get('session.use_cookies')) {
         $params = session_get_cookie_params();
         setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'] ?? false, $params['httponly'] ?? true);
     }
+    // Destroy session
     @session_destroy();
 }
 
+// CSRF helpers
 function csrf_token(): string
 {
     init_session();
@@ -564,6 +513,7 @@ function verify_csrf_token(?string $token): bool
     return hash_equals($_SESSION['csrf_token'], (string)$token);
 }
 
+// Settings helpers
 function get_setting(string $key, $default = null)
 {
     try {
@@ -573,7 +523,7 @@ function get_setting(string $key, $default = null)
         $row = $stmt->fetch();
         if ($row && isset($row['setting_value'])) return $row['setting_value'];
     } catch (Throwable $e) {
-        // Fallback default
+        // ignore and return default
     }
     return $default;
 }
@@ -589,7 +539,11 @@ function get_site_name(): string
 {
     $appName = APP_NAME ?? 'Boomy Appointments';
     $siteName = trim((string) get_setting('site_name', $appName));
-    return $siteName === '' ? $appName : $siteName;
+    if ($siteName === '') {
+        $siteName = $appName;
+    }
+
+    return $siteName;
 }
 
 function get_support_contact_message(?string $siteName = null): string
@@ -605,39 +559,61 @@ function get_support_contact_message(?string $siteName = null): string
     if ($supportEmail !== '' && $supportNumber !== '') {
         return 'Please contact ' . $resolvedSiteName . ' via ' . $supportEmail . ' or ' . $supportNumber . ' for further help.';
     }
+
     if ($supportEmail !== '') {
         return 'Please contact ' . $resolvedSiteName . ' via ' . $supportEmail . ' for further help.';
     }
+
     if ($supportNumber !== '') {
         return 'Please contact ' . $resolvedSiteName . ' via ' . $supportNumber . ' for further help.';
     }
+
     return 'Please contact ' . $resolvedSiteName . ' for extra help.';
 }
 
+// Return server time formatted. Attempts to use server time; if unavailable uses timezone from config
 function get_time(?string $format = null): string
 {
+    // Prefer using PHP's DateTime with the server timezone
     try {
         $tz = @date_default_timezone_get() ?: 'UTC';
         $dt = new DateTimeImmutable('now', new DateTimeZone($tz));
     } catch (Throwable $e) {
+        // Fallback to config timezone if set
         $fallback = 'UTC';
         if (defined('TZ') && TZ) {
             $fallback = TZ;
         } elseif (defined('APP_TIMEZONE')) {
             $fallback = APP_TIMEZONE;
+        } else {
+            // try to parse configured timezone from config.php by re-reading, but keep UTC otherwise
+            $fallback = 'UTC';
         }
         $dt = new DateTimeImmutable('now', new DateTimeZone($fallback));
     }
 
-    return $format ? $dt->format($format) : $dt->format(DateTime::ATOM);
+    if ($format) {
+        // support both PHP date formats and common tokens
+        return $dt->format($format);
+    }
+    return $dt->format(DateTime::ATOM);
 }
 
 function get_app_timezone_name(): string
 {
     $timezone = @date_default_timezone_get();
-    if ($timezone) return $timezone;
-    if (defined('TZ') && TZ) return TZ;
-    if (defined('APP_TIMEZONE') && APP_TIMEZONE) return APP_TIMEZONE;
+    if ($timezone) {
+        return $timezone;
+    }
+
+    if (defined('TZ') && TZ) {
+        return TZ;
+    }
+
+    if (defined('APP_TIMEZONE') && APP_TIMEZONE) {
+        return APP_TIMEZONE;
+    }
+
     return 'UTC';
 }
 
@@ -655,7 +631,9 @@ function get_app_root_url(): string
     }
 
     $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''), '/');
-    if ($host === '') $host = 'localhost';
+    if ($host === '') {
+        $host = 'localhost';
+    }
 
     $script_dir = str_replace('\\', '/', dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '')));
     $script_dir = trim($script_dir, '/');
@@ -664,6 +642,7 @@ function get_app_root_url(): string
     if ($script_dir !== '' && $script_dir !== '.') {
         $root_url .= '/' . $script_dir;
     }
+
     return rtrim($root_url, '/');
 }
 
@@ -673,11 +652,14 @@ function build_app_url(string $path, array $query = []): string
     if (!empty($query)) {
         $url .= '?' . http_build_query($query);
     }
+
     return $url;
 }
 
+// Email validation
 function validate_email_format(string $email): bool
 {
+    // Basic x@y.z format check
     return (bool) filter_var($email, FILTER_VALIDATE_EMAIL);
 }
 
@@ -688,14 +670,17 @@ function get_email_domain_whitelist(): array
     return array_filter(array_map('trim', explode("\n", $setting)));
 }
 
+// Get the client's IP address (tries common proxy headers)
 function get_client_ip(): string
 {
     $ip = '';
     if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
         $ip = $_SERVER['HTTP_CLIENT_IP'];
     } elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+        // may contain comma-separated list of IPs; take the first public one
         $list = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
         $list = array_map('trim', $list);
+        // return the last (closest to client) or first? use first non-private
         foreach ($list as $candidate) {
             if (filter_var($candidate, FILTER_VALIDATE_IP)) {
                 $ip = $candidate;
@@ -708,6 +693,7 @@ function get_client_ip(): string
     return (string)$ip;
 }
 
+// Insert a login attempt record
 function insert_login_attempt(?string $username, bool $success): void
 {
     try {
@@ -717,7 +703,7 @@ function insert_login_attempt(?string $username, bool $success): void
         $ua = $_SERVER['HTTP_USER_AGENT'] ?? null;
         $stmt->execute([$ip ?: null, $username ?: null, $success ? 1 : 0, $ua]);
     } catch (Throwable $e) {
-        // Auth log catch
+        // swallow errors; logging should not break auth
     }
 }
 
@@ -730,7 +716,8 @@ function get_email_domain_blacklist(): array
 
 function is_email_whitelist_enabled(): bool
 {
-    return (bool) (int) get_setting('email_whitelist_enabled', '0');
+    $setting = get_setting('email_whitelist_enabled', '0');
+    return (bool) (int) $setting;
 }
 
 function validate_email(string $email, bool $enforce_domain_rules = true): string|bool
@@ -739,11 +726,13 @@ function validate_email(string $email, bool $enforce_domain_rules = true): strin
     if (!validate_email_format($email)) {
         return 'Invalid email format';
     }
+
     if (!$enforce_domain_rules) {
         return true;
     }
 
     list($local, $domain) = explode('@', $email);
+
     $whitelist = get_email_domain_whitelist();
     $blacklist = get_email_domain_blacklist();
 
@@ -756,9 +745,11 @@ function validate_email(string $email, bool $enforce_domain_rules = true): strin
             return 'Email domain is blocked';
         }
     }
+
     return true;
 }
 
+// Password validation (registration only)
 function get_password_requirements(): array
 {
     return [
@@ -776,27 +767,44 @@ function validate_password(string $password): string|bool
     $req = get_password_requirements();
     $len = strlen($password);
 
-    if ($len < $req['min_length']) return "Password must be at least {$req['min_length']} characters";
-    if ($len > $req['max_length']) return "Password must not exceed {$req['max_length']} characters";
-    if ($req['require_lowercase'] && !preg_match('/[a-z]/', $password)) return 'Password must contain at least one lowercase letter';
-    if ($req['require_uppercase'] && !preg_match('/[A-Z]/', $password)) return 'Password must contain at least one uppercase letter';
-    if ($req['require_number'] && !preg_match('/[0-9]/', $password)) return 'Password must contain at least one number';
-    if ($req['require_symbol'] && !preg_match('/[!@#$%^&*()_+\-=\[\]{};:\'",.<>?\/\\|`~]/', $password)) return 'Password must contain at least one symbol';
+    if ($len < $req['min_length']) {
+        return "Password must be at least {$req['min_length']} characters";
+    }
+    if ($len > $req['max_length']) {
+        return "Password must not exceed {$req['max_length']} characters";
+    }
+
+    if ($req['require_lowercase'] && !preg_match('/[a-z]/', $password)) {
+        return 'Password must contain at least one lowercase letter';
+    }
+    if ($req['require_uppercase'] && !preg_match('/[A-Z]/', $password)) {
+        return 'Password must contain at least one uppercase letter';
+    }
+    if ($req['require_number'] && !preg_match('/[0-9]/', $password)) {
+        return 'Password must contain at least one number';
+    }
+    if ($req['require_symbol'] && !preg_match('/[!@#$%^&*()_+\-=\[\]{};:\'",.<>?\/\\|`~]/', $password)) {
+        return 'Password must contain at least one symbol';
+    }
 
     return true;
 }
 
+// Verification tokens (password reset, appointment confirmation, etc.)
 function create_verification_token(int $user_id, string $task = 'password_reset', int $expiry_minutes = 60): string
 {
     $db = get_db();
     $code = bin2hex(random_bytes(32));
     $expires_at = date('Y-m-d H:i:s', time() + ($expiry_minutes * 60));
     
+    // Delete old tokens for this user+task
     $stmt = $db->prepare('DELETE FROM verification WHERE user_id = ? AND task = ?');
     $stmt->execute([$user_id, $task]);
     
+    // Create new token
     $stmt = $db->prepare('INSERT INTO verification (user_id, code, task, expires_at) VALUES (?, ?, ?, ?)');
     $stmt->execute([$user_id, $code, $task, $expires_at]);
+    
     return $code;
 }
 
@@ -825,44 +833,7 @@ function delete_verification_token(string $code): void
     $stmt->execute([$code]);
 }
 
-function create_appointment_verification_token(int $appointmentId, int $expiry_minutes = 60): string
-{
-    $db = get_db();
-    $code = bin2hex(random_bytes(32));
-    $expiresAt = date('Y-m-d H:i:s', time() + (max(1, $expiry_minutes) * 60));
-
-    $stmt = $db->prepare('DELETE FROM verification WHERE appointment_id = ? AND task = ?');
-    $stmt->execute([$appointmentId, 'appointment_booking']);
-
-    $stmt = $db->prepare('INSERT INTO verification (appointment_id, code, task, expires_at) VALUES (?, ?, ?, ?)');
-    $stmt->execute([$appointmentId, $code, 'appointment_booking', $expiresAt]);
-    return $code;
-}
-
-function get_appointment_verification_by_code(string $code): ?array
-{
-    try {
-        $db = get_db();
-        $stmt = $db->prepare('SELECT id, user_id, appointment_id, code, task, created_at, expires_at FROM verification WHERE code = ? AND task = ? AND (expires_at IS NULL OR expires_at > NOW()) LIMIT 1');
-        $stmt->execute([$code, 'appointment_booking']);
-        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
-    } catch (Throwable $e) {
-        return null;
-    }
-}
-
-function get_appointment_verification_by_appointment_id(int $appointmentId): ?array
-{
-    try {
-        $db = get_db();
-        $stmt = $db->prepare('SELECT id, user_id, appointment_id, code, task, created_at, expires_at FROM verification WHERE appointment_id = ? AND task = ? LIMIT 1');
-        $stmt->execute([$appointmentId, 'appointment_booking']);
-        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
-    } catch (Throwable $e) {
-        return null;
-    }
-}
-
+// Collect email / SMTP diagnostics without attempting to send
 function email_diagnostics(string $to_email, string $subject): array
 {
     $smtp_host = get_setting('smtp_host');
@@ -872,19 +843,19 @@ function email_diagnostics(string $to_email, string $subject): array
     $mail_from_address = get_setting('mail_from_address');
     $mail_from_name = get_setting('mail_from_name', APP_NAME ?? 'Boomy Appointments');
 
-    $debug = [
-        "SMTP Host: " . ($smtp_host ?: '(not set)'),
-        "SMTP Port: $smtp_port",
-        "SMTP Encryption: $smtp_encryption",
-        "From Address: " . ($mail_from_address ?: '(not set)'),
-        "From Name: $mail_from_name",
-        "To: $to_email",
-        "Subject: $subject",
-        "PHP Version: " . PHP_VERSION,
-        "OpenSSL extension: " . (extension_loaded('openssl') ? 'loaded' : 'NOT loaded'),
-        "cURL extension: " . (extension_loaded('curl') ? 'loaded' : 'NOT loaded'),
-        "Filesystem writable check (phpmailer/): " . (is_writable(__DIR__ . '/phpmailer') ? 'writable' : 'not writable or not present')
-    ];
+    $debug = [];
+    $debug[] = "SMTP Host: " . ($smtp_host ?: '(not set)');
+    $debug[] = "SMTP Port: $smtp_port";
+    $debug[] = "SMTP Encryption: $smtp_encryption";
+    $debug[] = "From Address: " . ($mail_from_address ?: '(not set)');
+    $debug[] = "From Name: $mail_from_name";
+    $debug[] = "To: $to_email";
+    $debug[] = "Subject: $subject";
+
+    $debug[] = "PHP Version: " . PHP_VERSION;
+    $debug[] = "OpenSSL extension: " . (extension_loaded('openssl') ? 'loaded' : 'NOT loaded');
+    $debug[] = "cURL extension: " . (extension_loaded('curl') ? 'loaded' : 'NOT loaded');
+    $debug[] = "Filesystem writable check (phpmailer/): " . (is_writable(__DIR__ . '/phpmailer') ? 'writable' : 'not writable or not present');
 
     if ($smtp_username) {
         $len = strlen($smtp_username);
@@ -895,7 +866,8 @@ function email_diagnostics(string $to_email, string $subject): array
     }
 
     if ($smtp_host) {
-        $debug[] = "DNS lookup for $smtp_host -> " . gethostbyname($smtp_host);
+        $resolved = gethostbyname($smtp_host);
+        $debug[] = "DNS lookup for $smtp_host -> $resolved";
     }
 
     if ($smtp_host && $smtp_port) {
@@ -908,6 +880,7 @@ function email_diagnostics(string $to_email, string $subject): array
             $debug[] = "TCP connect to $smtp_host:$smtp_port failed: " . ($errstr ?: 'unknown error') . " (errno=$errno)";
         }
     }
+
     return $debug;
 }
 
@@ -918,8 +891,8 @@ function send_password_reset_email(string $email, string $code): bool
     
     $app_name = APP_NAME ?? 'Boomy Appointments';
     $reset_url = build_app_url('reset_password.php', ['code' => $code]);
-    $subject = "Password Reset - $app_name";
     
+    $subject = "Password Reset - $app_name";
     $body_html = "
         <h2>Password Reset Request</h2>
         <p>Hi {$user['full_name']},</p>
@@ -931,8 +904,23 @@ function send_password_reset_email(string $email, string $code): bool
         <p>Best regards,<br>$app_name</p>
     ";
     
-    $body_plain = "Password Reset Request\n\nHi {$user['full_name']},\n\nYou requested to reset your password. Visit this link to create a new password:\n{$reset_url}\n\nThis link expires in 60 minutes.\n\nIf you didn't request this, you can ignore this email.\n\nBest regards,\n$app_name";
-    return (bool) send_email($email, $subject, $body_html, $body_plain);
+    $body_plain = "
+Password Reset Request
+
+Hi {$user['full_name']},
+
+You requested to reset your password. Visit this link to create a new password:
+{$reset_url}
+
+This link expires in 60 minutes.
+
+If you didn't request this, you can ignore this email.
+
+Best regards,
+$app_name
+    ";
+    
+    return send_email($email, $subject, $body_html, $body_plain);
 }
 
 function send_account_confirmation_email(string $email, string $code): bool
@@ -952,18 +940,28 @@ function send_account_confirmation_email(string $email, string $code): bool
         <p>Best regards,<br>$app_name</p>
     ";
     $body_plain = "Confirm Your Account\n\nHi {$user['full_name']},\n\nPlease confirm your account by visiting this link: {$confirm_url}\n\nIf you didn't sign up, ignore this email.\n\nBest regards,\n$app_name";
-    return (bool) send_email($email, $subject, $body_html, $body_plain);
+    return send_email($email, $subject, $body_html, $body_plain);
 }
 
+// Return whether SMTP / PHPMailer configuration appears complete (basic check)
 function email_is_configured(): bool
 {
-    return (bool) (get_setting('smtp_host') && get_setting('smtp_username') && get_setting('smtp_password') && get_setting('mail_from_address'));
+    $smtp_host = get_setting('smtp_host');
+    $smtp_username = get_setting('smtp_username');
+    $smtp_password = get_setting('smtp_password');
+    $mail_from = get_setting('mail_from_address');
+
+    if (!$smtp_host || !$smtp_username || !$smtp_password || !$mail_from) return false;
+    return true;
 }
 
-function send_email(string $to_email, string $subject, string $body_html, string $body_plain = '')
+function send_email(string $to_email, string $subject, string $body_html, string $body_plain = ''): array|bool
 {
-    if (!email_is_configured()) return false;
-
+    // If basic email configuration isn't present, silently skip sending
+    if (!email_is_configured()) {
+        return false;
+    }
+    // Get SMTP settings from database
     $smtp_host = get_setting('smtp_host');
     $smtp_port = (int) get_setting('smtp_port', '587');
     $smtp_encryption = get_setting('smtp_encryption', 'tls');
@@ -972,14 +970,86 @@ function send_email(string $to_email, string $subject, string $body_html, string
     $mail_from_address = get_setting('mail_from_address');
     $mail_from_name = get_setting('mail_from_name', APP_NAME ?? 'Boomy Appointments');
     
-    if (!file_exists(__DIR__ . '/phpmailer/PHPMailer.php')) return false;
+    $debug = [];
+    $debug[] = "SMTP Host: " . ($smtp_host ?: '(not set)');
+    $debug[] = "SMTP Port: $smtp_port";
+    $debug[] = "SMTP Encryption: $smtp_encryption";
+    $debug[] = "From Address: " . ($mail_from_address ?: '(not set)');
+    $debug[] = "From Name: $mail_from_name";
+    $debug[] = "To: $to_email";
+    $debug[] = "Subject: $subject";
+
+    // Additional diagnostics
+    $debug[] = "PHP Version: " . PHP_VERSION;
+    $debug[] = "OpenSSL extension: " . (extension_loaded('openssl') ? 'loaded' : 'NOT loaded');
+    $debug[] = "cURL extension: " . (extension_loaded('curl') ? 'loaded' : 'NOT loaded');
+    $debug[] = "Filesystem writable check (phpmailer/): " . (is_writable(__DIR__ . '/phpmailer') ? 'writable' : 'not writable or not present');
+
+    // Mask SMTP username for safety (show length and first/last chars)
+    if ($smtp_username) {
+        $len = strlen($smtp_username);
+        $masked = $len > 3 ? substr($smtp_username, 0, 2) . str_repeat('*', max(0, $len - 4)) . substr($smtp_username, -2) : str_repeat('*', $len);
+        $debug[] = "SMTP Username: $masked (length=$len)";
+    } else {
+        $debug[] = "SMTP Username: (not set)";
+    }
+
+    // Quick DNS resolution check
+    if ($smtp_host) {
+        $resolved = gethostbyname($smtp_host);
+        $debug[] = "DNS lookup for $smtp_host -> $resolved";
+    }
+
+    // Quick TCP connectivity check (non-blocking short timeout)
+    if ($smtp_host && $smtp_port) {
+        $errno = 0; $errstr = '';
+        $conn = @fsockopen($smtp_host, $smtp_port, $errno, $errstr, 5);
+        if ($conn) {
+            $debug[] = "TCP connect to $smtp_host:$smtp_port succeeded";
+            fclose($conn);
+        } else {
+            $debug[] = "TCP connect to $smtp_host:$smtp_port failed: " . ($errstr ?: 'unknown error') . " (errno=$errno)";
+        }
+    }
+    
+    // Check if PHPMailer is available
+    if (!file_exists(__DIR__ . '/phpmailer/PHPMailer.php')) {
+        $debug[] = "❌ ERROR: PHPMailer library not found at /phpmailer/PHPMailer.php";
+        $debug[] = "Download PHPMailer files:";
+        $debug[] = "  - wget https://raw.githubusercontent.com/PHPMailer/PHPMailer/master/src/PHPMailer.php -O phpmailer/PHPMailer.php";
+        $debug[] = "  - wget https://raw.githubusercontent.com/PHPMailer/PHPMailer/master/src/SMTP.php -O phpmailer/SMTP.php";
+        $debug[] = "  - wget https://raw.githubusercontent.com/PHPMailer/PHPMailer/master/src/Exception.php -O phpmailer/Exception.php";
+        return $debug;
+    }
+    
+    // Validate SMTP settings
+    if (!$smtp_host) {
+        $debug[] = "❌ ERROR: SMTP Host not configured";
+        return $debug;
+    }
+    if (!$mail_from_address) {
+        $debug[] = "❌ ERROR: From email address not configured";
+        return $debug;
+    }
     
     try {
+        $debug[] = "✓ PHPMailer library found";
+        
         require_once __DIR__ . '/phpmailer/PHPMailer.php';
         require_once __DIR__ . '/phpmailer/SMTP.php';
         require_once __DIR__ . '/phpmailer/Exception.php';
         
         $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+        $debug[] = "✓ PHPMailer instantiated";
+        
+        // Enable debug output
+        $mail->SMTPDebug = \PHPMailer\PHPMailer\SMTP::DEBUG_SERVER;
+        $mail->Debugoutput = function($str, $level) use (&$debug) {
+            $debug[] = "🔍 SMTP Debug: $str";
+        };
+        
+        $debug[] = "Connecting to $smtp_host:$smtp_port (encryption: $smtp_encryption)...";
+        
         $mail->isSMTP();
         $mail->Host = $smtp_host;
         $mail->Port = $smtp_port;
@@ -993,11 +1063,21 @@ function send_email(string $to_email, string $subject, string $body_html, string
         $mail->isHTML(true);
         $mail->Subject = $subject;
         $mail->Body = $body_html;
-        if ($body_plain) $mail->AltBody = $body_plain;
+        if ($body_plain) {
+            $mail->AltBody = $body_plain;
+        }
         
-        return $mail->send();
+        $debug[] = "Sending email...";
+        if ($mail->send()) {
+            $debug[] = "✓ Email sent successfully";
+            return true;
+        } else {
+            $debug[] = "❌ ERROR: " . $mail->ErrorInfo;
+            return $debug;
+        }
     } catch (\Exception $e) {
-        return false;
+        $debug[] = "❌ EXCEPTION: " . $e->getMessage();
+        return $debug;
     }
 }
 
@@ -1012,7 +1092,9 @@ function email_transport_is_ready(): bool
 function format_app_datetime(string $value, ?string $format = null): string
 {
     $raw = trim($value);
-    if ($raw === '') return '';
+    if ($raw === '') {
+        return '';
+    }
 
     $timezone = new DateTimeZone(get_app_timezone_name());
     $dateTime = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $raw, $timezone);
@@ -1023,36 +1105,65 @@ function format_app_datetime(string $value, ?string $format = null): string
             return $raw;
         }
     }
-    return $dateTime->format($format ?: get_setting('date_format', 'd/m/Y H:i'));
+
+    $dateFormat = $format ?: get_setting('date_format', 'd/m/Y H:i');
+    return $dateTime->format($dateFormat);
 }
 
 function format_appointment_person_name(?array $person): string
 {
-    if (!$person) return '';
-    $preferred = trim(($person['first_name'] ?? '') . ' ' . ($person['last_name'] ?? ''));
-    if ($preferred !== '') return $preferred;
-    return trim((string)($person['full_name'] ?? $person['email'] ?? ''));
+    if (!$person) {
+        return '';
+    }
+
+    $firstName = trim((string) ($person['first_name'] ?? ''));
+    $lastName = trim((string) ($person['last_name'] ?? ''));
+    $preferred = trim($firstName . ' ' . $lastName);
+    if ($preferred !== '') {
+        return $preferred;
+    }
+
+    $fullName = trim((string) ($person['full_name'] ?? ''));
+    if ($fullName !== '') {
+        return $fullName;
+    }
+
+    return trim((string) ($person['email'] ?? ''));
 }
 
 function send_appointment_confirmation_email(int $appointmentId): array
 {
-    if (!email_transport_is_ready()) return ['ok' => false, 'error' => 'Mail settings not configured'];
+    if (!email_transport_is_ready()) {
+        return ['ok' => false, 'error' => 'Mail settings not configured'];
+    }
 
     $appointment = get_appointment_by_id($appointmentId);
-    if (!$appointment) return ['ok' => false, 'error' => 'Appointment not found'];
+    if (!$appointment) {
+        return ['ok' => false, 'error' => 'Appointment not found'];
+    }
 
     $customer = get_customer_by_id((int) ($appointment['customer_id'] ?? 0));
+    if (!$customer) {
+        return ['ok' => false, 'error' => 'Customer not found'];
+    }
+
     $customerEmail = trim((string) ($customer['email'] ?? ''));
-    if ($customerEmail === '') return ['ok' => false, 'error' => 'Email not recorded for this customer'];
+    if ($customerEmail === '') {
+        return ['ok' => false, 'error' => 'Email not recorded for this customer'];
+    }
 
     $provider = get_user_by_id((int) ($appointment['provider_id'] ?? 0));
     $appointmentType = get_appointment_type_by_id((int) ($appointment['appointment_type_id'] ?? 0));
     $hashKey = trim((string) ($appointment['hash_key'] ?? ''));
 
-    if ($hashKey === '') return ['ok' => false, 'error' => 'Appointment link is missing'];
+    if ($hashKey === '') {
+        return ['ok' => false, 'error' => 'Appointment link is missing'];
+    }
 
     $siteName = trim((string) get_setting('site_name', APP_NAME ?? 'Boomy Appointments'));
-    if ($siteName === '') $siteName = APP_NAME ?? 'Boomy Appointments';
+    if ($siteName === '') {
+        $siteName = APP_NAME ?? 'Boomy Appointments';
+    }
 
     $appointmentUrl = build_app_url('confirm_appointment.php', ['code' => $hashKey]);
     $appointmentTypeName = trim((string) ($appointmentType['name'] ?? 'Appointment'));
@@ -1066,7 +1177,7 @@ function send_appointment_confirmation_email(int $appointmentId): array
 
     $subject = 'Your appointment has been successfully booked for ' . $siteName;
     $body_html = '<h2>Your appointment has been successfully booked for ' . htmlspecialchars($siteName, ENT_QUOTES, 'UTF-8') . '</h2>'
-        . '<p>Thank you for arranging an appointment with us. Below you can see the appointment details.</p>'
+        . '<p>Thank you for arranging an appointment with us. Below you can see the appointment details. Make changes by clicking the appointment link.</p>'
         . '<h3>Appointment Details</h3>'
         . '<ul>'
         . '<li><strong>Appointment type:</strong> ' . htmlspecialchars($appointmentTypeName, ENT_QUOTES, 'UTF-8') . '</li>'
@@ -1079,13 +1190,30 @@ function send_appointment_confirmation_email(int $appointmentId): array
         . '<li><strong>Customer full name:</strong> ' . htmlspecialchars($customerName !== '' ? $customerName : 'Not recorded', ENT_QUOTES, 'UTF-8') . '</li>'
         . '<li><strong>Mobile number:</strong> ' . htmlspecialchars($customerMobileDisplay, ENT_QUOTES, 'UTF-8') . '</li>'
         . '</ul>'
-        . '<p><a href="' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '" style="background-color:#2457ff;color:#ffffff;padding:12px 20px;text-decoration:none;border-radius:999px;display:inline-block;font-weight:700;">Confirm or modify your appointment</a></p>';
+        . '<p><a href="' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '" style="background-color:#2457ff;color:#ffffff;padding:12px 20px;text-decoration:none;border-radius:999px;display:inline-block;font-weight:700;">Confirm or modify your appointment</a></p>'
+        . '<p>Or copy this link: ' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '</p>';
 
-    $body_plain = "Your appointment has been successfully booked for {$siteName}\n\nAppointment Details\nAppointment type: {$appointmentTypeName}\nProvider: {$providerDisplay}\nStart time: {$startTime}\nEnd time: {$endTime}\n\nConfirm or modify your appointment: {$appointmentUrl}\n";
+    $body_plain = "Your appointment has been successfully booked for {$siteName}\n\n"
+        . "Thank you for arranging an appointment with us. Below you can see the appointment details. Make changes by clicking the appointment link.\n\n"
+        . "Appointment Details\n"
+        . "Appointment type: {$appointmentTypeName}\n"
+        . "Provider: {$providerDisplay}\n"
+        . "Start time: {$startTime}\n"
+        . "End time: {$endTime}\n\n"
+        . "Customer details:\n"
+        . "Customer full name: " . ($customerName !== '' ? $customerName : 'Not recorded') . "\n"
+        . "Mobile number: {$customerMobileDisplay}\n\n"
+        . "Confirm or modify your appointment: {$appointmentUrl}\n";
 
-    return send_email($customerEmail, $subject, $body_html, $body_plain) ? ['ok' => true, 'sent' => true] : ['ok' => false, 'error' => 'Failed to send confirmation email'];
+    $sendResult = send_email($customerEmail, $subject, $body_html, $body_plain);
+    if ($sendResult === true) {
+        return ['ok' => true, 'sent' => true];
+    }
+
+    return ['ok' => false, 'error' => 'Failed to send confirmation email'];
 }
 
+// Customer settings and validation helpers
 function get_customer_field_settings(): array
 {
     return [
@@ -1155,18 +1283,32 @@ function get_booking_calendar_settings(): array
 function normalize_booking_calendar_height_setting($value)
 {
     $raw = strtolower(trim((string) ($value ?? '')));
-    if ($raw === '' || $raw === 'auto') return 'auto';
+    if ($raw === '') {
+        return 1800;
+    }
+
+    if ($raw === 'auto') {
+        return 'auto';
+    }
+
     if (preg_match('/^(\d+)(?:px)?$/', $raw, $matches)) {
         $height = (int) $matches[1];
-        if ($height >= 600 && $height <= 10000) return $height;
+        if ($height >= 600 && $height <= 10000) {
+            return $height;
+        }
     }
+
     return 1800;
 }
 
 function normalize_booking_week_start_day_setting($value): int
 {
     $day = (int) trim((string) ($value ?? '0'));
-    return ($day < 0 || $day > 6) ? 0 : $day;
+    if ($day < 0 || $day > 6) {
+        return 0;
+    }
+
+    return $day;
 }
 
 function get_appointment_types(bool $activeOnly = false): array
@@ -1174,8 +1316,13 @@ function get_appointment_types(bool $activeOnly = false): array
     try {
         $db = get_db();
         $sql = 'SELECT id, name, duration_minutes, color_hex, is_active FROM appointment_types';
-        if ($activeOnly) $sql .= ' WHERE is_active = 1';
-        return $db->query($sql . ' ORDER BY id ASC')->fetchAll(PDO::FETCH_ASSOC);
+        if ($activeOnly) {
+            $sql .= ' WHERE is_active = 1';
+        }
+        $sql .= ' ORDER BY id ASC';
+
+        $stmt = $db->query($sql);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {
         return [];
     }
@@ -1184,33 +1331,66 @@ function get_appointment_types(bool $activeOnly = false): array
 function validate_customer_field(string $fieldName, ?string $value): ?string
 {
     $settings = get_customer_field_settings();
-    if (!isset($settings[$fieldName])) return 'Unknown field: ' . $fieldName;
+    if (!isset($settings[$fieldName])) {
+        return 'Unknown field: ' . $fieldName;
+    }
 
     $cfg = $settings[$fieldName];
     $value = trim((string) ($value ?? ''));
 
-    if (empty($value) && $cfg['required']) return ucwords(str_replace('_', ' ', $fieldName)) . ' is required';
-    if (empty($value)) return null;
+    if (empty($value) && $cfg['required']) {
+        return ucwords(str_replace('_', ' ', $fieldName)) . ' is required';
+    }
+
+    if (empty($value)) {
+        return null;
+    }
 
     if (in_array($fieldName, ['first_name', 'last_name', 'middle_name'], true)) {
-        if ($cfg['letters_only'] && !preg_match('/^[a-zA-Z\s-\']+$/', $value)) return ucwords(str_replace('_', ' ', $fieldName)) . ' must contain only letters, spaces, hyphens, and apostrophes';
-        if (strlen($value) < $cfg['min_length']) return ucwords(str_replace('_', ' ', $fieldName)) . ' must be at least ' . $cfg['min_length'] . ' characters';
-        if (strlen($value) > $cfg['max_length']) return ucwords(str_replace('_', ' ', $fieldName)) . ' must not exceed ' . $cfg['max_length'] . ' characters';
+        if ($cfg['letters_only'] && !preg_match('/^[a-zA-Z\s-\']+$/', $value)) {
+            return ucwords(str_replace('_', ' ', $fieldName)) . ' must contain only letters, spaces, hyphens, and apostrophes';
+        }
+        if (strlen($value) < $cfg['min_length']) {
+            return ucwords(str_replace('_', ' ', $fieldName)) . ' must be at least ' . $cfg['min_length'] . ' characters';
+        }
+        if (strlen($value) > $cfg['max_length']) {
+            return ucwords(str_replace('_', ' ', $fieldName)) . ' must not exceed ' . $cfg['max_length'] . ' characters';
+        }
     }
-    if ($fieldName === 'email' && !filter_var($value, FILTER_VALIDATE_EMAIL)) return 'Email address is invalid';
+
+    if ($fieldName === 'email') {
+        if (!filter_var($value, FILTER_VALIDATE_EMAIL)) {
+            return 'Email address is invalid';
+        }
+    }
+
     if ($fieldName === 'mobile') {
-        if ($cfg['numbers_only'] && !preg_match('/^[0-9\s\-\+\(\)]+$/', $value)) return 'Phone number can only contain numbers and symbols';
-        if (strlen($value) < $cfg['min_length']) return 'Phone number must be at least ' . $cfg['min_length'] . ' characters';
-        if (strlen($value) > $cfg['max_length']) return 'Phone number must not exceed ' . $cfg['max_length'] . ' characters';
+        if ($cfg['numbers_only'] && !preg_match('/^[0-9\s\-\+\(\)]+$/', $value)) {
+            return 'Phone number can only contain numbers, spaces, hyphens, plus sign, and parentheses';
+        }
+        if (strlen($value) < $cfg['min_length']) {
+            return 'Phone number must be at least ' . $cfg['min_length'] . ' characters';
+        }
+        if (strlen($value) > $cfg['max_length']) {
+            return 'Phone number must not exceed ' . $cfg['max_length'] . ' characters';
+        }
     }
+
     if ($fieldName === 'date_of_birth') {
         $date = DateTimeImmutable::createFromFormat('Y-m-d', $value);
         $errors = DateTimeImmutable::getLastErrors();
-        if (!$date || ($errors['warning_count'] ?? 0) > 0 || ($errors['error_count'] ?? 0) > 0) return 'Date of birth must be a valid date';
+        if (!$date || ($errors['warning_count'] ?? 0) > 0 || ($errors['error_count'] ?? 0) > 0) {
+            return 'Date of birth must be a valid date';
+        }
     }
-    if ($fieldName === 'gender' && !in_array(strtolower($value), ['male', 'female', 'other', 'unknown'], true)) {
-        return 'Gender must be one of male, female, other, or unknown';
+
+    if ($fieldName === 'gender') {
+        $allowedGenders = ['male', 'female', 'other', 'unknown'];
+        if (!in_array(strtolower($value), $allowedGenders, true)) {
+            return 'Gender must be one of male, female, other, or unknown';
+        }
     }
+
     return null;
 }
 
@@ -1218,47 +1398,71 @@ function get_customer_missing_required_fields(array $data): array
 {
     $settings = get_customer_field_settings();
     $missing = [];
+
     foreach ($settings as $fieldName => $cfg) {
-        if ($cfg['required'] && empty(trim((string)($data[$fieldName] ?? '')))) {
-            $missing[] = $fieldName;
+        if ($cfg['required']) {
+            $value = trim((string) ($data[$fieldName] ?? ''));
+            if (empty($value)) {
+                $missing[] = $fieldName;
+            }
         }
     }
+
     return $missing;
 }
 
 function normalize_customer_date_of_birth(?string $value): ?string
 {
     $raw = trim((string) ($value ?? ''));
-    if ($raw === '') return null;
+    if ($raw === '') {
+        return null;
+    }
+
     $date = DateTimeImmutable::createFromFormat('Y-m-d', $raw);
     $errors = DateTimeImmutable::getLastErrors();
-    if (!$date || ($errors['warning_count'] ?? 0) > 0 || ($errors['error_count'] ?? 0) > 0) return null;
+    if (!$date || ($errors['warning_count'] ?? 0) > 0 || ($errors['error_count'] ?? 0) > 0) {
+        return null;
+    }
+
     return $date->format('Y-m-d');
 }
 
 function normalize_customer_gender(?string $value): ?string
 {
     $raw = strtolower(trim((string) ($value ?? '')));
-    return in_array($raw, ['male', 'female', 'other', 'unknown'], true) ? $raw : null;
+    if ($raw === '') {
+        return null;
+    }
+
+    $allowed = ['male', 'female', 'other', 'unknown'];
+    return in_array($raw, $allowed, true) ? $raw : null;
 }
+
 
 function create_customer(string $fullName, ?string $email, ?string $mobile, ?string $dateOfBirth = null, ?string $gender = null): ?int
 {
     try {
         $db = get_db();
+        $normalizedDateOfBirth = normalize_customer_date_of_birth($dateOfBirth);
+        $normalizedGender = normalize_customer_gender($gender);
+
         $columns = ['full_name', 'email', 'mobile'];
         $values = [$fullName, $email ?: '', $mobile ?: ''];
 
-        if (($dob = normalize_customer_date_of_birth($dateOfBirth)) !== null) {
-            $columns[] = 'date_of_birth'; $values[] = $dob;
+        if ($normalizedDateOfBirth !== null) {
+            $columns[] = 'date_of_birth';
+            $values[] = $normalizedDateOfBirth;
         }
-        if (($gen = normalize_customer_gender($gender)) !== null) {
-            $columns[] = 'gender'; $values[] = $gen;
+
+        if ($normalizedGender !== null) {
+            $columns[] = 'gender';
+            $values[] = $normalizedGender;
         }
 
         $placeholders = implode(', ', array_fill(0, count($columns), '?'));
         $stmt = $db->prepare('INSERT INTO customers (' . implode(', ', $columns) . ') VALUES (' . $placeholders . ')');
         $stmt->execute($values);
+
         return (int) $db->lastInsertId();
     } catch (Throwable $e) {
         return null;
@@ -1269,9 +1473,22 @@ function update_customer(int $customerId, string $fullName, ?string $email, ?str
 {
     try {
         $db = get_db();
-        if (!get_customer_by_id($customerId)) return false;
+        if (!get_customer_by_id($customerId)) {
+            return false;
+        }
+
+        $normalizedDateOfBirth = normalize_customer_date_of_birth($dateOfBirth);
+        $normalizedGender = normalize_customer_gender($gender);
+
         $stmt = $db->prepare('UPDATE customers SET full_name = ?, email = ?, mobile = ?, date_of_birth = ?, gender = ? WHERE id = ?');
-        return $stmt->execute([$fullName, $email ?: '', $mobile ?: '', normalize_customer_date_of_birth($dateOfBirth), normalize_customer_gender($gender) ?? 'unknown', $customerId]);
+        return $stmt->execute([
+            $fullName,
+            $email ?: '',
+            $mobile ?: '',
+            $normalizedDateOfBirth,
+            $normalizedGender ?? 'unknown',
+            $customerId,
+        ]);
     } catch (Throwable $e) {
         return false;
     }
@@ -1281,9 +1498,15 @@ function get_customer_by_email(string $email): ?array
 {
     try {
         $db = get_db();
-        $stmt = $db->prepare('SELECT id, email, mobile, full_name, date_of_birth, gender, date_added FROM customers WHERE email = ? LIMIT 1');
-        $stmt->execute([$email]);
-        return $stmt->fetch() ?: null;
+        try {
+            $stmt = $db->prepare('SELECT id, email, mobile, full_name, date_of_birth, gender, date_added FROM customers WHERE email = ? LIMIT 1');
+            $stmt->execute([$email]);
+            return $stmt->fetch() ?: null;
+        } catch (Throwable $e) {
+            $stmt = $db->prepare('SELECT id, email, mobile, full_name FROM customers WHERE email = ? LIMIT 1');
+            $stmt->execute([$email]);
+            return $stmt->fetch() ?: null;
+        }
     } catch (Throwable $e) {
         return null;
     }
@@ -1293,7 +1516,7 @@ function get_user_by_id(int $id): ?array
 {
     try {
         $db = get_db();
-        $stmt = $db->prepare('SELECT id, email, password_hash, full_name, first_name, last_name, phone, role, is_active, bookable FROM users WHERE id = ? LIMIT 1');
+        $stmt = $db->prepare('SELECT id, email, password_hash, full_name, first_name, last_name, phone, role, is_active FROM users WHERE id = ? LIMIT 1');
         $stmt->execute([$id]);
         return $stmt->fetch() ?: null;
     } catch (Throwable $e) {
@@ -1305,42 +1528,17 @@ function get_customer_by_id(int $id): ?array
 {
     try {
         $db = get_db();
-        $stmt = $db->prepare('SELECT id, email, mobile, full_name, date_of_birth, gender, date_added FROM customers WHERE id = ? LIMIT 1');
-        $stmt->execute([$id]);
-        return $stmt->fetch() ?: null;
+        try {
+            $stmt = $db->prepare('SELECT id, email, mobile, full_name, date_of_birth, gender, date_added FROM customers WHERE id = ? LIMIT 1');
+            $stmt->execute([$id]);
+            return $stmt->fetch() ?: null;
+        } catch (Throwable $e) {
+            $stmt = $db->prepare('SELECT id, email, mobile, full_name FROM customers WHERE id = ? LIMIT 1');
+            $stmt->execute([$id]);
+            return $stmt->fetch() ?: null;
+        }
     } catch (Throwable $e) {
         return null;
-    }
-}
-
-function get_customers_by_exact_contact(string $email, string $mobile): array
-{
-    try {
-        if (trim($email) === '' || trim($mobile) === '') return [];
-        $db = get_db();
-        $stmt = $db->prepare('SELECT id, email, mobile, full_name, date_of_birth, gender, date_added FROM customers WHERE email = ? AND mobile = ? ORDER BY full_name ASC, id ASC');
-        $stmt->execute([trim($email), trim($mobile)]);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Throwable $e) {
-        return [];
-    }
-}
-
-function get_admin_booking_providers(): array
-{
-    try {
-        return get_db()->query("SELECT id, email, full_name, role, is_active, bookable FROM users WHERE role IN ('provider','admin') AND is_active = 1 ORDER BY full_name ASC, id ASC")->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Throwable $e) {
-        return [];
-    }
-}
-
-function get_public_booking_providers(): array
-{
-    try {
-        return get_db()->query("SELECT id, email, full_name, role, is_active, bookable FROM users WHERE role IN ('provider','admin') AND is_active = 1 AND bookable = 1 ORDER BY full_name ASC, id ASC")->fetchAll(PDO::FETCH_ASSOC);
-    } catch (Throwable $e) {
-        return [];
     }
 }
 
@@ -1383,14 +1581,40 @@ function get_appointment_by_hash_key(string $hashKey): ?array
 function time_string_to_seconds(string $timeValue): ?int
 {
     $parts = explode(':', trim($timeValue));
-    if (count($parts) < 2) return null;
-    return ((int)$parts[0] * 3600) + ((int)$parts[1] * 60) + (isset($parts[2]) ? (int)$parts[2] : 0);
+    if (count($parts) < 2) {
+        return null;
+    }
+
+    $hours = is_numeric($parts[0]) ? (int) $parts[0] : null;
+    $minutes = is_numeric($parts[1]) ? (int) $parts[1] : null;
+    $seconds = isset($parts[2]) && is_numeric($parts[2]) ? (int) $parts[2] : 0;
+
+    if ($hours === null || $minutes === null) {
+        return null;
+    }
+
+    return ($hours * 3600) + ($minutes * 60) + $seconds;
 }
 
 function is_booking_day_enabled(DateTimeImmutable $date, array $bookingSettings): bool
 {
-    $map = [1 => 'show_monday', 2 => 'show_tuesday', 3 => 'show_wednesday', 4 => 'show_thursday', 5 => 'show_friday', 6 => 'show_saturday', 7 => 'show_sunday'];
-    return !empty($bookingSettings[$map[(int)$date->format('N')]] ?? null);
+    $map = [
+        1 => 'show_monday',
+        2 => 'show_tuesday',
+        3 => 'show_wednesday',
+        4 => 'show_thursday',
+        5 => 'show_friday',
+        6 => 'show_saturday',
+        7 => 'show_sunday',
+    ];
+
+    $dayOfWeek = (int) $date->format('N');
+    $settingKey = $map[$dayOfWeek] ?? null;
+    if ($settingKey === null) {
+        return false;
+    }
+
+    return !empty($bookingSettings[$settingKey]);
 }
 
 function validate_appointment_window(int $providerId, DateTimeImmutable $startDate, DateTimeImmutable $endDate, ?int $excludeAppointmentId = null): ?array
@@ -1415,9 +1639,20 @@ function validate_appointment_window(int $providerId, DateTimeImmutable $startDa
     if ($conflict = find_overlapping_appointment($providerId, $startDate, $endDate, $excludeAppointmentId)) {
         return ['error' => 'overlap', 'conflict' => $conflict];
     }
+    
     if ($breakConflict = find_overlapping_break($startDate, $endDate)) {
         return ['error' => 'break_overlap', 'conflict' => $breakConflict];
     }
+
+    // --- ADD THIS UNAVAILABILITY CHECK INTERCEPTION TRACK ---
+    if ($unavailConflict = check_provider_unavailability($providerId, $startDate, $endDate)) {
+        return [
+            'error' => 'provider_unavailable',
+            'message' => '🚨 ' . htmlspecialchars($unavailConflict['reason'])
+        ];
+    }
+    // ---------------------------------------------------------
+
     return null;
 }
 
@@ -1428,44 +1663,95 @@ function find_overlapping_appointment(int $providerId, DateTimeImmutable $startD
         $sql = 'SELECT a.id, a.customer_id, a.provider_id, a.appointment_type_id, a.start_time, a.end_time, a.status, c.full_name AS customer_name
                 FROM appointments a
                 LEFT JOIN customers c ON c.id = a.customer_id
-                WHERE a.provider_id = ? AND a.start_time < ? AND a.end_time > ?';
-        $params = [$providerId, $endDate->format('Y-m-d H:i:s'), $startDate->format('Y-m-d H:i:s')];
+                WHERE a.provider_id = ?
+                  AND a.start_time < ?
+                  AND a.end_time > ?';
+        $params = [
+            $providerId,
+            $endDate->format('Y-m-d H:i:s'),
+            $startDate->format('Y-m-d H:i:s'),
+        ];
 
         if ($excludeAppointmentId !== null && $excludeAppointmentId > 0) {
-            $sql .= ' AND a.id <> ?'; $params[] = $excludeAppointmentId;
+            $sql .= ' AND a.id <> ?';
+            $params[] = $excludeAppointmentId;
         }
 
-        $stmt = $db->prepare($sql . ' ORDER BY a.start_time ASC LIMIT 1');
+        $sql .= ' ORDER BY a.start_time ASC LIMIT 1';
+
+        $stmt = $db->prepare($sql);
         $stmt->execute($params);
-        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
     } catch (Throwable $e) {
         return null;
     }
 }
 
-function create_appointment(?int $customerId, int $providerId, int $appointmentTypeId, string $startTime, ?string $status = null, ?string $endTime = null, ?string $notes = null): ?array
+function create_appointment(int $customerId, int $providerId, int $appointmentTypeId, string $startTime, ?string $status = null, ?string $endTime = null, ?string $notes = null): ?array
 {
     try {
         $appointmentType = get_appointment_type_by_id($appointmentTypeId);
-        if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1) return null;
+        if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1) {
+            return null;
+        }
 
         $timezone = new DateTimeZone(get_app_timezone_name());
-        $startDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $startTime, $timezone) ?: new DateTimeImmutable($startTime, $timezone);
-        
+        $startDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $startTime, $timezone);
+        if (!$startDate) {
+            $startDate = new DateTimeImmutable($startTime, $timezone);
+        }
         $durationMinutes = max(1, (int) ($appointmentType['duration_minutes'] ?? 30));
-        $endTimeValue = trim((string) ($endTime ?? ''));
-        $endDate = $endTimeValue !== '' ? (DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $endTimeValue, $timezone) ?: new DateTimeImmutable($endTimeValue, $timezone)) : $startDate->modify('+' . $durationMinutes . ' minutes');
+        $resolvedEndDate = null;
 
-        if ($windowError = validate_appointment_window($providerId, $startDate, $endDate)) return $windowError;
+        $endTimeValue = trim((string) ($endTime ?? ''));
+        if ($endTimeValue !== '') {
+            $resolvedEndDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $endTimeValue, $timezone);
+            if (!$resolvedEndDate) {
+                $resolvedEndDate = new DateTimeImmutable($endTimeValue, $timezone);
+            }
+        }
+
+        $endDate = $resolvedEndDate ?: $startDate->modify('+' . $durationMinutes . ' minutes');
+        $windowError = validate_appointment_window($providerId, $startDate, $endDate);
+        if ($windowError) {
+            return $windowError;
+        }
 
         $finalStatus = $status ?: 'booked';
-        $hashKey = hash('sha256', implode('|', [(string)$customerId, (string)$providerId, (string)$appointmentTypeId, $startDate->format(DateTimeInterface::ATOM), $endDate->format(DateTimeInterface::ATOM), bin2hex(random_bytes(8))]));
+        $hashKey = hash('sha256', implode('|', [
+            (string) $customerId,
+            (string) $providerId,
+            (string) $appointmentTypeId,
+            $startDate->format(DateTimeInterface::ATOM),
+            $endDate->format(DateTimeInterface::ATOM),
+            bin2hex(random_bytes(8)),
+        ]));
 
         $db = get_db();
         $stmt = $db->prepare('INSERT INTO appointments (customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([$customerId, $providerId, $appointmentTypeId, $startDate->format('Y-m-d H:i:s'), $endDate->format('Y-m-d H:i:s'), $finalStatus, trim((string)$notes) !== '' ? trim($notes) : null, $hashKey]);
+        $stmt->execute([
+            $customerId,
+            $providerId,
+            $appointmentTypeId,
+            $startDate->format('Y-m-d H:i:s'),
+            $endDate->format('Y-m-d H:i:s'),
+            $finalStatus,
+            $notes !== null && trim($notes) !== '' ? trim($notes) : null,
+            $hashKey,
+        ]);
 
-        return ['id' => (int) $db->lastInsertId(), 'customer_id' => $customerId, 'provider_id' => $providerId, 'appointment_type_id' => $appointmentTypeId, 'start_time' => $startDate->format('Y-m-d H:i:s'), 'end_time' => $endDate->format('Y-m-d H:i:s'), 'status' => $finalStatus, 'notes' => $notes, 'hash_key' => $hashKey];
+        return [
+            'id' => (int) $db->lastInsertId(),
+            'customer_id' => $customerId,
+            'provider_id' => $providerId,
+            'appointment_type_id' => $appointmentTypeId,
+            'start_time' => $startDate->format('Y-m-d H:i:s'),
+            'end_time' => $endDate->format('Y-m-d H:i:s'),
+            'status' => $finalStatus,
+            'notes' => $notes !== null && trim($notes) !== '' ? trim($notes) : null,
+            'hash_key' => $hashKey,
+        ];
     } catch (Throwable $e) {
         return null;
     }
@@ -1475,26 +1761,61 @@ function update_appointment(int $appointmentId, int $customerId, int $providerId
 {
     try {
         $existingAppointment = get_appointment_by_id($appointmentId);
-        if (!$existingAppointment) return null;
+        if (!$existingAppointment) {
+            return null;
+        }
 
         $appointmentType = get_appointment_type_by_id($appointmentTypeId);
-        if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1) return null;
+        if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1) {
+            return null;
+        }
 
         $timezone = new DateTimeZone(get_app_timezone_name());
-        $startDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $startTime, $timezone) ?: new DateTimeImmutable($startTime, $timezone);
+        $startDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $startTime, $timezone);
+        if (!$startDate) {
+            $startDate = new DateTimeImmutable($startTime, $timezone);
+        }
 
         $durationMinutes = max(1, (int) ($appointmentType['duration_minutes'] ?? 30));
+        $resolvedEndDate = null;
         $endTimeValue = trim((string) ($endTime ?? ''));
-        $endDate = $endTimeValue !== '' ? (DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $endTimeValue, $timezone) ?: new DateTimeImmutable($endTimeValue, $timezone)) : $startDate->modify('+' . $durationMinutes . ' minutes');
+        if ($endTimeValue !== '') {
+            $resolvedEndDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $endTimeValue, $timezone);
+            if (!$resolvedEndDate) {
+                $resolvedEndDate = new DateTimeImmutable($endTimeValue, $timezone);
+            }
+        }
 
-        if ($windowError = validate_appointment_window($providerId, $startDate, $endDate, $appointmentId)) return $windowError;
+        $endDate = $resolvedEndDate ?: $startDate->modify('+' . $durationMinutes . ' minutes');
+        $windowError = validate_appointment_window($providerId, $startDate, $endDate, $appointmentId);
+        if ($windowError) {
+            return $windowError;
+        }
 
         $finalStatus = $status ?: (string) ($existingAppointment['status'] ?? 'booked');
         $db = get_db();
         $stmt = $db->prepare('UPDATE appointments SET customer_id = ?, provider_id = ?, appointment_type_id = ?, start_time = ?, end_time = ?, status = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-        $stmt->execute([$customerId, $providerId, $appointmentTypeId, $startDate->format('Y-m-d H:i:s'), $endDate->format('Y-m-d H:i:s'), $finalStatus, trim((string)$notes) !== '' ? trim($notes) : null, $appointmentId]);
+        $stmt->execute([
+            $customerId,
+            $providerId,
+            $appointmentTypeId,
+            $startDate->format('Y-m-d H:i:s'),
+            $endDate->format('Y-m-d H:i:s'),
+            $finalStatus,
+            $notes !== null && trim($notes) !== '' ? trim($notes) : null,
+            $appointmentId,
+        ]);
 
-        return ['id' => $appointmentId, 'customer_id' => $customerId, 'provider_id' => $providerId, 'appointment_type_id' => $appointmentTypeId, 'start_time' => $startDate->format('Y-m-d H:i:s'), 'end_time' => $endDate->format('Y-m-d H:i:s'), 'status' => $finalStatus, 'notes' => $notes];
+        return [
+            'id' => $appointmentId,
+            'customer_id' => $customerId,
+            'provider_id' => $providerId,
+            'appointment_type_id' => $appointmentTypeId,
+            'start_time' => $startDate->format('Y-m-d H:i:s'),
+            'end_time' => $endDate->format('Y-m-d H:i:s'),
+            'status' => $finalStatus,
+            'notes' => $notes !== null && trim($notes) !== '' ? trim($notes) : null,
+        ];
     } catch (Throwable $e) {
         return null;
     }
@@ -1508,6 +1829,10 @@ function get_appointment_status_values(): array
 function normalize_appointment_status(?string $status): ?string
 {
     $value = strtolower(trim((string) $status));
+    if ($value === '') {
+        return null;
+    }
+
     return in_array($value, get_appointment_status_values(), true) ? $value : null;
 }
 
@@ -1522,21 +1847,23 @@ function delete_appointment(int $appointmentId): bool
     }
 }
 
+// User search helpers
 function search_users(string $query = '', int $limit = 50, int $offset = 0): array
 {
     try {
         $db = get_db();
+
         $query = trim($query);
 
         if (empty($query)) {
-            $stmt = $db->prepare('SELECT id, email, full_name, first_name, last_name, phone, role, is_active, bookable, created_at FROM users ORDER BY full_name ASC, created_at DESC LIMIT ? OFFSET ?');
+            $stmt = $db->prepare('SELECT id, email, full_name, first_name, last_name, phone, role, is_active, created_at FROM users ORDER BY full_name ASC, created_at DESC LIMIT ? OFFSET ?');
             $stmt->execute([$limit, $offset]);
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
         $searchPattern = '%' . $query . '%';
         $stmt = $db->prepare("
-            SELECT id, email, full_name, first_name, last_name, phone, role, is_active, bookable, created_at
+            SELECT id, email, full_name, first_name, last_name, phone, role, is_active, created_at
             FROM users
             WHERE full_name LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ?
             ORDER BY full_name ASC, created_at DESC
@@ -1569,5 +1896,96 @@ function count_users(string $query = ''): int
         return (int) ($stmt->fetch()['cnt'] ?? 0);
     } catch (Throwable $e) {
         return 0;
+    }
+}
+
+/**
+ * Checks if a requested booking window overlaps with any provider unavailabilities
+ * (Supports both single one-off blocks and recurring rolling constraints)
+ */
+function check_provider_unavailability(int $providerId, DateTimeImmutable $startDate, DateTimeImmutable $endDate): ?array
+{
+    try {
+        $db = get_db();
+        
+        // 1. Check Single Layout Footprints (One-off blocks)
+        $stmt = $db->prepare("
+            SELECT id, reason, start_datetime, end_datetime 
+            FROM unavailabilities 
+            WHERE provider_id = ? AND type = 'single'
+              AND start_datetime < ? 
+              AND end_datetime > ?
+            LIMIT 1
+        ");
+        $stmt->execute([
+            $providerId, 
+            $endDate->format('Y-m-d H:i:s'), 
+            $startDate->format('Y-m-d H:i:s')
+        ]);
+        $singleConflict = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($singleConflict) {
+            return [
+                'type' => 'single',
+                'reason' => $singleConflict['reason'] ?: 'Provider unavailable (One-off Block)'
+            ];
+        }
+
+        // 2. Check Rolling Calendar Constraints (Recurring rules)
+        $dayOfWeek = (int) $startDate->format('N'); // 1 (Monday) to 7 (Sunday)
+        $bookingDateStr = $startDate->format('Y-m-d');
+        
+        $stmt = $db->prepare("
+            SELECT id, start_time, end_time, reason 
+            FROM unavailabilities 
+            WHERE provider_id = ? AND type = 'recurring'
+              AND day_of_week = ?
+              AND rolling_start_date <= ?
+              AND (rolling_end_date IS NULL OR rolling_end_date >= ?)
+        ");
+        $stmt->execute([$providerId, $dayOfWeek, $bookingDateStr, $bookingDateStr]);
+        $recurringRules = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        if (!empty($recurringRules)) {
+            // Convert booking times to standalone operational seconds for comparison
+            $reqStartSec = ((int)$startDate->format('H') * 3600) + ((int)$startDate->format('i') * 60) + (int)$startDate->format('s');
+            $reqEndSec = ((int)$endDate->format('H') * 3600) + ((int)$endDate->format('i') * 60) + (int)$endDate->format('s');
+
+            foreach ($recurringRules as $rule) {
+                // Parse rule bound sequences cleanly into seconds
+                $ruleStartParts = explode(':', $rule['start_time']);
+                $ruleEndParts = explode(':', $rule['end_time']);
+                
+                $ruleStartSec = ((int)$ruleStartParts[0] * 3600) + ((int)$ruleStartParts[1] * 60);
+                $ruleEndSec = ((int)$ruleEndParts[0] * 3600) + ((int)$ruleEndParts[1] * 60);
+
+                // Overlap formula: rule start < booking end AND rule end > booking start
+                if ($ruleStartSec < $reqEndSec && $ruleEndSec > $reqStartSec) {
+                    return [
+                        'type' => 'recurring',
+                        'reason' => $rule['reason'] ?: 'Provider unavailable (Recurring Rule Pattern)'
+                    ];
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        // Safe execution fallback inside critical routing tracks
+    }
+    return null;
+}
+
+
+/**
+ * Fetches all bookable users who are providers or admins
+ */
+function get_active_booking_providers(): array
+{
+    try {
+        $db = get_db();
+        // Include bookable users who are providers or admins so admins can be selectable as providers.
+        $stmt = $db->query("SELECT id, email, full_name, role, is_active, 1 as bookable FROM users WHERE role IN ('provider','admin') ORDER BY full_name ASC, id ASC");
+        return $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+    } catch (Throwable $e) {
+        return [];
     }
 }
