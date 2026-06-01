@@ -40,6 +40,7 @@ function get_db(): PDO
     ensure_customer_schema($pdo);
     ensure_breaks_schema($pdo);
     ensure_user_schema($pdo);
+    ensure_verification_schema($pdo);
     ensure_appointment_schema($pdo);
     return $pdo;
 }
@@ -1987,5 +1988,136 @@ function get_active_booking_providers(): array
         return $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
     } catch (Throwable $e) {
         return [];
+    }
+}
+
+/**
+ * Fetches existing customers matching exactly an email and mobile number combo.
+ * This satisfies the customer validation and duplicate lookup routines.
+ */
+function get_customers_by_exact_contact(string $email, string $mobile): array
+{
+    try {
+        $db = get_db();
+        
+        // We trim values to guarantee space padding variations do not break index lookups
+        $cleanEmail  = trim($email);
+        $cleanMobile = trim($mobile);
+
+        // First attempt a robust look up with the comprehensive column scheme
+        try {
+            $stmt = $db->prepare('
+                SELECT id, email, mobile, full_name, date_of_birth, gender, date_added 
+                FROM customers 
+                WHERE email = ? AND mobile = ? 
+                ORDER BY id ASC
+            ');
+            $stmt->execute([$cleanEmail, $cleanMobile]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        } catch (Throwable $e) {
+            // Fallback gracefully to standard minimal columns if the database schema is un-migrated
+            $stmt = $db->prepare('
+                SELECT id, email, mobile, full_name 
+                FROM customers 
+                WHERE email = ? AND mobile = ? 
+                ORDER BY id ASC
+            ');
+            $stmt->execute([$cleanEmail, $cleanMobile]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        }
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+
+function create_appointment_verification_token(int $appointmentId, int $expiry_minutes = 60): string
+{
+    $db = get_db();
+    $code = bin2hex(random_bytes(32));
+    $expiresAt = date('Y-m-d H:i:s', time() + (max(1, $expiry_minutes) * 60));
+
+    $stmt = $db->prepare('DELETE FROM verification WHERE appointment_id = ? AND task = ?');
+    $stmt->execute([$appointmentId, 'appointment_booking']);
+
+    $stmt = $db->prepare('INSERT INTO verification (appointment_id, code, task, expires_at) VALUES (?, ?, ?, ?)');
+    $stmt->execute([$appointmentId, $code, 'appointment_booking', $expiresAt]);
+    return $code;
+}
+
+function get_appointment_verification_by_code(string $code): ?array
+{
+    try {
+        $db = get_db();
+        $stmt = $db->prepare('SELECT id, user_id, appointment_id, code, task, created_at, expires_at FROM verification WHERE code = ? AND task = ? AND (expires_at IS NULL OR expires_at > NOW()) LIMIT 1');
+        $stmt->execute([$code, 'appointment_booking']);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function get_appointment_verification_by_appointment_id(int $appointmentId): ?array
+{
+    try {
+        $db = get_db();
+        $stmt = $db->prepare('SELECT id, user_id, appointment_id, code, task, created_at, expires_at FROM verification WHERE appointment_id = ? AND task = ? LIMIT 1');
+        $stmt->execute([$appointmentId, 'appointment_booking']);
+        return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+function ensure_verification_schema(PDO $db): void
+{
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
+
+    try {
+        $tableExists = (bool) $db->query("SHOW TABLES LIKE 'verification'")->fetch();
+        if (!$tableExists) {
+            $db->exec("CREATE TABLE `verification` (
+              `id` INT UNSIGNED AUTO_INCREMENT,
+              `user_id` INT UNSIGNED NULL,
+              `appointment_id` INT UNSIGNED NULL,
+              `code` VARCHAR(64) NOT NULL,
+              `task` VARCHAR(32) NOT NULL,
+              `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              `expires_at` TIMESTAMP NULL,
+              PRIMARY KEY (`id`),
+              UNIQUE KEY `idx_verification_code` (`code`),
+              UNIQUE KEY `idx_verification_appointment_task` (`appointment_id`, `task`),
+              KEY `idx_verification_user_task` (`user_id`, `task`),
+              CONSTRAINT `fk_verification_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+              CONSTRAINT `fk_verification_appointment` FOREIGN KEY (`appointment_id`) REFERENCES `appointments` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            return;
+        }
+
+        $hasAppointmentId = (bool) $db->query("SHOW COLUMNS FROM verification LIKE 'appointment_id'")->fetch();
+        if (!$hasAppointmentId) {
+            $db->exec("ALTER TABLE verification ADD COLUMN appointment_id INT UNSIGNED NULL AFTER user_id");
+        }
+
+        $userIdNullable = (bool) $db->query("SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'verification' AND COLUMN_NAME = 'user_id' AND IS_NULLABLE = 'YES'")->fetch();
+        if (!$userIdNullable) {
+            $db->exec("ALTER TABLE verification MODIFY user_id INT UNSIGNED NULL");
+        }
+
+        $hasAppointmentIndex = (bool) $db->query("SHOW INDEX FROM verification WHERE Key_name = 'idx_verification_appointment_task'")->fetch();
+        if (!$hasAppointmentIndex) {
+            $db->exec("CREATE UNIQUE INDEX idx_verification_appointment_task ON verification (appointment_id, task)");
+        }
+
+        $hasAppointmentFk = (bool) $db->query("SELECT CONSTRAINT_NAME FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'verification' AND COLUMN_NAME = 'appointment_id' AND REFERENCED_TABLE_NAME = 'appointments' LIMIT 1")->fetch();
+        if (!$hasAppointmentFk) {
+            $db->exec("ALTER TABLE verification ADD CONSTRAINT fk_verification_appointment FOREIGN KEY (appointment_id) REFERENCES appointments (id) ON DELETE CASCADE ON UPDATE CASCADE");
+        }
+    } catch (Throwable $e) {
+        // Ignore fallback
     }
 }

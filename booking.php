@@ -948,6 +948,8 @@ $csrfToken = csrf_token();
       state.appointmentTypes = data.appointment_types || [];
       state.providers = data.providers || [];
       state.settings = data.settings || {};
+
+state.settings.customer_field_settings = data.customer_field_settings || {};
       fillSelects();
       state.appointmentTypeId = String(state.appointmentTypes[0]?.id || '');
       state.providerId = String(state.providers[0]?.id || '');
@@ -1159,21 +1161,45 @@ $csrfToken = csrf_token();
       return true;
     }
 
-    function validateCustomerInputs() {
-      if (state.customerMode === 'existing') {
-        if (!els.existingEmail.value.trim() || !els.existingMobile.value.trim()) {
-          setToast('Missing customer details', 'Email and mobile are required for an existing customer lookup.');
-          return false;
-        }
-        return true;
-      }
+function validateCustomerInputs() {
+  const fieldSettings = state.settings?.customer_field_settings || {};
 
-      if (!els.newEmail.value.trim() || !els.newMobile.value.trim()) {
-        setToast('Missing customer details', 'Email and mobile are required for new customers.');
-        return false;
-      }
-      return true;
+  if (state.customerMode === 'existing') {
+    if (!els.existingEmail.value.trim() || !els.existingMobile.value.trim()) {
+      setToast('Missing customer details', 'Email and mobile are required for an existing customer lookup.');
+      return false;
     }
+    return true;
+  }
+
+  // New customer — check required fields dynamically
+  const checks = [
+    { el: els.newFirstName, key: 'first_name',    label: 'First name' },
+    { el: els.newLastName,  key: 'last_name',     label: 'Last name' },
+    { el: els.newEmail,     key: 'email',         label: 'Email' },
+    { el: els.newMobile,    key: 'mobile',        label: 'Mobile' },
+    { el: els.newDob,       key: 'date_of_birth', label: 'Date of birth' },
+    { el: els.newGender,    key: 'gender',        label: 'Gender' },
+  ];
+
+  for (const { el, key, label } of checks) {
+    const cfg = fieldSettings[key] || {};
+    if (cfg.required && !el.value.trim()) {
+      setToast('Missing required field', `${label} is required.`);
+      el.focus();
+      return false;
+    }
+  }
+
+  // Email and mobile are always needed for duplicate checking
+  // even if not marked required in settings
+  if (!els.newEmail.value.trim() || !els.newMobile.value.trim()) {
+    setToast('Missing customer details', 'Email and mobile are always needed to check for duplicates.');
+    return false;
+  }
+
+  return true;
+}
 
     function renderSummary() {
       const appointmentType = state.appointmentTypes.find((item) => String(item.id) === String(state.appointmentTypeId));
@@ -1211,23 +1237,23 @@ $csrfToken = csrf_token();
       }
 
       els.summaryNotice.classList.add('hidden');
-      const customerLines = state.customerMode === 'existing'
-        ? [
-            ['Customer', state.customerCheck && state.customerCheck.selected_customer ? (state.customerCheck.selected_customer.full_name || '-') : 'Selected customer'],
-            ['Email', els.existingEmail.value.trim()],
-            ['Mobile', els.existingMobile.value.trim()]
-          ]
-        : [
-            ['Customer', customerInfo.customer_name],
-            ['Email', customerInfo.customer_email],
-            ['Mobile', customerInfo.customer_mobile],
-            ['Date of birth', customerInfo.customer_date_of_birth || '-'],
-            ['Gender', customerInfo.customer_gender || '-']
-          ];
+ const customerLines = state.customerMode === 'existing'
+    ? [
+        ['Customer', state.customerCheck?.selected_customer?.full_name || 'Selected customer'],
+        ['Email', els.existingEmail.value.trim()],
+        ['Mobile', els.existingMobile.value.trim()]
+      ]
+    : [
+        ['Customer', customerInfo.customer_name],
+        (fieldSettings.email?.display !== false)        ? ['Email', customerInfo.customer_email]         : null,
+        (fieldSettings.mobile?.display !== false)       ? ['Mobile', customerInfo.customer_mobile]        : null,
+        (fieldSettings.date_of_birth?.display !== false)? ['Date of birth', customerInfo.customer_date_of_birth || '-'] : null,
+        (fieldSettings.gender?.display !== false)       ? ['Gender', customerInfo.customer_gender || '-'] : null,
+      ].filter(Boolean);
 
-      els.summaryCustomerSection.innerHTML = '<div class="summary-grid">' + customerLines.map((row) => {
-        return '<div class="summary-item"><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1] || '-') + '</strong></div>';
-      }).join('') + '</div>';
+  els.summaryCustomerSection.innerHTML = '<div class="summary-grid">' + customerLines.map((row) => {
+    return '<div class="summary-item"><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1] || '-') + '</strong></div>';
+  }).join('') + '</div>';
       els.confirmBookingBtn.textContent = 'Confirm booking';
     }
 
@@ -1383,6 +1409,33 @@ $csrfToken = csrf_token();
     async function boot() {
       try {
         await fetchInit();
+
+         // Apply customer field visibility from settings
+    const fieldSettings = state.settings?.customer_field_settings || {};
+
+    function applyFieldVisibility(inputEl, fieldKey) {
+      const cfg = fieldSettings[fieldKey] || {};
+      const field = inputEl?.closest('.field');
+      if (!field) return;
+      if (!cfg.display) {
+        field.classList.add('hidden');
+        inputEl.disabled = true;
+      } else if (cfg.required) {
+        inputEl.required = true;
+        const label = field.querySelector('label');
+        if (label && !label.textContent.includes('*')) {
+          label.textContent += ' *';
+        }
+      }
+    }
+
+applyFieldVisibility(els.newFirstName, 'first_name');
+applyFieldVisibility(els.newMiddleName, 'middle_name');
+applyFieldVisibility(els.newLastName,  'last_name');
+applyFieldVisibility(els.newEmail,     'email');
+applyFieldVisibility(els.newMobile,    'mobile');
+applyFieldVisibility(els.newDob,       'date_of_birth');
+applyFieldVisibility(els.newGender,    'gender');
         els.appointmentTypeSelect.addEventListener('change', () => {
           state.appointmentTypeId = els.appointmentTypeSelect.value;
         });
