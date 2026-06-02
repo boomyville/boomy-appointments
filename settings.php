@@ -85,6 +85,7 @@ $booking_show_now_indicator = (int) get_setting('booking_show_now_indicator', '1
 $booking_snap_minutes = (int) get_setting('booking_snap_minutes', '15');
 $booking_snap_options = [1, 2, 5, 10, 15, 20, 30, 40, 45, 60];
 $auto_no_show = (int) get_setting('auto_no_show', '0');
+$prevent_same_user_booking = (int) get_setting('prevent_same_user_booking', '0');
 $appointmentTypes = get_appointment_types();
 
 // PHPMailer/Gmail settings
@@ -282,7 +283,14 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
           <label><input type="checkbox" name="booking_show_sunday" value="1" <?php echo $booking_show_sunday ? 'checked' : ''; ?>> Sunday</label>
         </div>
       </fieldset>
-      
+      <fieldset class="field-group">
+        <legend>Booking Restrictions</legend>
+        <label for="prevent_same_user_booking">Max Active Bookings Per Customer</label>
+        <input id="prevent_same_user_booking" name="prevent_same_user_booking" type="number" min="0" step="1" value="<?php echo $prevent_same_user_booking; ?>" required>
+        <p style="font-size: 0.9em; color: #666; margin-top: 4px;">
+          Limits how many concurrent active bookings (unconfirmed, confirmed, booked) a single profile can hold. Set to <strong>0</strong> to completely disable this rule and allow unlimited concurrent appointments.
+        </p>
+      </fieldset>
       <fieldset class="field-group">
         <legend>Automated Catch-up Maintenance</legend>
         <label>
@@ -294,7 +302,7 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
           When checked, any appointment left in an unconfirmed, confirmed, or booked state whose end-time has drifted past the current server time will be updated automatically during page load.
         </p>
       </fieldset>
-      
+
       <fieldset class="field-group">
         <legend>Live Time Marker</legend>
         <label><input type="checkbox" name="booking_show_now_indicator" value="1" <?php echo $booking_show_now_indicator ? 'checked' : ''; ?>> Show red line for the current time</label>

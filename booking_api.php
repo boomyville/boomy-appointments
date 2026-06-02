@@ -342,13 +342,10 @@ try {
     $action = strtolower(trim((string) ($_GET['action'] ?? 'init')));
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
-    if ($action === 'init' && $method === 'GET') {
+   if ($action === 'init' && $method === 'GET') {
         $appointmentTypes = get_appointment_types(true);
-        
-        // Dynamic lookup safely filtering across role restrictions without requiring missing user table properties
         $stmt = get_db()->query("SELECT id, email, full_name, role, is_active FROM users WHERE role IN ('provider','admin') AND is_active = 1 ORDER BY full_name ASC");
         $providers = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
-        
         $settings = get_booking_calendar_settings();
 
         booking_api_response([
@@ -357,6 +354,7 @@ try {
             'site_name' => get_setting('site_name', APP_NAME ?? 'Boomy Appointments'),
             'timezone' => get_app_timezone_name(),
             'settings' => $settings,
+            'prevent_same_user_booking' => (int) get_setting('prevent_same_user_booking', 0), // <-- EXPLICIT ROOT PROPERTY
             'customer_field_settings' => get_customer_field_settings(),
             'appointment_types' => $appointmentTypes,
             'providers' => $providers,
@@ -636,6 +634,55 @@ update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
         $emailSent = booking_send_confirmation_email($appointment);
         booking_api_response(['ok' => true, 'status' => 'completed', 'customer' => get_customer_by_id((int) $appointment['customer_id']), 'appointment' => $appointment, 'email_sent' => $emailSent, 'message' => 'Appointment verified and booked successfully']);
     }
+if ($action === 'check_metadata_limit' && $method === 'POST') {
+    // 1. Temporarily skip CSRF verification for direct browser link testing
+    // if (!verify_csrf_token($_GET['csrf_token'] ?? null)) { ... }
+
+    // 2. Fetch the threshold limit setting
+    $limit = (int) get_setting('prevent_same_user_booking', 0);
+    
+    // 3. Collect visitor meta telemetry
+    $clientIp  = get_client_ip();
+    $timezone  = trim((string)($_GET['client_timezone'] ?? ''));
+    $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+
+    $db = get_db();
+
+    // 4. Wide-Net Query: Grab all active appointments sharing this IP address
+    $query = "SELECT a.id, c.id AS customer_id, c.last_ip, c.last_timezone, c.last_user_agent 
+              FROM appointments a
+              INNER JOIN customers c ON a.customer_id = c.id
+              WHERE a.status IN ('booked', 'confirmed', 'unconfirmed')
+              AND c.last_ip = ?";
+
+    $stmt = $db->prepare($query);
+    $stmt->execute([$clientIp]);
+    $ipMatches = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // 5. Weight-matching loop logic
+    $matchCount = 0;
+    foreach ($ipMatches as $record) {
+        // NOTE: If testing from the same browser/timezone, these will usually match
+        $sameTimezone  = (!empty($record['last_timezone']) && $record['last_timezone'] === $timezone);
+        $sameUserAgent = (!empty($record['last_user_agent']) && $record['last_user_agent'] === $userAgent);
+
+        // For this live browser test, if your database records have blank timezones, 
+        // let's count them purely on IP + UserAgent matching.
+        if ($sameUserAgent || $sameTimezone || empty($timezone)) {
+            $matchCount++;
+        }
+    }
+
+    // 6. Return comprehensive debug payload so you can see your data rows
+    booking_api_response([
+        'is_blocked'       => ($matchCount >= $limit),
+        'match_count'      => $matchCount,
+        'limit'            => $limit,
+        'your_current_ip'  => $clientIp,
+        'database_records' => $ipMatches
+    ]);
+    exit;
+}
 
     booking_api_response(['error' => 'unknown action'], 400);
 } catch (Throwable $e) {

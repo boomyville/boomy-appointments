@@ -179,6 +179,7 @@ INSERT INTO `settings` (`setting_key`,`setting_value`) VALUES
 ('organization_number',''),
 ('date_format','d/m/Y H:i'),
 ('auto_no_show','1'),
+('prevent_same_user_booking','0'),
 ('booking_deadline_hours','24'),
 ('email_whitelist_enabled','0'),
 ('email_domain_whitelist',''),

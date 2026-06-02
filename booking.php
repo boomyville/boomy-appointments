@@ -605,8 +605,10 @@ $csrfToken = csrf_token();
           <p>Select the appointment type and provider first.</p>
         </div>
       </div>
-      <div class="grid-2">
-        <div class="field">
+
+      <div id="step1RestrictionNotice" class="notice is-error hidden" style="margin-bottom: 20px;"></div>
+
+      <div class="grid-2" id="step1SelectionGrid"> <div class="field">
           <label for="appointmentTypeSelect">Appointment type</label>
           <select id="appointmentTypeSelect"></select>
         </div>
@@ -784,7 +786,8 @@ $csrfToken = csrf_token();
       bookingResult: null,
       loading: false,
       requestToken: '',
-      duplicateMatches: []
+      duplicateMatches: [],
+      prevent_same_user_booking: 0 // Track root property explicitly
     };
 
     const els = {
@@ -830,15 +833,14 @@ $csrfToken = csrf_token();
       duplicateContinueBtn: document.getElementById('duplicateContinueBtn'),
       toast: document.getElementById('toast')
     };
-
-    function escapeHtml(value) {
-      return String(value ?? '').replace(/[&<>"]/g, (char) => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;'
-      }[char]));
-    }
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"]/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;'
+  }[char] || char)); 
+}
 
     function setToast(title, message) {
       els.toast.innerHTML = '<strong>' + escapeHtml(title) + '</strong><p>' + escapeHtml(message) + '</p>';
@@ -950,8 +952,15 @@ $csrfToken = csrf_token();
       state.appointmentTypes = data.appointment_types || [];
       state.providers = data.providers || [];
       state.settings = data.settings || {};
+      
+      if (data.csrf_token) {
+        BOOMY.csrfToken = data.csrf_token;
+      }
+      
+      // FIX 1: Read dynamically directly from the root property we injected on the backend
+      state.prevent_same_user_booking = parseInt(data.prevent_same_user_booking ?? 0, 10);
 
-state.settings.customer_field_settings = data.customer_field_settings || {};
+      state.settings.customer_field_settings = data.customer_field_settings || {};
       fillSelects();
       state.appointmentTypeId = String(state.appointmentTypes[0]?.id || '');
       state.providerId = String(state.providers[0]?.id || '');
@@ -1083,18 +1092,15 @@ state.settings.customer_field_settings = data.customer_field_settings || {};
       els.existingMatches.classList.add('hidden');
     }
 
-function renderDuplicateModal(matches, mode) {
-  const message = mode === 'new'
-    ? 'A customer profile already exists for this email and mobile combination. You can continue to create a pending booking request, switch to the existing profile, or cancel.'
-    : 'Multiple customer profiles share this email and mobile combination. The booking will need to be verified before it can be completed.';
-  
-  els.duplicateModalText.textContent = message;
-
-  // We are no longer looping over or displaying "matches" here to safeguard customer privacy.
-  
-  els.duplicateModal.classList.add('is-open');
-  els.duplicateModal.setAttribute('aria-hidden', 'false');
-}
+    function renderDuplicateModal(matches, mode) {
+      const message = mode === 'new'
+        ? 'A customer profile already exists for this email and mobile combination. You can continue to create a pending booking request, switch to the existing profile, or cancel.'
+        : 'Multiple customer profiles share this email and mobile combination. The booking will need to be verified before it can be completed.';
+      
+      els.duplicateModalText.textContent = message;
+      els.duplicateModal.classList.add('is-open');
+      els.duplicateModal.setAttribute('aria-hidden', 'false');
+    }
 
     function closeDuplicateModal() {
       els.duplicateModal.classList.remove('is-open');
@@ -1164,48 +1170,46 @@ function renderDuplicateModal(matches, mode) {
       return true;
     }
 
-    
-function validateCustomerInputs() {
-  const fieldSettings = state.settings?.customer_field_settings || {};
+    function validateCustomerInputs() {
+      const fieldSettings = state.settings?.customer_field_settings || {};
 
-  if (state.customerMode === 'existing') {
-    if (!els.existingEmail.value.trim() || !els.existingMobile.value.trim()) {
-      setToast('Missing customer details', 'Email and mobile are required for an existing customer lookup.');
-      return false;
+      if (state.customerMode === 'existing') {
+        if (!els.existingEmail.value.trim() || !els.existingMobile.value.trim()) {
+          setToast('Missing customer details', 'Email and mobile are required for an existing customer lookup.');
+          return false;
+        }
+        return true;
+      }
+
+      const checks = [
+        { el: els.newFirstName, key: 'first_name',     label: 'First name' },
+        { el: els.newLastName,  key: 'last_name',      label: 'Last name' },
+        { el: els.newEmail,     key: 'email',          label: 'Email' },
+        { el: els.newMobile,    key: 'mobile',         label: 'Mobile' },
+        { el: els.newDob,       key: 'date_of_birth',  label: 'Date of birth' },
+        { el: els.newGender,    key: 'gender',         label: 'Gender' },
+      ];
+
+      for (const { el, key, label } of checks) {
+        const cfg = fieldSettings[key] || {};
+        if (cfg.required && !el.value.trim()) {
+          setToast('Missing required field', `${label} is required.`);
+          el.focus();
+          return false;
+        }
+      }
+
+      if (!els.newEmail.value.trim() || !els.newMobile.value.trim()) {
+        setToast('Missing customer details', 'Email and mobile are always needed to check for duplicates.');
+        return false;
+      }
+
+      return true;
     }
-    return true;
-  }
-
-  const checks = [
-    { el: els.newFirstName, key: 'first_name',     label: 'First name' },
-    { el: els.newLastName,  key: 'last_name',      label: 'Last name' },
-    { el: els.newEmail,     key: 'email',          label: 'Email' },
-    { el: els.newMobile,    key: 'mobile',         label: 'Mobile' },
-    { el: els.newDob,       key: 'date_of_birth',  label: 'Date of birth' },
-    { el: els.newGender,    key: 'gender',         label: 'Gender' },
-  ];
-
-  for (const { el, key, label } of checks) {
-    const cfg = fieldSettings[key] || {};
-    if (cfg.required && !el.value.trim()) {
-      setToast('Missing required field', `${label} is required.`);
-      el.focus();
-      return false;
-    }
-  }
-
-  if (!els.newEmail.value.trim() || !els.newMobile.value.trim()) {
-    setToast('Missing customer details', 'Email and mobile are always needed to check for duplicates.');
-    return false;
-  }
-
-  return true;
-}
 
     function renderSummary() {
       const appointmentType = state.appointmentTypes.find((item) => String(item.id) === String(state.appointmentTypeId));
       const provider = state.providers.find((item) => String(item.id) === String(state.providerId));
-      const slotParts = state.selectedSlot ? state.selectedSlot.split(' ') : [];
       const selectedDateText = state.selectedDate ? formatDateLong(state.selectedDate) : '-';
       const selectedTimeText = state.selectedSlot ? formatTimeLabel(state.selectedSlot) : '-';
       const fieldSettings = state.settings?.customer_field_settings || {};
@@ -1217,7 +1221,7 @@ function validateCustomerInputs() {
         ['Date', selectedDateText],
         ['Time', selectedTimeText]
       ].map((row) => {
-        return '<div class="summary-item"><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1]) + '</strong></div>';
+        return '<div class="summary-item"><span>' + escapeHtml(row[0]) + '</span>export strong>' + escapeHtml(row[1]) + '</strong></div>';
       }).join('');
 
       if (state.customerMode === 'existing' && state.customerCheck && state.customerCheck.requires_verification) {
@@ -1239,23 +1243,23 @@ function validateCustomerInputs() {
       }
 
       els.summaryNotice.classList.add('hidden');
- const customerLines = state.customerMode === 'existing'
-    ? [
-        ['Customer', state.customerCheck?.selected_customer?.full_name || 'Selected customer'],
-        ['Email', els.existingEmail.value.trim()],
-        ['Mobile', els.existingMobile.value.trim()]
-      ]
-    : [
-        ['Customer', customerInfo.customer_name],
-        (fieldSettings.email?.display !== false)        ? ['Email', customerInfo.customer_email]         : null,
-        (fieldSettings.mobile?.display !== false)       ? ['Mobile', customerInfo.customer_mobile]        : null,
-        (fieldSettings.date_of_birth?.display !== false)? ['Date of birth', customerInfo.customer_date_of_birth || '-'] : null,
-        (fieldSettings.gender?.display !== false)       ? ['Gender', customerInfo.customer_gender || '-'] : null,
-      ].filter(Boolean);
+      const customerLines = state.customerMode === 'existing'
+        ? [
+            ['Customer', state.customerCheck?.selected_customer?.full_name || 'Selected customer'],
+            ['Email', els.existingEmail.value.trim()],
+            ['Mobile', els.existingMobile.value.trim()]
+          ]
+        : [
+            ['Customer', customerInfo.customer_name],
+            (fieldSettings.email?.display !== false)        ? ['Email', customerInfo.customer_email]         : null,
+            (fieldSettings.mobile?.display !== false)       ? ['Mobile', customerInfo.customer_mobile]        : null,
+            (fieldSettings.date_of_birth?.display !== false)? ['Date of birth', customerInfo.customer_date_of_birth || '-'] : null,
+            (fieldSettings.gender?.display !== false)       ? ['Gender', customerInfo.customer_gender || '-'] : null,
+          ].filter(Boolean);
 
-  els.summaryCustomerSection.innerHTML = '<div class="summary-grid">' + customerLines.map((row) => {
-    return '<div class="summary-item"><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1] || '-') + '</strong></div>';
-  }).join('') + '</div>';
+      els.summaryCustomerSection.innerHTML = '<div class="summary-grid">' + customerLines.map((row) => {
+        return '<div class="summary-item"><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1] || '-') + '</strong></div>';
+      }).join('') + '</div>';
       els.confirmBookingBtn.textContent = 'Confirm booking';
     }
 
@@ -1291,14 +1295,14 @@ function validateCustomerInputs() {
       }
     }
 
-
     function collectClientMeta() {
-  return {
-    client_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
-    client_screen:   (screen.width || 0) + 'x' + (screen.height || 0),
-    client_locale:   navigator.language || ''
-  };
-}
+      return {
+        client_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+        client_screen:   (screen.width || 0) + 'x' + (screen.height || 0),
+        client_locale:   navigator.language || ''
+      };
+    }
+
     async function createBooking() {
       const payload = {
         csrf_token: BOOMY.csrfToken,
@@ -1309,8 +1313,7 @@ function validateCustomerInputs() {
         allow_duplicate: state.allowDuplicate,
         notes: '',
         ...currentCustomerPayload(),
-
-    ...collectClientMeta()   // add this
+        ...collectClientMeta()
       };
 
       if (state.customerMode === 'new') {
@@ -1418,14 +1421,9 @@ function validateCustomerInputs() {
       setStep(1);
     }
 
-    async function boot() {
-      try {
-        await fetchInit();
-
-         // Apply customer field visibility from settings
-    const fieldSettings = state.settings?.customer_field_settings || {};
-
+    // FIX 2: Extracted cleanly outside boot mapping context to optimize rendering engine tracking
     function applyFieldVisibility(inputEl, fieldKey) {
+      const fieldSettings = state.settings?.customer_field_settings || {};
       const cfg = fieldSettings[fieldKey] || {};
       const field = inputEl?.closest('.field');
       if (!field) return;
@@ -1441,13 +1439,66 @@ function validateCustomerInputs() {
       }
     }
 
-applyFieldVisibility(els.newFirstName, 'first_name');
-applyFieldVisibility(els.newMiddleName, 'middle_name');
-applyFieldVisibility(els.newLastName,  'last_name');
-applyFieldVisibility(els.newEmail,     'email');
-applyFieldVisibility(els.newMobile,    'mobile');
-applyFieldVisibility(els.newDob,       'date_of_birth');
-applyFieldVisibility(els.newGender,    'gender');
+    async function boot() {
+      try {
+        await fetchInit();
+
+        // --- START CONCURRENT METADATA RESTRICTION TRACK CHECK ---
+        console.log("Configured Booking Limit:", state.prevent_same_user_booking);
+        
+        // FIX 3: Point target checks back to the raw property updated from fetchInit
+        if (state.prevent_same_user_booking > 0) {
+          const clientMeta = collectClientMeta();
+          const checkUrl = new URL('booking_api.php?action=check_metadata_limit', window.location.href);
+          
+          const verifyCheck = await fetchJson(checkUrl.toString(), {
+            method: 'POST',
+            body: JSON.stringify({
+              csrf_token: BOOMY.csrfToken,
+              ...clientMeta
+            })
+          });
+
+          console.log("Telemetry validation block result:", verifyCheck);
+
+          if (verifyCheck.is_blocked) {
+            const supportEmail = state.settings?.organization_email ?? 'appointments@example.com';
+            const supportPhone = state.settings?.organization_number ?? '';
+            let contactLine = `email at <strong>${escapeHtml(supportEmail)}</strong>`;
+            if (supportPhone.trim() !== '') {
+              contactLine += ` or phone at <strong>${escapeHtml(supportPhone)}</strong>`;
+            }
+
+            const noticeEl = document.getElementById('step1RestrictionNotice');
+            if (noticeEl) {
+               noticeEl.innerHTML = `🚨 <strong>Booking Limit Exceeded:</strong> You have reached the maximum allowed concurrent appointments. Cannot make booking, please contact us via ${contactLine} to make a booking.`;
+               noticeEl.classList.remove('hidden');
+            }
+
+            const gridEl = document.getElementById('step1SelectionGrid');
+            if (gridEl) {
+               gridEl.classList.add('hidden');
+            }
+            
+            if (els.step1Continue) {
+               els.step1Continue.disabled = true;
+               els.step1Continue.classList.add('hidden');
+            }
+            
+            setToast('Booking locked', 'Maximum concurrent appointments threshold crossed.');
+            return; // Halt logic setup execution entirely
+          }
+        }
+        // --- END CONCURRENT METADATA RESTRICTION TRACK CHECK ---
+
+        applyFieldVisibility(els.newFirstName, 'first_name');
+        applyFieldVisibility(els.newMiddleName, 'middle_name');
+        applyFieldVisibility(els.newLastName,  'last_name');
+        applyFieldVisibility(els.newEmail,     'email');
+        applyFieldVisibility(els.newMobile,    'mobile');
+        applyFieldVisibility(els.newDob,       'date_of_birth');
+        applyFieldVisibility(els.newGender,    'gender');
+
         els.appointmentTypeSelect.addEventListener('change', () => {
           state.appointmentTypeId = els.appointmentTypeSelect.value;
         });
