@@ -48,7 +48,7 @@ try {
             'booking_phone_display', 'booking_phone_required', 'booking_phone_numbers_only', 'booking_phone_min', 'booking_phone_max',
             'booking_dob_display', 'booking_dob_required', 'booking_gender_display', 'booking_gender_required',
             'booking_show_monday', 'booking_show_tuesday', 'booking_show_wednesday', 'booking_show_thursday', 'booking_show_friday', 'booking_show_saturday', 'booking_show_sunday',
-            'booking_start_time', 'booking_end_time', 'booking_week_start_day', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes',
+            'booking_start_time', 'booking_end_time', 'booking_week_start_day', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes', 'auto_no_show',
             'password_min_length', 'password_max_length', 'password_require_lowercase', 'password_require_uppercase', 'password_require_number', 'password_require_symbol',
             'email_whitelist_enabled', 'email_domain_whitelist', 'email_domain_blacklist',
             'smtp_host', 'smtp_port', 'smtp_encryption', 'smtp_username', 'smtp_password', 'mail_from_address', 'mail_from_name'
@@ -176,7 +176,7 @@ try {
             'booking' => [
                 'booking_deadline_hours',
                 'booking_show_monday', 'booking_show_tuesday', 'booking_show_wednesday', 'booking_show_thursday', 'booking_show_friday', 'booking_show_saturday', 'booking_show_sunday',
-                'booking_start_time', 'booking_end_time', 'booking_week_start_day', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes'
+                'booking_start_time', 'booking_end_time', 'booking_week_start_day', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes', 'auto_no_show'
             ],
             'authentication' => [
                 'password_min_length', 'password_max_length', 'password_require_lowercase', 'password_require_uppercase', 'password_require_number', 'password_require_symbol',
@@ -284,6 +284,7 @@ try {
             $data['booking_calendar_height'] = $calendarHeight === 'auto' ? 'auto' : (string) $calendarHeight;
             $data['booking_deadline_hours'] = (string) $deadline_hours;
             $data['booking_snap_minutes'] = (string) $snap_minutes;
+            $data['auto_no_show'] = isset($data['auto_no_show']) && $data['auto_no_show'] === '1' ? '1' : '0';
 
             $db = get_db();
             $existingTypes = [];
@@ -389,15 +390,26 @@ try {
 
         // Save fields
         foreach ($fields_to_save as $k) {
+            // Define if this specific key is a checkbox type toggle
+            $isCheckbox = (
+                strpos($k, '_display') !== false || 
+                strpos($k, '_required') !== false || 
+                strpos($k, '_require') !== false || 
+                strpos($k, '_enabled') !== false || 
+                strpos($k, '_letters_only') !== false || 
+                strpos($k, '_numbers_only') !== false || 
+                strpos($k, '_show_') !== false || 
+                $k === 'auto_no_show'
+            );
+
             if (isset($data[$k])) {
                 $value = $data[$k];
-                // Handle checkboxes (they're only present if checked)
-                if (strpos($k, '_display') !== false || strpos($k, '_required') !== false || strpos($k, '_require') !== false || strpos($k, '_enabled') !== false || strpos($k, '_letters_only') !== false || strpos($k, '_numbers_only') !== false || strpos($k, '_show_') !== false) {
+                if ($isCheckbox) {
                     $value = $value === '1' ? '1' : '0';
                 }
                 set_setting($k, $value);
-            } elseif (strpos($k, '_display') !== false || strpos($k, '_required') !== false || strpos($k, '_require') !== false || strpos($k, '_enabled') !== false || strpos($k, '_letters_only') !== false || strpos($k, '_numbers_only') !== false || strpos($k, '_show_') !== false) {
-                // Checkbox not present means it was unchecked
+            } elseif ($isCheckbox) {
+                // Checkbox not present in the payload request means it was explicitly unchecked by the user
                 set_setting($k, '0');
             }
         }

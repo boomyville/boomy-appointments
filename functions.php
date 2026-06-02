@@ -18,6 +18,9 @@ function init_session(): void
             'samesite' => 'Lax'
         ]);
         session_start();
+
+        // Run the automatic stale appointment cleanup pass cleanly once per load cycle
+        process_automatic_no_shows();
     }
 }
 
@@ -2180,5 +2183,52 @@ function update_customer_meta(int $customerId, array $meta): void
         ]);
     } catch (Throwable $e) {
         // silently fail - tracking should never break bookings
+    }
+}
+
+/**
+ * Automatically processes stale unconfirmed, confirmed, or booked appointments
+ * and flips their status to 'no_show' if their end_time has drifted behind server NOW.
+ */
+function process_automatic_no_shows(): void
+{
+    try {
+        // Evaluate configuration toggle preference dynamically from database
+        if ((string) get_setting('auto_no_show', '0') === '1') {
+            $db = get_db();
+            
+            // Get the true localized application time matching your appointments timezone
+            $appTimezone = get_app_timezone_name();
+            $tz = new DateTimeZone($appTimezone);
+            $dt = new DateTimeImmutable('now', $tz);
+            $now = $dt->format('Y-m-d H:i:s');
+
+            // Explicit target checklist matching your schema strings
+            $targetStatuses = ['unconfirmed', 'confirmed', 'booked'];
+            
+            // Build absolute named placeholders map array dynamically
+            $namedPlaceholders = [];
+            $bindValues = [':now' => $now];
+            
+            foreach ($targetStatuses as $index => $status) {
+                $key = ':status' . $index;
+                $namedPlaceholders[] = $key;
+                $bindValues[$key] = $status;
+            }
+
+            // Construct definitive target query — SET status explicitly to 'no_show' with an underscore!
+            $query = "UPDATE `appointments` 
+                      SET `status` = 'no_show' 
+                      WHERE `end_time` < :now 
+                      AND `status` IN (" . implode(', ', $namedPlaceholders) . ")";
+                      
+            $stmt = $db->prepare($query);
+            $stmt->execute($bindValues);
+        }
+    } catch (Throwable $e) {
+        // Log to server errors in dev to give visibility without blocking clients
+        if (defined('DEVELOPMENT_MODE') && DEVELOPMENT_MODE) {
+            error_log('Auto No-Show Routine Error Trace: ' . $e->getMessage());
+        }
     }
 }

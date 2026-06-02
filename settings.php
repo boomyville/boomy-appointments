@@ -84,6 +84,7 @@ $booking_calendar_height = normalize_booking_calendar_height_setting(get_setting
 $booking_show_now_indicator = (int) get_setting('booking_show_now_indicator', '1');
 $booking_snap_minutes = (int) get_setting('booking_snap_minutes', '15');
 $booking_snap_options = [1, 2, 5, 10, 15, 20, 30, 40, 45, 60];
+$auto_no_show = (int) get_setting('auto_no_show', '0');
 $appointmentTypes = get_appointment_types();
 
 // PHPMailer/Gmail settings
@@ -281,7 +282,23 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
           <label><input type="checkbox" name="booking_show_sunday" value="1" <?php echo $booking_show_sunday ? 'checked' : ''; ?>> Sunday</label>
         </div>
       </fieldset>
-
+      
+      <fieldset class="field-group">
+        <legend>Automated Catch-up Maintenance</legend>
+        <label>
+          <input type="hidden" name="auto_no_show" value="0">
+          <input type="checkbox" name="auto_no_show" value="1" <?php echo $auto_no_show === 1 ? 'checked' : ''; ?>> 
+          Automatically transition expired appointments to "No Show" status
+        </label>
+        <p style="font-size: 0.9em; color: #666; margin-top: 4px;">
+          When checked, any appointment left in an unconfirmed, confirmed, or booked state whose end-time has drifted past the current server time will be updated automatically during page load.
+        </p>
+      </fieldset>
+      
+      <fieldset class="field-group">
+        <legend>Live Time Marker</legend>
+        <label><input type="checkbox" name="booking_show_now_indicator" value="1" <?php echo $booking_show_now_indicator ? 'checked' : ''; ?>> Show red line for the current time</label>
+      </fieldset>
       <fieldset class="field-group">
         <legend>Standard Breaks</legend>
         <p style="font-size: 0.9em; color: #666; margin-bottom: 12px;">Choose a day to view or create recurring breaks. Leave it blank to work with everyday breaks.</p>
