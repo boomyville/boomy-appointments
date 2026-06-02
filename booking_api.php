@@ -217,6 +217,35 @@ function booking_resolve_customer_name(array $data, string $email = ''): string
     }
     return 'New Customer';
 }
+function booking_extract_client_meta(array $data): array
+{
+    $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] 
+        ?? $_SERVER['HTTP_X_REAL_IP'] 
+        ?? $_SERVER['REMOTE_ADDR'] 
+        ?? null;
+
+    // X-Forwarded-For can be a comma-separated list; take the first
+    if ($ip && str_contains($ip, ',')) {
+        $ip = trim(explode(',', $ip)[0]);
+    }
+
+    return [
+        'last_ip'         => $ip ? substr($ip, 0, 45) : null,
+        'last_user_agent' => isset($_SERVER['HTTP_USER_AGENT']) 
+                               ? substr($_SERVER['HTTP_USER_AGENT'], 0, 512) 
+                               : null,
+        'last_timezone'   => isset($data['client_timezone']) 
+                               ? substr(trim($data['client_timezone']), 0, 64) 
+                               : null,
+        'last_screen'     => isset($data['client_screen']) 
+                               ? substr(trim($data['client_screen']), 0, 32) 
+                               : null,
+        'last_locale'     => isset($data['client_locale']) 
+                               ? substr(trim($data['client_locale']), 0, 32) 
+                               : null,
+        'last_seen_at'    => (new DateTimeImmutable())->format('Y-m-d H:i:s'),
+    ];
+}
 
 function booking_validate_new_customer_data(array $data): array
 {
@@ -414,7 +443,17 @@ try {
                 'selected_customer' => $matchCount === 1 ? $matches[0] : null,
             ]);
         }
-        booking_api_response(['ok' => true, 'customer_mode' => 'new', 'match_count' => 0, 'duplicate_contact' => false, 'can_continue' => true, 'matches' => []]);
+        $matches = booking_find_exact_customer_matches($email, $mobile);
+        $matchCount = count($matches);
+        booking_api_response([
+            'ok' => true,
+            'customer_mode' => 'new',
+            'match_count' => $matchCount,
+            'duplicate_contact' => $matchCount > 0,
+            'can_continue' => true,
+            'matches' => $matches,
+        ]);
+
     }
 
     if ($action === 'request' && $method === 'GET') {
@@ -476,7 +515,8 @@ try {
         $matches = booking_find_exact_customer_matches($customerEmail, $customerMobile);
         $matchCount = count($matches);
         $notesValue = $notes !== '' ? $notes : null;
-        $needsVerification = ($matchCount > 0); 
+        $allowDuplicate = !empty($data['allow_duplicate']);
+        $needsVerification = ($matchCount > 0) && !$allowDuplicate;
         $resolvedCustomerName = booking_resolve_customer_name($data, $customerEmail);
 
         if ($customerMode === 'existing') {
@@ -496,6 +536,7 @@ try {
             }
 
             if (!$customer) booking_api_response(['error' => 'Failed to load customer'], 500);
+update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
 
             $appointment = create_appointment((int)$customer['id'], $providerId, $appointmentTypeId, $startDate->format('Y-m-d H:i:s'), 'unconfirmed', null, $notesValue);
             if (!$appointment) booking_api_response(['error' => 'Failed to create appointment'], 500);
@@ -520,6 +561,7 @@ try {
         }
 
         if (!$customer) booking_api_response(['error' => 'Failed to load customer'], 500);
+update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
 
         $appointment = create_appointment((int) $customer['id'], $providerId, $appointmentTypeId, $startDate->format('Y-m-d H:i:s'), 'booked', null, $notesValue);
         if (!$appointment) booking_api_response(['error' => 'Failed to create appointment'], 500);

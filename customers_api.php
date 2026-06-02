@@ -260,6 +260,178 @@ try {
         exit;
     }
 
+    // GET /customers_api.php?action=meta&id=X — raw metadata for a customer
+    if ($action === 'meta' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        if ($role !== 'admin') {
+            http_response_code(403);
+            echo json_encode(['error' => 'permission denied']);
+            exit;
+        }
+
+        $customerId = (int) ($_GET['id'] ?? 0);
+        if ($customerId < 1) {
+            http_response_code(422);
+            echo json_encode(['error' => 'id is required']);
+            exit;
+        }
+
+        $db = get_db();
+        try {
+            $stmt = $db->prepare('
+                SELECT id, full_name, email, mobile,
+                       last_ip, last_user_agent, last_timezone,
+                       last_screen, last_locale, last_seen_at,
+                       date_added, date_of_birth, gender
+                FROM customers WHERE id = ? LIMIT 1
+            ');
+            $stmt->execute([$customerId]);
+            $customer = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            // Fallback if meta columns don't exist yet
+            $stmt = $db->prepare('SELECT id, full_name, email, mobile, date_added, date_of_birth, gender FROM customers WHERE id = ? LIMIT 1');
+            $stmt->execute([$customerId]);
+            $customer = $stmt->fetch(PDO::FETCH_ASSOC);
+        }
+
+        if (!$customer) {
+            http_response_code(404);
+            echo json_encode(['error' => 'customer not found']);
+            exit;
+        }
+
+        echo json_encode(['ok' => true, 'customer' => $customer]);
+        exit;
+    }
+
+    // GET /customers_api.php?action=signals&id=X — duplicate-signal analysis
+    if ($action === 'signals' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+        if ($role !== 'admin') {
+            http_response_code(403);
+            echo json_encode(['error' => 'permission denied']);
+            exit;
+        }
+
+        $customerId = (int) ($_GET['id'] ?? 0);
+        if ($customerId < 1) {
+            http_response_code(422);
+            echo json_encode(['error' => 'id is required']);
+            exit;
+        }
+
+        $db = get_db();
+
+        // Fetch the customer's own values first
+        try {
+            $stmt = $db->prepare('SELECT email, mobile, last_ip, last_user_agent, last_screen FROM customers WHERE id = ? LIMIT 1');
+            $stmt->execute([$customerId]);
+            $self = $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            $stmt = $db->prepare('SELECT email, mobile FROM customers WHERE id = ? LIMIT 1');
+            $stmt->execute([$customerId]);
+            $self = $stmt->fetch(PDO::FETCH_ASSOC);
+        }
+
+        if (!$self) {
+            http_response_code(404);
+            echo json_encode(['error' => 'customer not found']);
+            exit;
+        }
+
+        $signals = [];
+
+        // ── Signal 1: shared email ───────────────────────────────────────────
+        $email = trim((string) ($self['email'] ?? ''));
+        if ($email !== '') {
+            $stmt = $db->prepare('SELECT COUNT(*) FROM customers WHERE email = ? AND email != \'\' AND id != ?');
+            $stmt->execute([$email, $customerId]);
+            $count = (int) $stmt->fetchColumn();
+            if ($count > 0) {
+                $total = $count + 1; // include self
+                $signals[] = [
+                    'type'    => 'shared_email',
+                    'label'   => 'Email',
+                    'count'   => $total,
+                    'others'  => $count,
+                    'value'   => $email,
+                    'severity' => $total <= 4 ? 'green' : ($total <= 10 ? 'yellow' : 'red'),
+                ];
+            }
+        }
+
+        // ── Signal 2: shared mobile ──────────────────────────────────────────
+        $mobile = trim((string) ($self['mobile'] ?? ''));
+        if ($mobile !== '') {
+            $stmt = $db->prepare('SELECT COUNT(*) FROM customers WHERE mobile = ? AND mobile != \'\' AND id != ?');
+            $stmt->execute([$mobile, $customerId]);
+            $count = (int) $stmt->fetchColumn();
+            if ($count > 0) {
+                $total = $count + 1;
+                $signals[] = [
+                    'type'    => 'shared_mobile',
+                    'label'   => 'Mobile',
+                    'count'   => $total,
+                    'others'  => $count,
+                    'value'   => $mobile,
+                    'severity' => $total <= 4 ? 'green' : ($total <= 10 ? 'yellow' : 'red'),
+                ];
+            }
+        }
+
+        // ── Signal 3: shared IP ──────────────────────────────────────────────
+        $ip = trim((string) ($self['last_ip'] ?? ''));
+        if ($ip !== '') {
+            try {
+                $stmt = $db->prepare('SELECT COUNT(*) FROM customers WHERE last_ip = ? AND last_ip IS NOT NULL AND id != ?');
+                $stmt->execute([$ip, $customerId]);
+                $count = (int) $stmt->fetchColumn();
+                if ($count > 0) {
+                    $total = $count + 1;
+                    $signals[] = [
+                        'type'    => 'shared_ip',
+                        'label'   => 'IP',
+                        'count'   => $total,
+                        'others'  => $count,
+                        'value'   => $ip,
+                        'severity' => $total <= 4 ? 'green' : ($total <= 10 ? 'yellow' : 'red'),
+                    ];
+                }
+            } catch (Throwable $e) { /* meta columns not yet migrated */ }
+        }
+
+        // ── Signal 4: shared IP + device fingerprint ─────────────────────────
+        // Fingerprint = same IP + same user_agent + same screen resolution
+        $ua     = trim((string) ($self['last_user_agent'] ?? ''));
+        $screen = trim((string) ($self['last_screen'] ?? ''));
+        if ($ip !== '' && $ua !== '' && $screen !== '') {
+            try {
+                $stmt = $db->prepare('
+                    SELECT COUNT(*) FROM customers
+                    WHERE last_ip = ?
+                      AND last_user_agent = ?
+                      AND last_screen = ?
+                      AND last_ip IS NOT NULL
+                      AND id != ?
+                ');
+                $stmt->execute([$ip, $ua, $screen, $customerId]);
+                $count = (int) $stmt->fetchColumn();
+                if ($count > 0) {
+                    $total = $count + 1;
+                    $signals[] = [
+                        'type'    => 'shared_device',
+                        'label'   => 'Device',
+                        'count'   => $total,
+                        'others'  => $count,
+                        'value'   => $screen . ' / ' . substr($ua, 0, 60) . (strlen($ua) > 60 ? '…' : ''),
+                        'severity' => $total <= 2 ? 'green' : ($total <= 3 ? 'yellow' : 'red'),
+                    ];
+                }
+            } catch (Throwable $e) { /* meta columns not yet migrated */ }
+        }
+
+        echo json_encode(['ok' => true, 'customer_id' => $customerId, 'signals' => $signals]);
+        exit;
+    }
+
     http_response_code(400);
     echo json_encode(['error' => 'unknown action']);
 } catch (Throwable $e) {

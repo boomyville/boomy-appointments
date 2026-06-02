@@ -737,18 +737,20 @@ $csrfToken = csrf_token();
     </section>
   </main>
 
-  <div id="duplicateModal" class="modal" aria-hidden="true">
-    <div class="modal-card">
-      <h3>This email and mobile combination already exists</h3>
-      <p id="duplicateModalText">Choose whether to continue, cancel, or switch to the existing customer profile.</p>
-      <div id="duplicateMatchList" class="results-list"></div>
-      <div class="modal-actions">
-        <button type="button" class="btn ghost" id="duplicateCancelBtn">Cancel</button>
-        <button type="button" class="btn" id="duplicateUseExistingBtn">Use existing profile</button>
-        <button type="button" class="btn primary" id="duplicateContinueBtn">Continue anyway</button>
-      </div>
+<div id="duplicateModal" class="modal" aria-hidden="true">
+  <div class="modal-card">
+    <h3>This email and mobile combination already exists</h3>
+    <p id="duplicateModalText">Choose whether to continue, cancel, or switch to the existing customer profile.</p>
+    
+    <!-- The duplicateMatchList container has been completely removed from here for privacy -->
+
+    <div class="modal-actions">
+      <button type="button" class="btn ghost" id="duplicateCancelBtn">Cancel</button>
+      <button type="button" class="btn" id="duplicateUseExistingBtn">Use existing profile</button>
+      <button type="button" class="btn primary" id="duplicateContinueBtn">Continue anyway</button>
     </div>
   </div>
+</div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
@@ -1081,17 +1083,18 @@ state.settings.customer_field_settings = data.customer_field_settings || {};
       els.existingMatches.classList.add('hidden');
     }
 
-    function renderDuplicateModal(matches, mode) {
-      const message = mode === 'new'
-        ? 'A customer profile already exists for this email and mobile combination. You can continue to create a pending booking request, switch to the existing profile, or cancel.'
-        : 'Multiple customer profiles share this email and mobile combination. The booking will need to be verified before it can be completed.';
-      els.duplicateModalText.textContent = message;
-      els.duplicateMatchList.innerHTML = matches.map((match) => {
-        return '<div class="result-card"><strong>' + escapeHtml(match.full_name || 'Unnamed customer') + '</strong><small>Email: ' + escapeHtml(match.email || '-') + '<br>Mobile: ' + escapeHtml(match.mobile || '-') + '</small></div>';
-      }).join('');
-      els.duplicateModal.classList.add('is-open');
-      els.duplicateModal.setAttribute('aria-hidden', 'false');
-    }
+function renderDuplicateModal(matches, mode) {
+  const message = mode === 'new'
+    ? 'A customer profile already exists for this email and mobile combination. You can continue to create a pending booking request, switch to the existing profile, or cancel.'
+    : 'Multiple customer profiles share this email and mobile combination. The booking will need to be verified before it can be completed.';
+  
+  els.duplicateModalText.textContent = message;
+
+  // We are no longer looping over or displaying "matches" here to safeguard customer privacy.
+  
+  els.duplicateModal.classList.add('is-open');
+  els.duplicateModal.setAttribute('aria-hidden', 'false');
+}
 
     function closeDuplicateModal() {
       els.duplicateModal.classList.remove('is-open');
@@ -1161,6 +1164,7 @@ state.settings.customer_field_settings = data.customer_field_settings || {};
       return true;
     }
 
+    
 function validateCustomerInputs() {
   const fieldSettings = state.settings?.customer_field_settings || {};
 
@@ -1172,14 +1176,13 @@ function validateCustomerInputs() {
     return true;
   }
 
-  // New customer — check required fields dynamically
   const checks = [
-    { el: els.newFirstName, key: 'first_name',    label: 'First name' },
-    { el: els.newLastName,  key: 'last_name',     label: 'Last name' },
-    { el: els.newEmail,     key: 'email',         label: 'Email' },
-    { el: els.newMobile,    key: 'mobile',        label: 'Mobile' },
-    { el: els.newDob,       key: 'date_of_birth', label: 'Date of birth' },
-    { el: els.newGender,    key: 'gender',        label: 'Gender' },
+    { el: els.newFirstName, key: 'first_name',     label: 'First name' },
+    { el: els.newLastName,  key: 'last_name',      label: 'Last name' },
+    { el: els.newEmail,     key: 'email',          label: 'Email' },
+    { el: els.newMobile,    key: 'mobile',         label: 'Mobile' },
+    { el: els.newDob,       key: 'date_of_birth',  label: 'Date of birth' },
+    { el: els.newGender,    key: 'gender',         label: 'Gender' },
   ];
 
   for (const { el, key, label } of checks) {
@@ -1191,8 +1194,6 @@ function validateCustomerInputs() {
     }
   }
 
-  // Email and mobile are always needed for duplicate checking
-  // even if not marked required in settings
   if (!els.newEmail.value.trim() || !els.newMobile.value.trim()) {
     setToast('Missing customer details', 'Email and mobile are always needed to check for duplicates.');
     return false;
@@ -1207,6 +1208,7 @@ function validateCustomerInputs() {
       const slotParts = state.selectedSlot ? state.selectedSlot.split(' ') : [];
       const selectedDateText = state.selectedDate ? formatDateLong(state.selectedDate) : '-';
       const selectedTimeText = state.selectedSlot ? formatTimeLabel(state.selectedSlot) : '-';
+      const fieldSettings = state.settings?.customer_field_settings || {};
       const customerInfo = currentCustomerPayload();
 
       els.summaryGrid.innerHTML = [
@@ -1289,6 +1291,14 @@ function validateCustomerInputs() {
       }
     }
 
+
+    function collectClientMeta() {
+  return {
+    client_timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+    client_screen:   (screen.width || 0) + 'x' + (screen.height || 0),
+    client_locale:   navigator.language || ''
+  };
+}
     async function createBooking() {
       const payload = {
         csrf_token: BOOMY.csrfToken,
@@ -1298,7 +1308,9 @@ function validateCustomerInputs() {
         customer_mode: state.customerMode,
         allow_duplicate: state.allowDuplicate,
         notes: '',
-        ...currentCustomerPayload()
+        ...currentCustomerPayload(),
+
+    ...collectClientMeta()   // add this
       };
 
       if (state.customerMode === 'new') {

@@ -87,19 +87,28 @@ CREATE TABLE `provider_appointment_types` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 5. CUSTOMERS
+-- 5. CUSTOMERS
 CREATE TABLE `customers` (
-  `id` INT UNSIGNED AUTO_INCREMENT,
-  `email` VARCHAR(191) NOT NULL,
-  `mobile` VARCHAR(32) NOT NULL,
-  `full_name` VARCHAR(128) NOT NULL,
-  `date_of_birth` DATE NULL,
-  `date_added` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `gender` ENUM('male','female','other','unknown') NOT NULL DEFAULT 'unknown',
-  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `idx_customer_lookup` (`email`,`mobile`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `id`              INT UNSIGNED AUTO_INCREMENT,
+  `email`           VARCHAR(191)  NOT NULL,
+  `mobile`          VARCHAR(32)   NOT NULL,
+  `full_name`       VARCHAR(128)  NOT NULL,
+  `date_of_birth`   DATE          NULL,
+  `date_added`      TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `gender`          ENUM('male','female','other','unknown') NOT NULL DEFAULT 'unknown',
 
+  -- tracking
+  `last_ip`         VARCHAR(45)   NULL,
+  `last_user_agent` VARCHAR(512)  NULL,
+  `last_timezone`   VARCHAR(64)   NULL,
+  `last_screen`     VARCHAR(32)   NULL,
+  `last_locale`     VARCHAR(32)   NULL,
+  `last_seen_at`    TIMESTAMP     NULL,
+
+  PRIMARY KEY (`id`),
+  KEY `idx_customer_lookup` (`email`, `mobile`),
+  KEY `idx_customer_ip`     (`last_ip`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- 6. BREAKS
 CREATE TABLE `breaks` (
   `id` INT UNSIGNED AUTO_INCREMENT,

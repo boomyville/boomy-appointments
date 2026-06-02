@@ -42,8 +42,42 @@ function get_db(): PDO
     ensure_user_schema($pdo);
     ensure_verification_schema($pdo);
     ensure_appointment_schema($pdo);
+    ensure_customer_meta_schema($pdo); 
     return $pdo;
 }
+
+function ensure_customer_meta_schema(PDO $db): void
+{
+    static $checked = false;
+    if ($checked) return;
+    $checked = true;
+
+    try {
+        $tableExists = (bool) $db->query("SHOW TABLES LIKE 'customers'")->fetch();
+        if (!$tableExists) return;
+
+        $columns = [
+            'last_ip'         => "VARCHAR(45) NULL DEFAULT NULL",
+            'last_user_agent' => "VARCHAR(512) NULL DEFAULT NULL",
+            'last_timezone'   => "VARCHAR(64) NULL DEFAULT NULL",
+            'last_screen'     => "VARCHAR(32) NULL DEFAULT NULL",
+            'last_locale'     => "VARCHAR(32) NULL DEFAULT NULL",
+            'last_seen_at'    => "TIMESTAMP NULL DEFAULT NULL",
+        ];
+
+        foreach ($columns as $column => $definition) {
+            $exists = (bool) $db->query(
+                "SHOW COLUMNS FROM customers LIKE '{$column}'"
+            )->fetch();
+            if (!$exists) {
+                $db->exec("ALTER TABLE customers ADD COLUMN {$column} {$definition}");
+            }
+        }
+    } catch (Throwable $e) {
+        // Non-fatal — tracking columns are optional
+    }
+}
+
 function ensure_user_schema(PDO $db): void
 {
     static $checked = false;
@@ -2119,5 +2153,32 @@ function ensure_verification_schema(PDO $db): void
         }
     } catch (Throwable $e) {
         // Ignore fallback
+    }
+}
+
+function update_customer_meta(int $customerId, array $meta): void
+{
+    try {
+        $db = get_db();
+        $db->prepare("
+            UPDATE customers SET
+                last_ip         = :last_ip,
+                last_user_agent = :last_user_agent,
+                last_timezone   = :last_timezone,
+                last_screen     = :last_screen,
+                last_locale     = :last_locale,
+                last_seen_at    = :last_seen_at
+            WHERE id = :id
+        ")->execute([
+            ':last_ip'         => $meta['last_ip'],
+            ':last_user_agent' => $meta['last_user_agent'],
+            ':last_timezone'   => $meta['last_timezone'],
+            ':last_screen'     => $meta['last_screen'],
+            ':last_locale'     => $meta['last_locale'],
+            ':last_seen_at'    => $meta['last_seen_at'],
+            ':id'              => $customerId,
+        ]);
+    } catch (Throwable $e) {
+        // silently fail - tracking should never break bookings
     }
 }
