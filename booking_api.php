@@ -82,25 +82,57 @@ function booking_get_appointment_duration(int $appointmentTypeId): ?int
     return max(1, (int) ($appointmentType['duration_minutes'] ?? 30));
 }
 
-function booking_validate_day_slots(int $providerId, DateTimeImmutable $date, int $appointmentTypeId): array
-{
+function booking_validate_day_slots(
+    int $providerId,
+    DateTimeImmutable $date,
+    int $appointmentTypeId,
+    array $prefetchedAppointments = [],  // ← new
+    array $prefetchedRecurring = [],     // ← new
+    array $prefetchedSingle = []         // ← new
+): array {
     $durationMinutes = booking_get_appointment_duration($appointmentTypeId);
     if ($durationMinutes === null) return [];
 
-    $bookingSettings = get_booking_calendar_settings();
-    $serverNow = booking_server_now();
-    $dayStartDate = $date->setTime(0, 0, 0);
-    $todayStart = $serverNow->setTime(0, 0, 0);
+    $bookingSettings = get_booking_calendar_settings(); // cached, free
+    if (!is_booking_day_enabled($date, $bookingSettings)) return [];
 
+    $serverNow   = booking_server_now();
+    $todayStart  = $serverNow->setTime(0, 0, 0);
+    $dayStartDate = $date->setTime(0, 0, 0);
     if ($dayStartDate < $todayStart) return [];
 
-    $dayStart = booking_visible_time($date, (string) $bookingSettings['start_time']);
-    $dayEnd = booking_visible_time($date, (string) $bookingSettings['end_time']);
+    $dayStart  = booking_visible_time($date, (string) $bookingSettings['start_time']);
+    $dayEnd    = booking_visible_time($date, (string) $bookingSettings['end_time']);
     $lastStart = $dayEnd->modify('-' . $durationMinutes . ' minutes');
     if ($lastStart < $dayStart) return [];
 
+    $tz = booking_timezone();
+    $dayKey = $date->format('Y-m-d');
+
+    // Filter prefetched appointments down to this day
+    $dayAppointments = array_filter($prefetchedAppointments, function($appt) use ($dayKey) {
+        return str_starts_with((string)$appt['start_time'], $dayKey)
+            || str_starts_with((string)$appt['end_time'], $dayKey)
+            || ($appt['start_time'] < $dayKey . ' 23:59:59' && $appt['end_time'] > $dayKey . ' 00:00:00');
+    });
+
+    // Filter recurring unavailabilities to this day-of-week
+    $dayOfWeek = (int) $date->format('N');
+    $dayRecurring = array_filter($prefetchedRecurring, function($r) use ($dayOfWeek, $dayKey) {
+        return (int)$r['day_of_week'] === $dayOfWeek
+            && $r['rolling_start_date'] <= $dayKey
+            && ($r['rolling_end_date'] === null || $r['rolling_end_date'] >= $dayKey);
+    });
+
+    // Filter single blocks overlapping this day
+    $daySingle = array_filter($prefetchedSingle, function($s) use ($dayKey) {
+        return $s['start_datetime'] < $dayKey . ' 23:59:59'
+            && $s['end_datetime'] > $dayKey . ' 00:00:00';
+    });
+
     $slots = [];
     $cursor = $dayStart;
+
     while ($cursor <= $lastStart) {
         if ($cursor < $serverNow) {
             $cursor = booking_add_minutes($cursor, $durationMinutes);
@@ -108,81 +140,157 @@ function booking_validate_day_slots(int $providerId, DateTimeImmutable $date, in
         }
 
         $slotEnd = booking_add_minutes($cursor, $durationMinutes);
-        $windowError = validate_appointment_window($providerId, $cursor, $slotEnd);
-        if ($windowError === null) {
-            $slots[] = [
-                'start' => $cursor->format('Y-m-d H:i:s'),
-                'end' => $slotEnd->format('Y-m-d H:i:s'),
-                'label' => booking_slot_label($cursor),
-                'value' => $cursor->format('Y-m-d H:i:s'),
-            ];
-            $cursor = booking_add_minutes($cursor, $durationMinutes);
+        $slotStartStr = $cursor->format('Y-m-d H:i:s');
+        $slotEndStr   = $slotEnd->format('Y-m-d H:i:s');
+        $blocked = false;
+
+        // Check appointment overlaps (in-memory)
+        foreach ($dayAppointments as $appt) {
+            if ($appt['start_time'] < $slotEndStr && $appt['end_time'] > $slotStartStr) {
+                // Jump cursor past this appointment
+                $cursor = new DateTimeImmutable($appt['end_time'], $tz);
+                $blocked = true;
+                break;
+            }
+        }
+        if ($blocked) continue;
+
+        // Check standard breaks (already cached by get_all_standard_breaks())
+        $breakConflict = find_overlapping_break($cursor, $slotEnd);
+        if ($breakConflict) {
+            $breakEnd = new DateTimeImmutable($breakConflict['break_end'], $tz);
+            $cursor = $breakEnd > $cursor ? $breakEnd : booking_add_minutes($cursor, $durationMinutes);
             continue;
         }
 
-        $conflictEnd = booking_conflict_end_time($windowError['conflict'] ?? null);
-        if ($conflictEnd instanceof DateTimeImmutable && $conflictEnd > $cursor) {
-            $cursor = $conflictEnd;
-            continue;
+        // Check single unavailability blocks (in-memory)
+        foreach ($daySingle as $s) {
+            if ($s['start_datetime'] < $slotEndStr && $s['end_datetime'] > $slotStartStr) {
+                $cursor = new DateTimeImmutable($s['end_datetime'], $tz);
+                $blocked = true;
+                break;
+            }
         }
+        if ($blocked) continue;
+
+        // Check recurring unavailabilities (in-memory)
+        $slotStartSec = (int)$cursor->format('H') * 3600 + (int)$cursor->format('i') * 60;
+        $slotEndSec   = (int)$slotEnd->format('H') * 3600 + (int)$slotEnd->format('i') * 60;
+        foreach ($dayRecurring as $r) {
+            [$rh, $rm] = explode(':', $r['start_time']);
+            [$eh, $em] = explode(':', $r['end_time']);
+            $rStart = (int)$rh * 3600 + (int)$rm * 60;
+            $rEnd   = (int)$eh * 3600 + (int)$em * 60;
+            if ($rStart < $slotEndSec && $rEnd > $slotStartSec) {
+                // Jump to end of recurring block
+                $cursor = booking_visible_time($date, $r['end_time']);
+                $blocked = true;
+                break;
+            }
+        }
+        if ($blocked) continue;
+
+        $slots[] = [
+            'start' => $slotStartStr,
+            'end'   => $slotEndStr,
+            'label' => booking_slot_label($cursor),
+            'value' => $slotStartStr,
+        ];
         $cursor = booking_add_minutes($cursor, $durationMinutes);
     }
+
     return $slots;
 }
 
 function booking_build_month_view(int $providerId, int $appointmentTypeId, DateTimeImmutable $monthStart): array
 {
-    $bookingSettings = get_booking_calendar_settings();
+    $bookingSettings = get_booking_calendar_settings(); // now cached
     $weekStartDay = (int) ($bookingSettings['week_start_day'] ?? 0);
     $monthEnd = $monthStart->modify('first day of next month')->setTime(0, 0, 0);
     $serverNow = booking_server_now();
     $todayStart = $serverNow->setTime(0, 0, 0);
 
+    // ── Prefetch all appointments for this provider this month ──────────────
+    $db = get_db();
+    $monthStartStr = $monthStart->format('Y-m-d 00:00:00');
+    $monthEndStr   = $monthEnd->format('Y-m-d 00:00:00');
+
+    $stmt = $db->prepare("
+        SELECT start_time, end_time
+        FROM appointments
+        WHERE provider_id = ?
+          AND start_time < ? AND end_time > ?
+          AND status NOT IN ('cancelled', 'no_show')
+    ");
+    $stmt->execute([$providerId, $monthEndStr, $monthStartStr]);
+    $monthAppointments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    // ── Prefetch recurring unavailabilities for this provider this month ────
+    $stmt2 = $db->prepare("
+        SELECT start_time, end_time, day_of_week, reason, rolling_start_date, rolling_end_date
+        FROM unavailabilities
+        WHERE provider_id = ? AND type = 'recurring'
+          AND rolling_start_date <= ?
+          AND (rolling_end_date IS NULL OR rolling_end_date >= ?)
+    ");
+    $stmt2->execute([$providerId, $monthEnd->format('Y-m-d'), $monthStart->format('Y-m-d')]);
+    $recurringUnavail = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+
+    // ── Prefetch single-block unavailabilities for this month ───────────────
+    $stmt3 = $db->prepare("
+        SELECT start_datetime, end_datetime, reason
+        FROM unavailabilities
+        WHERE provider_id = ? AND type = 'single'
+          AND start_datetime < ? AND end_datetime > ?
+    ");
+    $stmt3->execute([$providerId, $monthEndStr, $monthStartStr]);
+    $singleUnavail = $stmt3->fetchAll(PDO::FETCH_ASSOC);
+
+    // Build day entries
     $days = [];
     $leadingBlankCount = ((int) $monthStart->format('w') - $weekStartDay + 7) % 7;
-    for ($index = 0; $index < $leadingBlankCount; $index++) {
-        $days[] = [
-            'date' => null, 'day' => null, 'weekday' => null, 'in_month' => false,
-            'is_today' => false, 'has_slots' => false, 'slot_count' => 0,
-        ];
+    for ($i = 0; $i < $leadingBlankCount; $i++) {
+        $days[] = ['date' => null, 'day' => null, 'weekday' => null, 'in_month' => false,
+                   'is_today' => false, 'has_slots' => false, 'slot_count' => 0];
     }
 
     $cursor = $monthStart->setTime(0, 0, 0);
     while ($cursor < $monthEnd) {
         $isPastDay = $cursor < $todayStart;
-        $slots = $isPastDay ? [] : booking_validate_day_slots($providerId, $cursor, $appointmentTypeId);
+        $slots = $isPastDay ? [] : booking_validate_day_slots(
+            $providerId, $cursor, $appointmentTypeId,
+            $monthAppointments, $recurringUnavail, $singleUnavail // ← pass prefetched data
+        );
         $days[] = [
-            'date' => $cursor->format('Y-m-d'),
-            'day' => (int) $cursor->format('j'),
-            'weekday' => (int) $cursor->format('w'),
-            'in_month' => true,
-            'is_today' => $cursor->format('Y-m-d') === $todayStart->format('Y-m-d'),
+            'date'      => $cursor->format('Y-m-d'),
+            'day'       => (int) $cursor->format('j'),
+            'weekday'   => (int) $cursor->format('w'),
+            'in_month'  => true,
+            'is_today'  => $cursor->format('Y-m-d') === $todayStart->format('Y-m-d'),
             'has_slots' => !$isPastDay && !empty($slots),
-            'slot_count' => $isPastDay ? 0 : count($slots),
+            'slot_count'=> $isPastDay ? 0 : count($slots),
         ];
         $cursor = $cursor->modify('+1 day');
     }
 
     $trailingBlankCount = (7 - (count($days) % 7)) % 7;
-    for ($index = 0; $index < $trailingBlankCount; $index++) {
-        $days[] = [
-            'date' => null, 'day' => null, 'weekday' => null, 'in_month' => false,
-            'is_today' => false, 'has_slots' => false, 'slot_count' => 0,
-        ];
+    for ($i = 0; $i < $trailingBlankCount; $i++) {
+        $days[] = ['date' => null, 'day' => null, 'weekday' => null, 'in_month' => false,
+                   'is_today' => false, 'has_slots' => false, 'slot_count' => 0];
     }
 
     $weekdayLabels = [];
-    $labelMap = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    $labelMap = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     for ($offset = 0; $offset < 7; $offset++) {
         $weekdayLabels[] = $labelMap[($weekStartDay + $offset) % 7];
     }
 
     return [
-        'month' => $monthStart->format('Y-m'),
-        'label' => $monthStart->format('F Y'),
+        'month'          => $monthStart->format('Y-m'),
+        'label'          => $monthStart->format('F Y'),
         'week_start_day' => $weekStartDay,
         'weekday_labels' => $weekdayLabels,
-        'days' => $days,
+        'days'           => $days,
     ];
 }
 
@@ -362,31 +470,47 @@ try {
             'next_month_start' => booking_server_now()->modify('first day of next month')->format('Y-m-d'),
         ]);
     }
+if ($action === 'month' && $method === 'GET') {
+    $__t = ['start' => microtime(true)];
 
-    if ($action === 'month' && $method === 'GET') {
-        $providerId = (int) ($_GET['provider_id'] ?? 0);
-        $appointmentTypeId = (int) ($_GET['appointment_type_id'] ?? 0);
-        $month = booking_parse_month((string) ($_GET['month'] ?? ''));
+    $providerId        = (int) ($_GET['provider_id'] ?? 0);
+    $appointmentTypeId = (int) ($_GET['appointment_type_id'] ?? 0);
+    $month             = booking_parse_month((string) ($_GET['month'] ?? ''));
+    $__t['after_parse'] = microtime(true);
 
-        if ($providerId < 1 || $appointmentTypeId < 1 || !$month) {
-            booking_api_response(['error' => 'provider_id, appointment_type_id, and month are required'], 422);
-        }
-
-        $provider = get_user_by_id($providerId);
-        if (!$provider || !in_array((string) ($provider['role'] ?? ''), ['provider', 'admin'], true)) {
-            booking_api_response(['error' => 'provider not found'], 404);
-        }
-
-        $appointmentType = get_appointment_type_by_id($appointmentTypeId);
-        if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1) {
-            booking_api_response(['error' => 'appointment type not found'], 404);
-        }
-
-        booking_api_response([
-            'ok' => true,
-            'month' => booking_build_month_view($providerId, $appointmentTypeId, $month),
-        ]);
+    if ($providerId < 1 || $appointmentTypeId < 1 || !$month) {
+        booking_api_response(['error' => 'provider_id, appointment_type_id, and month are required'], 422);
     }
+
+    $provider = get_user_by_id($providerId);
+    $__t['after_get_provider'] = microtime(true);
+
+    $appointmentType = get_appointment_type_by_id($appointmentTypeId);
+    $__t['after_get_type'] = microtime(true);
+
+    if (!$provider || !in_array((string) ($provider['role'] ?? ''), ['provider', 'admin'], true)) {
+        booking_api_response(['error' => 'provider not found'], 404);
+    }
+    if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1) {
+        booking_api_response(['error' => 'appointment type not found'], 404);
+    }
+
+    $monthView = booking_build_month_view($providerId, $appointmentTypeId, $month);
+    $__t['after_build_month'] = microtime(true);
+
+    $base = $__t['start'];
+    $timings = [];
+    foreach ($__t as $k => $v) {
+        if ($k === 'start') continue;
+        $timings[$k] = round(($v - $base) * 1000) . 'ms';
+    }
+
+    booking_api_response([
+        'ok'       => true,
+        'month'    => $monthView,
+        '_timings' => $timings,
+    ]);
+}
 
     if ($action === 'day_slots' && $method === 'GET') {
         $providerId = (int) ($_GET['provider_id'] ?? 0);

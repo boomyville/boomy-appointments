@@ -124,13 +124,13 @@
       require_symbol: true
     }, requirements || {});
 
-    // build UI
+    // build UI using plain divs to completely bypass Pico CSS list stylings
     container.classList.add('pw-hints');
     container.innerHTML = '';
-    const ul = document.createElement('ul');
-    ul.style.listStyle = 'none';
-    ul.style.padding = '0';
-    ul.style.margin = '8px 0 0 0';
+    
+    const hintsWrapper = document.createElement('div');
+    hintsWrapper.style.margin = '8px 0 0 0';
+    hintsWrapper.style.padding = '0';
 
     const items = [];
     items.push({ key: 'min_length', text: `At least ${req.min_length} characters`, check: (v) => v.length >= req.min_length });
@@ -142,24 +142,26 @@
     items.push({ key: 'match', text: 'Passwords match', check: (v) => conf ? (v === (conf.value || '')) : true });
 
     items.forEach(it => {
-      const li = document.createElement('li');
-      li.style.margin = '4px 0';
-      li.dataset.key = it.key;
-      li.textContent = '\u2022 ' + it.text;
-      li.style.color = '#b00020';
-      ul.appendChild(li);
+      const hintLine = document.createElement('div');
+      hintLine.style.margin = '4px 0';
+      hintLine.style.display = 'block';
+      hintLine.dataset.key = it.key;
+      // Keep the visual string bullet safely untouched by global CSS overrides
+      hintLine.textContent = '\u2022 ' + it.text;
+      hintLine.style.color = '#b00020';
+      hintsWrapper.appendChild(hintLine);
     });
 
-    container.appendChild(ul);
+    container.appendChild(hintsWrapper);
 
     function update() {
       const v = pwd ? pwd.value || '' : '';
       items.forEach(it => {
-        const li = ul.querySelector('li[data-key="' + it.key + '"]');
-        if (!li) return;
+        const hintLine = hintsWrapper.querySelector('div[data-key="' + it.key + '"]');
+        if (!hintLine) return;
         const ok = it.check(v);
-        li.style.color = ok ? '#0b6623' : '#b00020';
-        li.style.fontWeight = ok ? '600' : '400';
+        hintLine.style.color = ok ? '#0b6623' : '#b00020';
+        hintLine.style.fontWeight = ok ? '600' : '400';
       });
     }
 

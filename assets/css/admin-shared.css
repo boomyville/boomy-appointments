@@ -332,6 +332,11 @@ body {
   color: #065f46;
 }
 
+html[data-theme="light"] {
+    --primary: #1095c1;
+    --pico-primary-inverse: #1095c1;
+}
+
 /* Dark Mode Variant */
 html[data-theme="dark"] {
   --bg: #0f172a;
@@ -421,5 +426,10 @@ html[data-theme="dark"] .admin-table th {
 
   .admin-grid {
     grid-template-columns: 1fr;
+  }
+
+  /* Checkbox visibility fix for light mode */
+  html[data-theme="light"] input[type="checkbox"] {
+    accent-color: var(--accent);
   }
 }

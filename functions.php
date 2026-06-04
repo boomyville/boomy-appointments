@@ -28,24 +28,27 @@ function init_session(): void
 function get_db(): PDO
 {
     static $pdo = null;
-    if ($pdo instanceof PDO) {
-        return $pdo;
-    }
+    if ($pdo instanceof PDO) return $pdo;
 
     $dsn = sprintf('mysql:host=%s;dbname=%s;charset=utf8mb4', DB_HOST, DB_NAME);
     $options = [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES => false,
+        PDO::ATTR_EMULATE_PREPARES   => false,
     ];
-
     $pdo = new PDO($dsn, DB_USER, DB_PASS, $options);
-    ensure_customer_schema($pdo);
-    ensure_breaks_schema($pdo);
-    ensure_user_schema($pdo);
-    ensure_verification_schema($pdo);
-    ensure_appointment_schema($pdo);
-    ensure_customer_meta_schema($pdo); 
+
+    // Only run schema checks if not already confirmed this session
+    if (empty($_SESSION['schema_checked'])) {
+        ensure_customer_schema($pdo);
+        ensure_breaks_schema($pdo);
+        ensure_user_schema($pdo);
+        ensure_verification_schema($pdo);
+        ensure_appointment_schema($pdo);
+        ensure_customer_meta_schema($pdo);
+        $_SESSION['schema_checked'] = true;
+    }
+
     return $pdo;
 }
 
@@ -279,20 +282,24 @@ function get_standard_breaks(?int $dayOfWeek = null, bool $includeInactive = fal
     }
 }
 
+
 function get_all_standard_breaks(bool $includeInactive = false): array
 {
+    static $cache = [];
+    $key = $includeInactive ? 'all' : 'active';
+    if (isset($cache[$key])) return $cache[$key];
+
     try {
         $db = get_db();
-        $sql = 'SELECT id, day_of_week, start_time, end_time, is_active, created_at, updated_at FROM breaks';
-        if (!$includeInactive) {
-            $sql .= ' WHERE is_active = 1';
-        }
+        $sql = 'SELECT id, day_of_week, start_time, end_time, is_active FROM breaks';
+        if (!$includeInactive) $sql .= ' WHERE is_active = 1';
         $sql .= ' ORDER BY (day_of_week IS NULL) DESC, day_of_week ASC, start_time ASC, id ASC';
         $stmt = $db->query($sql);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $cache[$key] = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Throwable $e) {
-        return [];
+        $cache[$key] = [];
     }
+    return $cache[$key];
 }
 
 function create_standard_break(?int $dayOfWeek, string $startTime, string $endTime, ?bool $isActive = true): ?int
@@ -1300,7 +1307,10 @@ function get_customer_field_settings(): array
 
 function get_booking_calendar_settings(): array
 {
-    return [
+    static $cache = null;
+    if ($cache !== null) return $cache;
+
+    $cache = [
         'deadline_hours' => (int) get_setting('booking_deadline_hours', '24'),
         'calendar_height' => normalize_booking_calendar_height_setting(get_setting('booking_calendar_height', '1800')),
         'week_start_day' => normalize_booking_week_start_day_setting(get_setting('booking_week_start_day', '0')),
@@ -1316,8 +1326,8 @@ function get_booking_calendar_settings(): array
         'show_now_indicator' => (bool) (int) get_setting('booking_show_now_indicator', '1'),
         'snap_minutes' => (int) get_setting('booking_snap_minutes', '15'),
     ];
+    return $cache;
 }
-
 function normalize_booking_calendar_height_setting($value)
 {
     $raw = strtolower(trim((string) ($value ?? '')));

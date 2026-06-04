@@ -68,7 +68,7 @@ $statusLabel = $appointment ? str_replace('_', ' ', (string) ($appointment['stat
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Confirm Appointment - <?php echo htmlspecialchars($siteName); ?></title>
-  <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@1.*/css/pico.min.css">
+  <link rel="stylesheet" href="assets/css/pico.min.css" id="pico-css" onerror="this.onerror=null; this.href='https://unpkg.com/@picocss/pico@2.*/css/pico.min.css';">
   <style>
     /* allow global theme to control page background */
     body {
