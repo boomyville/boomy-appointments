@@ -2306,22 +2306,33 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
           });
       },
       eventDidMount: function(arg) {
+        // Background event splitting (from previous fix)
         if (arg.event.display === 'background') {
+          if (isDualProviderSplitEnabled()) {
+            const bgProviderId = Number(arg.event.extendedProps?.provider_id || 0);
+            const el = arg.el;
+            if (bgProviderId === Number(selectedPrimaryProviderId || 0)) {
+              el.style.cssText += ';left:0%!important;right:50%!important;width:50%!important';
+            } else if (bgProviderId === Number(selectedSecondaryProviderId || 0)) {
+              el.style.cssText += ';left:50%!important;right:0%!important;width:50%!important';
+            }
+          }
           return;
         }
 
         const harness = arg.el.closest('.fc-timegrid-event-harness');
-        if (!harness) {
-          return;
-        }
+        if (!harness) return;
 
         harness.classList.remove('provider-split-left', 'provider-split-right');
 
-        if (!isDualProviderSplitEnabled()) {
-          return;
-        }
+        if (!isDualProviderSplitEnabled()) return;
 
-        const eventProviderId = Number(arg.event.extendedProps.provider_id || 0);
+        const eventProviderId = Number(
+          arg.event.extendedProps?.provider_id ||
+          (arg.event.extendedProps?.isDraftPlaceholder ? (pendingDraftProviderId || selectedPrimaryProviderId) : 0) ||
+          0
+        );
+
         if (eventProviderId === Number(selectedPrimaryProviderId || 0)) {
           harness.classList.add('provider-split-left');
         } else if (eventProviderId === Number(selectedSecondaryProviderId || 0)) {
@@ -2347,9 +2358,12 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
           title: '🆕 Creating Draft...',
           start: roundedStart,
           end: fixedEnd,
-          color: '#2457ff', 
+          color: '#2457ff',
           editable: true,
-          extendedProps: { isDraftPlaceholder: true }
+          extendedProps: {
+            isDraftPlaceholder: true,
+            provider_id: pendingDraftProviderId  // ← add this
+          }
         });
 
         currentBookingStartDate = roundedStart;
@@ -3381,18 +3395,41 @@ function isAppointmentInPast(startTimeValue) {
       });
     }
 
-    appointmentTypeSelect.addEventListener('change', function() {
-      if (bookingModal.getAttribute('data-mode') === 'draft') {
-        syncBookingDraftTimes();
-        return;
-      }
+appointmentTypeSelect.addEventListener('change', function() {
+  if (bookingModal.getAttribute('data-mode') === 'draft') {
+    syncBookingDraftTimes();
+    return;
+  }
 
-      if (bookingEndOverrideActive) {
+  if (bookingEndOverrideActive) {
+    bookingEndOverrideActive = false;
+  }
+  applyVisibleTimeInputsToHidden();
+  checkTimeSlotConflicts();
+});
+
+    // === FIXED: Added provider dropdown change listener ===
+    if (providerSelect) {
+      providerSelect.addEventListener('change', function() {
+        // If working with a fresh slot draft, update its visual column split placement
+        if (bookingModal.getAttribute('data-mode') === 'draft') {
+          const placeholder = window.calendarInstance?.getEventById('booking-draft-placeholder');
+          if (placeholder) {
+            placeholder.setExtendedProp('provider_id', Number(providerSelect.value || 0));
+          }
+        }
+        
+        // Instantly check if this new provider is unavaialble/booked
+        checkTimeSlotConflicts();
+      });
+    }
+
+    if (bookingStartTimeInput) {
+      bookingStartTimeInput.addEventListener('change', function() {
         bookingEndOverrideActive = false;
-      }
-      applyVisibleTimeInputsToHidden();
-      checkTimeSlotConflicts();
-    });
+        applyVisibleTimeInputsToHidden();
+      });
+    }
 
     if (bookingStartTimeInput) {
       bookingStartTimeInput.addEventListener('change', function() {
@@ -3503,11 +3540,16 @@ function isAppointmentInPast(startTimeValue) {
 
     // CHECK BACKGROUND EVENTS (Breaks and Unavailabilities)
     if (event.display === 'background') {
-      // Only conflict if it has a specific identifier
       if (event.classNames.includes('unavail-event') || event.classNames.includes('standard-break-event')) {
-         return event.start < draftEnd && (event.end || event.start) > draftStart;
+        // If the unavailability belongs to a specific provider, only conflict
+        // if it matches the provider being booked
+        const bgProviderId = Number(event.extendedProps?.provider_id || 0);
+        if (bgProviderId > 0 && selectedBookingProviderId > 0 && bgProviderId !== selectedBookingProviderId) {
+          return false; // different provider's unavailability — not a conflict
+        }
+        return event.start < draftEnd && (event.end || event.start) > draftStart;
       }
-      return false; // Ignore general business hours background
+      return false;
     }
 
     // CHECK APPOINTMENTS
