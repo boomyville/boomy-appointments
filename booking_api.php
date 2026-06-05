@@ -452,7 +452,7 @@ try {
 
    if ($action === 'init' && $method === 'GET') {
         $appointmentTypes = get_appointment_types(true);
-        $stmt = get_db()->query("SELECT id, email, full_name, role, is_active FROM users WHERE role IN ('provider','admin') AND is_active = 1 ORDER BY full_name ASC");
+        $stmt = get_db()->query("SELECT id, email, full_name, role, is_active, bookable FROM users WHERE role IN ('provider','admin') AND is_active = 1 AND bookable = 1 ORDER BY full_name ASC");
         $providers = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
         $settings = get_booking_calendar_settings();
 

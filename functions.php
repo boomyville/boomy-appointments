@@ -1895,23 +1895,21 @@ function delete_appointment(int $appointmentId): bool
     }
 }
 
-// User search helpers
 function search_users(string $query = '', int $limit = 50, int $offset = 0): array
 {
     try {
         $db = get_db();
-
         $query = trim($query);
 
         if (empty($query)) {
-            $stmt = $db->prepare('SELECT id, email, full_name, first_name, last_name, phone, role, is_active, created_at FROM users ORDER BY full_name ASC, created_at DESC LIMIT ? OFFSET ?');
+            $stmt = $db->prepare('SELECT id, email, full_name, first_name, last_name, phone, role, is_active, bookable, created_at FROM users ORDER BY full_name ASC, created_at DESC LIMIT ? OFFSET ?');
             $stmt->execute([$limit, $offset]);
             return $stmt->fetchAll(PDO::FETCH_ASSOC);
         }
 
         $searchPattern = '%' . $query . '%';
         $stmt = $db->prepare("
-            SELECT id, email, full_name, first_name, last_name, phone, role, is_active, created_at
+            SELECT id, email, full_name, first_name, last_name, phone, role, is_active, bookable, created_at
             FROM users
             WHERE full_name LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ?
             ORDER BY full_name ASC, created_at DESC

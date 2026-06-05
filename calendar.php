@@ -44,6 +44,10 @@ foreach ($providers as $providerRow) {
 if ($defaultProviderId === null && !empty($providers)) {
   $defaultProviderId = (int) $providers[0]['id'];
 }
+
+
+$calendarDefaultId = $providerId ?? $defaultProviderId;
+
 $defaultAppointmentTypeId = !empty($appointmentTypes) ? (int) $appointmentTypes[0]['id'] : null;
 $bookingCalendarSettings = get_booking_calendar_settings();
 $customerFieldSettings = get_customer_field_settings();
@@ -1186,7 +1190,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
             <select id="calendarProviderPrimary" name="calendar_provider_primary">
               <?php foreach ($providers as $provider): ?>
                 <?php $providerListLabel = trim((string) ($provider['full_name'] ?? '')) !== '' ? (string) $provider['full_name'] : (string) ($provider['email'] ?? ''); ?>
-                <option value="<?php echo (int) $provider['id']; ?>" <?php echo ($defaultProviderId === (int) $provider['id']) ? 'selected' : ''; ?>>
+                <option value="<?php echo (int) $provider['id']; ?>" <?php echo ($calendarDefaultId === (int) $provider['id']) ? 'selected' : ''; ?>>
                   <?php echo htmlspecialchars($providerListLabel, ENT_QUOTES, 'UTF-8'); ?>
                   <?php if (!empty($provider['role'])): ?>
                     (<?php echo htmlspecialchars((string) $provider['role'], ENT_QUOTES, 'UTF-8'); ?>)
@@ -1199,7 +1203,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
             </select>
           </div>
           <div class="calendar-provider-filters__row" id="calendarProviderSecondaryWrap" style="display:none;">
-            <label for="calendarProviderSecondary">Compare</label>
+            <label for="calendarProviderSecondary">Other</label>
             <select id="calendarProviderSecondary" name="calendar_provider_secondary">
               <option value="">None</option>
             </select>
@@ -1341,12 +1345,12 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
           <div class="field">
             <label for="providerSelect">Which provider?</label>
             <select id="providerSelect" name="provider_id">
-              <?php foreach ($providers as $index => $provider): ?>
-                <option value="<?php echo (int) $provider['id']; ?>" <?php echo ((int) ($provider['is_active'] ?? 0) === 1 && $defaultProviderId === (int) $provider['id']) ? 'selected' : ''; ?> <?php echo ((int) ($provider['is_active'] ?? 0) !== 1) ? 'disabled' : ''; ?>>
-                  <?php echo htmlspecialchars($provider['full_name'] ?: $provider['email']); ?>
-                  <?php if (!empty($provider['role'])): ?>
-                    (<?php echo htmlspecialchars($provider['role']); ?>)
-                  <?php endif; ?>
+            <?php foreach ($providers as $index => $provider): ?>
+              <option value="<?php echo (int) $provider['id']; ?>" <?php echo ((int) ($provider['is_active'] ?? 0) === 1 && $calendarDefaultId === (int) $provider['id']) ? 'selected' : ''; ?> <?php echo ((int) ($provider['is_active'] ?? 0) !== 1) ? 'disabled' : ''; ?>>
+                <?php echo htmlspecialchars($provider['full_name'] ?: $provider['email']); ?>
+                <?php if (!empty($provider['role'])): ?>
+                  (<?php echo htmlspecialchars($provider['role']); ?>)
+                <?php endif; ?>
                   <?php if ((int) ($provider['is_active'] ?? 0) !== 1): ?>
                     (inactive)
                   <?php endif; ?>
@@ -1505,11 +1509,11 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     const fallbackDurationMinutes = appointmentTypes.length > 0 ? Number(appointmentTypes[0].duration_minutes || 30) : 30;
 
     function getDefaultPrimaryProviderId() {
-      if (defaultProviderId && Number(defaultProviderId) > 0) {
-        return Number(defaultProviderId);
-      }
       if (providerId && Number(providerId) > 0) {
         return Number(providerId);
+      }
+      if (defaultProviderId && Number(defaultProviderId) > 0) {
+        return Number(defaultProviderId);
       }
       if (providers.length > 0) {
         return Number(providers[0].id);
