@@ -1164,6 +1164,14 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
   <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
   <?php
     $current_page = 'calendar.php';
+    
+    // Add this right before the navigation include:
+    if ((int) get_setting('disable_online_booking', '0') === 1) {
+        echo '<div style="background-color: #f59e0b; color: #fff; text-align: center; padding: 8px 12px; font-weight: bold; font-size: 0.9rem; border-bottom: 1px solid rgba(0,0,0,0.1);">
+                ⚠️ Public Online Bookings are Deactivated. Admin calendar bookings remain available.
+              </div>';
+    }
+    
     $navAssets = __DIR__ . '/assets/nav.html';
     $navIncludes = __DIR__ . '/includes/nav.html';
 
@@ -1172,6 +1180,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     } elseif (is_file($navIncludes)) {
         include $navIncludes;
     }
+
   ?>
   
   <div class="admin-container">

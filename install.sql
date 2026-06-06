@@ -230,6 +230,7 @@ INSERT INTO `settings` (`setting_key`,`setting_value`) VALUES
 ('booking_calendar_height','1800'),
 ('booking_show_now_indicator','1'),
 ('booking_snap_minutes','15'),
+('disable_online_booking', '0'),
 ('smtp_host','smtp.gmail.com'),
 ('smtp_port','587'),
 ('smtp_encryption','tls'),

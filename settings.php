@@ -87,6 +87,7 @@ $booking_snap_options = [1, 2, 5, 10, 15, 20, 30, 40, 45, 60];
 $auto_no_show = (int) get_setting('auto_no_show', '0');
 $prevent_same_user_booking = (int) get_setting('prevent_same_user_booking', '0');
 $appointmentTypes = get_appointment_types();
+$disable_online_booking = (int) get_setting('disable_online_booking', '0');
 
 // PHPMailer/Gmail settings
 $smtp_host = get_setting('smtp_host', 'smtp.gmail.com');
@@ -289,6 +290,17 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
         <input id="prevent_same_user_booking" name="prevent_same_user_booking" type="number" min="0" step="1" value="<?php echo $prevent_same_user_booking; ?>" required>
         <p style="font-size: 0.9em; color: #666; margin-top: 4px;">
           Limits how many concurrent active bookings (unconfirmed, confirmed, booked) a single profile can hold. Set to <strong>0</strong> to completely disable this rule and allow unlimited concurrent appointments.
+        </p>
+      </fieldset>
+      <fieldset class="field-group">
+        <legend>Online Availability Control</legend>
+        <label>
+          <input type="hidden" name="disable_online_booking" value="0">
+          <input type="checkbox" name="disable_online_booking" value="1" <?php echo $disable_online_booking === 1 ? 'checked' : ''; ?>>
+          <strong>Disable public online booking</strong>
+        </label>
+        <p style="font-size: 0.9em; color: #666; margin-top: 4px;">
+          When checked, members of the public cannot initiate new appointments through the web booking interface. Internal operations executed directly from the administrative workspace calendar remain operational.
         </p>
       </fieldset>
       <fieldset class="field-group">

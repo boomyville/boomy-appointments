@@ -9,6 +9,8 @@ if ($siteName === '') {
     $siteName = APP_NAME ?? 'Boomy Appointments';
 }
 $csrfToken = csrf_token();
+
+$disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
 ?>
 <!doctype html>
 <html lang="en">
@@ -606,9 +608,31 @@ $csrfToken = csrf_token();
         </div>
       </div>
 
-      <div id="step1RestrictionNotice" class="notice is-error hidden" style="margin-bottom: 20px;"></div>
+      <?php if ($disableOnlineBooking === 1): ?>
+        <div class="notice is-error" style="margin-bottom: 0px;">
+          🚨 <strong>Online Bookings Temporarily Offline:</strong> Public scheduling via our website has been paused. Please contact our front desk operations staff directly to verify current space options and arrange calendar slots manually.
+        </div>
+        <script>
+          document.addEventListener('DOMContentLoaded', () => {
+            // Force disable user interaction steps across the layout wizard
+            const stepGrid = document.getElementById('step1SelectionGrid');
+            if (stepGrid) stepGrid.classList.add('hidden');
+            
+            if (els.step1Continue) {
+              els.step1Continue.disabled = true;
+              els.step1Continue.classList.add('hidden');
+            }
+            
+            els.stepButtons.forEach(btn => { btn.disabled = true; btn.style.cursor = 'not-allowed'; });
+            setToast('Booking Unavailable', 'Online registrations are currently deactivated.');
+          });
+        </script>
+      <?php else: ?>
+        <div id="step1RestrictionNotice" class="notice is-error hidden" style="margin-bottom: 20px;"></div>
+      <?php endif; ?>
 
-      <div class="grid-2" id="step1SelectionGrid"> <div class="field">
+      <div class="grid-2" id="step1SelectionGrid"> 
+        <div class="field">
           <label for="appointmentTypeSelect">Appointment type</label>
           <select id="appointmentTypeSelect"></select>
         </div>
@@ -895,7 +919,7 @@ function escapeHtml(value) {
     }
 
     function formatTimeLabel(value) {
-      const date = new Date(value.replace(' ', 'T') + 'Z');
+      const date = new Date(value.replace(' ', 'T'));
       if (Number.isNaN(date.getTime())) {
         return value;
       }
@@ -1221,7 +1245,7 @@ function escapeHtml(value) {
         ['Date', selectedDateText],
         ['Time', selectedTimeText]
       ].map((row) => {
-        return '<div class="summary-item"><span>' + escapeHtml(row[0]) + '</span>export strong>' + escapeHtml(row[1]) + '</strong></div>';
+        return '<div class="summary-item"><span>' + escapeHtml(row[0]) + '</span><export strong>' + escapeHtml(row[1]) + '</strong></div>';
       }).join('');
 
       if (state.customerMode === 'existing' && state.customerCheck && state.customerCheck.requires_verification) {
