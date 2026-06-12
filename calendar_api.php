@@ -147,19 +147,17 @@ try {
         }
 
         // 2. Fetch Recurring Unavailabilities
-        // FIXED: Added the mandatory (day_of_week = ? OR day_of_week = 0) placeholder layer to catch 'Everyday' rules
+        // REMOVED: (day_of_week = ? OR day_of_week = 0) constraint to prevent parameter array offset bugs
         $stmt = $db->prepare("
             SELECT id, provider_id, day_of_week, start_time, end_time, reason, rolling_start_date, rolling_end_date 
             FROM unavailabilities 
             WHERE type = 'recurring' AND provider_id IN ($placeholders)
-            AND (day_of_week = ? OR day_of_week = 0)
             AND rolling_start_date <= ? 
             AND (rolling_end_date IS NULL OR rolling_end_date >= ?)
         ");
         
-        // FIXED: Handled query constraints array payload merge bounds dynamically via cross-dates metrics
+        // Match parameters cleanly to the expected placeholders: Provider IDs, Range End Date, Range Start Date
         $paramsRecurring = array_merge($targetProviderIds, [
-            0, // Temporary token dummy to fulfill binding array count requirements safely
             $rangeEndDate->format('Y-m-d'), 
             $rangeStartDate->format('Y-m-d')
         ]);
@@ -169,13 +167,15 @@ try {
         if (!empty($recurringRules)) {
             $cursor = $rangeStartDate->setTime(0, 0, 0);
             while ($cursor <= $rangeEndDate) {
+                // PHP format 'N' treats Monday as 1 and Sunday as 7.
+                // Note: Ensure your database data model aligns with this or alter tracking values accordingly.
                 $currentDayOfWeek = (int) $cursor->format('N');
                 $currentDateStr = $cursor->format('Y-m-d');
                 
                 foreach ($recurringRules as $rule) {
                     $ruleDay = (int)$rule['day_of_week'];
                     
-                    // FIXED: Rebuilt the day checker rules correctly so ruleDay 0 (Everyday) slides through cleanly
+                    // Allow ruleDay 0 (Every day) to pass through, or explicitly verify match
                     if ($ruleDay !== 0 && $ruleDay !== $currentDayOfWeek) {
                         continue; 
                     }

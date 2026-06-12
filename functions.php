@@ -1666,7 +1666,7 @@ function is_booking_day_enabled(DateTimeImmutable $date, array $bookingSettings)
     return !empty($bookingSettings[$settingKey]);
 }
 
-function validate_appointment_window(int $providerId, DateTimeImmutable $startDate, DateTimeImmutable $endDate, ?int $excludeAppointmentId = null): ?array
+function validate_appointment_window(int $providerId, DateTimeImmutable $startDate, DateTimeImmutable $endDate, ?int $excludeAppointmentId = null, bool $allowStaffOverride = false): ?array
 {
     $bookingSettings = get_booking_calendar_settings();
     if (!is_booking_day_enabled($startDate, $bookingSettings)) {
@@ -1685,22 +1685,23 @@ function validate_appointment_window(int $providerId, DateTimeImmutable $startDa
         return ['error' => 'outside_booking_hours', 'message' => 'Selected time is outside the configured booking hours'];
     }
 
-    if ($conflict = find_overlapping_appointment($providerId, $startDate, $endDate, $excludeAppointmentId)) {
-        return ['error' => 'overlap', 'conflict' => $conflict];
-    }
-    
-    if ($breakConflict = find_overlapping_break($startDate, $endDate)) {
-        return ['error' => 'break_overlap', 'conflict' => $breakConflict];
-    }
+    // Only run blocking checks if staff override is NOT active
+    if (!$allowStaffOverride) {
+        if ($conflict = find_overlapping_appointment($providerId, $startDate, $endDate, $excludeAppointmentId)) {
+            return ['error' => 'overlap', 'conflict' => $conflict];
+        }
+        
+        if ($breakConflict = find_overlapping_break($startDate, $endDate)) {
+            return ['error' => 'break_overlap', 'conflict' => $breakConflict];
+        }
 
-    // --- ADD THIS UNAVAILABILITY CHECK INTERCEPTION TRACK ---
-    if ($unavailConflict = check_provider_unavailability($providerId, $startDate, $endDate)) {
-        return [
-            'error' => 'provider_unavailable',
-            'message' => '🚨 ' . htmlspecialchars($unavailConflict['reason'])
-        ];
+        if ($unavailConflict = check_provider_unavailability($providerId, $startDate, $endDate)) {
+            return [
+                'error' => 'provider_unavailable',
+                'message' => '🚨 ' . htmlspecialchars($unavailConflict['reason'])
+            ];
+        }
     }
-    // ---------------------------------------------------------
 
     return null;
 }
@@ -1737,7 +1738,7 @@ function find_overlapping_appointment(int $providerId, DateTimeImmutable $startD
     }
 }
 
-function create_appointment(int $customerId, int $providerId, int $appointmentTypeId, string $startTime, ?string $status = null, ?string $endTime = null, ?string $notes = null): ?array
+function create_appointment(int $customerId, int $providerId, int $appointmentTypeId, string $startTime, ?string $status = null, ?string $endTime = null, ?string $notes = null, bool $allowStaffOverride = false): ?array
 {
     try {
         $appointmentType = get_appointment_type_by_id($appointmentTypeId);
@@ -1762,7 +1763,9 @@ function create_appointment(int $customerId, int $providerId, int $appointmentTy
         }
 
         $endDate = $resolvedEndDate ?: $startDate->modify('+' . $durationMinutes . ' minutes');
-        $windowError = validate_appointment_window($providerId, $startDate, $endDate);
+        
+        // Pass override flag here
+        $windowError = validate_appointment_window($providerId, $startDate, $endDate, null, $allowStaffOverride);
         if ($windowError) {
             return $windowError;
         }
@@ -1806,7 +1809,7 @@ function create_appointment(int $customerId, int $providerId, int $appointmentTy
     }
 }
 
-function update_appointment(int $appointmentId, int $customerId, int $providerId, int $appointmentTypeId, string $startTime, ?string $endTime = null, ?string $status = null, ?string $notes = null): ?array
+function update_appointment(int $appointmentId, int $customerId, int $providerId, int $appointmentTypeId, string $startTime, ?string $endTime = null, ?string $status = null, ?string $notes = null, bool $allowStaffOverride = false): ?array
 {
     try {
         $existingAppointment = get_appointment_by_id($appointmentId);
@@ -1836,7 +1839,9 @@ function update_appointment(int $appointmentId, int $customerId, int $providerId
         }
 
         $endDate = $resolvedEndDate ?: $startDate->modify('+' . $durationMinutes . ' minutes');
-        $windowError = validate_appointment_window($providerId, $startDate, $endDate, $appointmentId);
+        
+        // Pass override flag here
+        $windowError = validate_appointment_window($providerId, $startDate, $endDate, $appointmentId, $allowStaffOverride);
         if ($windowError) {
             return $windowError;
         }

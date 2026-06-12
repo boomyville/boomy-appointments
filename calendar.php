@@ -2708,26 +2708,28 @@ if (event.display === 'background') return;
 
         const handleConfirm = () => {
           cleanup();
+          if (typeof bookingWarningModal.close === 'function') {
+            bookingWarningModal.close();
+          }
           resolve(true);
         };
 
         const handleCancel = () => {
           cleanup();
+          if (typeof bookingWarningModal.close === 'function') {
+            bookingWarningModal.close();
+          }
           resolve(false);
         };
 
         const cleanup = () => {
           bookingWarningConfirm.removeEventListener('click', handleConfirm);
           bookingWarningCancel.removeEventListener('click', handleCancel);
-          if (typeof bookingWarningModal.close === 'function') {
-            bookingWarningModal.close();
-          } else {
-            bookingWarningModal.removeAttribute('open');
-          }
         };
 
         bookingWarningConfirm.addEventListener('click', handleConfirm, { once: true });
         bookingWarningCancel.addEventListener('click', handleCancel, { once: true });
+        
         bookingWarningModal.addEventListener('cancel', function(event) {
           event.preventDefault();
           handleCancel();
@@ -3120,182 +3122,6 @@ function isAppointmentInPast(startTimeValue) {
       }
     }
 
-    async function submitBooking() {
-      const mode = bookingModal.getAttribute('data-mode');
-      const isEdit = mode === 'edit' && currentEditingAppointmentId;
-      const selectedCustomerValue = selectedCustomerId.value.trim();
-      const firstNameValue = newCustomerFirstName ? newCustomerFirstName.value.trim() : '';
-      const lastNameValue = newCustomerLastName ? newCustomerLastName.value.trim() : '';
-      const customerId = selectedCustomerId.value.trim(); // This is the hidden input field
-      const customerDob = newCustomerDob.value.trim();
-      const customerGender = newCustomerGender ? newCustomerGender.value.trim() : '';
-      const customerEmail = newCustomerEmail.value.trim();
-      const customerMobile = newCustomerMobile.value.trim();
-      const providerId = providerSelect.value.trim();
-      const appointmentTypeId = appointmentTypeSelect.value.trim();
-      const startTime = bookingStart.value.trim();
-
-      if (!providerId) {
-        setBookingAlert('Choose a provider before making the booking.');
-        return;
-      }
-      if (!appointmentTypeId) {
-        setBookingAlert('Choose an appointment type before making the booking.');
-        return;
-      }
-
-      if (checkTimeSlotConflicts()) {
-        setBookingAlert('🚨 This time slot is unavailable due to a break, existing appointment, or lockout.', true);
-        return; 
-      }
-
-      const draftStart = new Date(bookingStart.value + 'Z');
-      const draftEnd = new Date(bookingEnd.value + 'Z');
-
-      const hasBackgroundConflict = window.calendarInstance.getEvents().some(function(event) {
-      if (event.display === 'background') {
-          return event.start < draftEnd && (event.end || event.start) > draftStart;
-        }
-        return false;
-      });
-      if (hasBackgroundConflict) {
-        bookingModal.classList.add('is-invalid-time');
-        setBookingAlert('🚨 You are trying to book over a break or an unavailable time slot.', true);
-        if (navigator.vibrate) navigator.vibrate(100);
-        return;
-      }
-      const hasTimeConflict = window.calendarInstance.getEvents().some(function(event) {
-        if (event.display !== 'background') return false;
-        
-        const breakStart = event.start;
-        const breakEnd = event.end || event.start;
-        
-        return breakStart < draftEnd && breakEnd > draftStart;
-      });
-
-      if (hasTimeConflict) {
-        bookingModal.classList.add('is-invalid-time');
-        setBookingAlert('🚨 This appointment cannot be booked because it overlaps with an unavailable or break time slot.', true);
-        if (navigator.vibrate) navigator.vibrate(100);
-        return; 
-      } else {
-        bookingModal.classList.remove('is-invalid-time');
-      }
-
-      if (currentCustomerMode === 'existing') {
-        if (!selectedCustomerValue) {
-          setBookingAlert('Select a customer from the search results.');
-          return;
-        }
-      } else if (!firstNameValue && !lastNameValue) {
-        setBookingAlert('Enter a customer name or switch to existing customer search.');
-        return;
-      }
-
-      const confirmationQueue = [];
-      if (isAppointmentInPast(startTime)) {
-        confirmationQueue.push('This appointment is in the past.');
-      } else if (isBookingWithinDeadline(startTime)) {
-        confirmationQueue.push('This booking is within the ' + bookingDeadlineHours + '-hour booking deadline or.');
-      }
-      if (isBookingOutsideDisplayTime()) {
-        confirmationQueue.push('This booking is outside the configured display time (' + visibleStartTime.slice(0, 5) + ' to ' + visibleEndTime.slice(0, 5) + ').');
-      }
-
-      const missingFields = getCustomerMissingRequiredFields();
-      if (missingFields.length) {
-        confirmationQueue.push('The new customer is missing ' + missingFields.length + ' required field' + (missingFields.length === 1 ? '' : 's') + ': ' + missingFields.join(', ') + '.');
-      }
-
-      for (const warningMessage of confirmationQueue) {
-        setBookingAlert(warningMessage, false);
-        const proceed = await showBookingWarning(warningMessage + ' Do you want to continue?');
-        if (!proceed) {
-          return;
-        }
-      }
-
-      makeBookingBtn.disabled = true;
-      makeBookingBtn.textContent = 'Saving...';
-      setBookingAlert('');
-
-      try {
-        const customerName = [firstNameValue, lastNameValue].filter(Boolean).join(' ').trim();
-        const url = 'appointments_api.php?action=' + (isEdit ? 'update' : 'create');
-        const statusValue = isEdit && appointmentStatusSelect ? normalizeAppointmentStatus(appointmentStatusSelect.value) : 'booked';
-        const notesValue = bookingNotes ? bookingNotes.value.trim() : '';
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(Object.assign({
-            csrf_token: document.querySelector('input[name="csrf_token"]').value,
-            selected_customer_id: selectedCustomerValue,
-            customer_name: customerName,
-            customer_first_name: firstNameValue,
-            customer_last_name: lastNameValue,
-            customer_email: customerEmail,
-            customer_mobile: customerMobile,
-            date_of_birth: customerDob,
-            customer_gender: customerGender,
-            provider_id: providerId,
-            appointment_type_id: appointmentTypeId,
-            start_time: startTime,
-            status: statusValue,
-            notes: notesValue
-          }, (isEdit ? { appointment_id: currentEditingAppointmentId } : {}), (bookingEndOverrideActive ? { end_time: bookingEnd.value } : {})))
-        });
-
-        const json = await resp.json();
-        if (!resp.ok) {
-          throw new Error(json.error || 'Failed to create booking');
-        }
-
-        const savedAppointmentId = Number(json.appointment && json.appointment.id ? json.appointment.id : 0);
-        const savedCustomerEmail = String(json.customer && json.customer.email ? json.customer.email : '').trim();
-        const savedCustomerName = String(json.customer && json.customer.full_name ? json.customer.full_name : customerName || 'this customer').trim();
-
-        if (savedAppointmentId > 0) {
-          while (true) {
-            const sendEmail = await showAppointmentEmailPrompt({
-              appointmentId: savedAppointmentId,
-              customerEmail: savedCustomerEmail,
-              customerName: savedCustomerName
-            });
-
-            if (!sendEmail) {
-              break;
-            }
-
-            makeBookingBtn.disabled = true;
-            makeBookingBtn.textContent = 'Sending email...';
-            try {
-              await sendAppointmentConfirmationEmail(savedAppointmentId);
-              break;
-            } catch (emailErr) {
-              setBookingAlert(emailErr.message || 'Failed to send confirmation email.');
-            } finally {
-              makeBookingBtn.disabled = false;
-              makeBookingBtn.textContent = mode === 'edit' ? 'Save changes' : 'Make booking';
-            }
-          }
-        }
-
-        await calendar.refetchEvents();
-        if (typeof bookingModal.close === 'function') {
-          bookingModal.close();
-        } else {
-          bookingModal.removeAttribute('open');
-        }
-        setDraftMode();
-      } catch (err) {
-        setBookingAlert(err.message || (mode === 'edit' ? 'Failed to update booking.' : 'Failed to create booking.'));
-      } finally {
-        makeBookingBtn.disabled = false;
-        makeBookingBtn.textContent = mode === 'edit' ? 'Save changes' : 'Make booking';
-      }
-    }
 
     createCustomerTab.addEventListener('click', () => setCustomerMode('create'));
     existingCustomerTab.addEventListener('click', () => setCustomerMode('existing'));
@@ -3322,7 +3148,7 @@ function isAppointmentInPast(startTimeValue) {
 
     clearSelectedCustomerBtn.addEventListener('click', clearSelectedCustomer);
 
-    setCustomerMode('create');
+   setCustomerMode('create');
 
     function setDraftMode() {
       const cardElement = bookingModal.querySelector('.booking-card');
@@ -3374,6 +3200,166 @@ function isAppointmentInPast(startTimeValue) {
       setDraftMode();
     });
 
+    submitBooking._running = false;
+
+  async function submitBooking() {
+      if (submitBooking._running) return;
+      submitBooking._running = true;
+
+      const mode = bookingModal.getAttribute('data-mode');
+      const isEdit = mode === 'edit' && currentEditingAppointmentId;
+      const selectedCustomerValue = selectedCustomerId.value.trim();
+      const firstNameValue = newCustomerFirstName ? newCustomerFirstName.value.trim() : '';
+      const lastNameValue = newCustomerLastName ? newCustomerLastName.value.trim() : '';
+      const customerDob = newCustomerDob.value.trim();
+      const customerGender = newCustomerGender ? newCustomerGender.value.trim() : '';
+      const customerEmail = newCustomerEmail.value.trim();
+      const customerMobile = newCustomerMobile.value.trim();
+      const providerId = providerSelect.value.trim();
+      const appointmentTypeId = appointmentTypeSelect.value.trim();
+      const startTime = bookingStart.value.trim();
+
+      if (!providerId) {
+        submitBooking._running = false;
+        setBookingAlert('Choose a provider before making the booking.');
+        return;
+      }
+      if (!appointmentTypeId) {
+        submitBooking._running = false;
+        setBookingAlert('Choose an appointment type before making the booking.');
+        return;
+      }
+      if (currentCustomerMode === 'existing') {
+        if (!selectedCustomerValue) {
+          submitBooking._running = false;
+          setBookingAlert('Select a customer from the search results.');
+          return;
+        }
+      } else if (!firstNameValue && !lastNameValue) {
+        submitBooking._running = false;
+        setBookingAlert('Enter a customer name or switch to existing customer search.');
+        return;
+      }
+
+      // 1. Compile warnings dynamically using updated calendar data tracks
+      const confirmationQueue = [];
+
+      if (checkTimeSlotConflicts()) {
+        confirmationQueue.push('This booking overlaps with an existing appointment, shift break, or provider unavailability track.');
+      }
+      if (isAppointmentInPast(startTime)) {
+        confirmationQueue.push('This appointment is in the past.');
+      } else if (isBookingWithinDeadline(startTime)) {
+        confirmationQueue.push('This booking is within the ' + bookingDeadlineHours + '-hour booking deadline window.');
+      }
+      if (isBookingOutsideDisplayTime()) {
+        confirmationQueue.push('This booking is outside the configured calendar display layout times (' + visibleStartTime.slice(0, 5) + ' to ' + visibleEndTime.slice(0, 5) + ').');
+      }
+      const missingFields = getCustomerMissingRequiredFields();
+      if (missingFields.length) {
+        confirmationQueue.push('The new customer profile is missing required info fields: ' + missingFields.join(', ') + '.');
+      }
+
+      // 2. Process all confirmations sequentially BEFORE disabling UI button actions
+      async function processWarningsSequentially(queue) {
+        for (let i = 0; i < queue.length; i++) {
+          setBookingAlert(queue[i], false);
+          const proceed = await showBookingWarning(queue[i] + ' Do you want to override this constraint and save anyway?');
+          if (!proceed) {
+            return false;
+          }
+          await new Promise(r => setTimeout(r, 120));
+        }
+        return true;
+      }
+
+      const allWarningsCleared = await processWarningsSequentially(confirmationQueue);
+      if (!allWarningsCleared) {
+        submitBooking._running = false;
+        setBookingAlert('Booking execution halted by user override.');
+        return;
+      }
+
+      // 3. Clear alert states and flip submission button flags safely
+      setBookingAlert('');
+      makeBookingBtn.disabled = true;
+      makeBookingBtn.textContent = mode === 'edit' ? 'Save changes...' : 'Saving...';
+
+      try {
+        const customerName = [firstNameValue, lastNameValue].filter(Boolean).join(' ').trim();
+        const url = 'appointments_api.php?action=' + (isEdit ? 'update' : 'create');
+        const statusValue = isEdit && appointmentStatusSelect ? normalizeAppointmentStatus(appointmentStatusSelect.value) : 'booked';
+        const notesValue = bookingNotes ? bookingNotes.value.trim() : '';
+        
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(Object.assign({
+            csrf_token: document.querySelector('input[name="csrf_token"]').value,
+            selected_customer_id: selectedCustomerValue,
+            customer_name: customerName,
+            customer_first_name: firstNameValue,
+            customer_last_name: lastNameValue,
+            customer_email: customerEmail,
+            customer_mobile: customerMobile,
+            date_of_birth: customerDob,
+            customer_gender: customerGender,
+            provider_id: providerId,
+            appointment_type_id: appointmentTypeId,
+            start_time: startTime,
+            status: statusValue,
+            notes: notesValue
+          }, (isEdit ? { appointment_id: currentEditingAppointmentId } : {}), (bookingEndOverrideActive ? { end_time: bookingEnd.value } : {})))
+        });
+
+        const json = await resp.json();
+        if (!resp.ok) {
+          throw new Error(json.error || 'The backend application endpoint rejected the submission data structure.');
+        }
+
+        const savedAppointmentId = Number(json.appointment && json.appointment.id ? json.appointment.id : 0);
+        const savedCustomerEmail = String(json.customer && json.customer.email ? json.customer.email : '').trim();
+        const savedCustomerName = String(json.customer && json.customer.full_name ? json.customer.full_name : customerName || 'this customer').trim();
+
+        // 4. Trigger email routine confirmation prompts seamlessly
+        if (savedAppointmentId > 0) {
+          while (true) {
+            const sendEmail = await showAppointmentEmailPrompt({
+              appointmentId: savedAppointmentId,
+              customerEmail: savedCustomerEmail,
+              customerName: savedCustomerName
+            });
+
+            if (!sendEmail) break;
+
+            makeBookingBtn.disabled = true;
+            makeBookingBtn.textContent = 'Sending email...';
+            try {
+              await sendAppointmentConfirmationEmail(savedAppointmentId);
+              break;
+            } catch (emailErr) {
+              setBookingAlert(emailErr.message || 'The booking transaction was successful, but your confirmation email could not be delivered.', true);
+              break;
+            }
+          }
+        }
+
+        await calendar.refetchEvents();
+        if (typeof bookingModal.close === 'function') {
+          bookingModal.close();
+        } else {
+          bookingModal.removeAttribute('open');
+        }
+        setDraftMode();
+      } catch (err) {
+        setBookingAlert(err.message || (mode === 'edit' ? 'Failed to update booking structure.' : 'Failed to save appointment.'));
+      } finally {
+        submitBooking._running = false;
+        makeBookingBtn.disabled = false;
+        makeBookingBtn.textContent = mode === 'edit' ? 'Save changes' : 'Make booking';
+      }
+    }
+
     if (makeBookingBtn) {
       makeBookingBtn.addEventListener('click', submitBooking);
     }
@@ -3394,9 +3380,7 @@ function isAppointmentInPast(startTimeValue) {
         try {
           const resp = await fetch('appointments_api.php?action=delete', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               csrf_token: document.querySelector('input[name="csrf_token"]').value,
               appointment_id: currentEditingAppointmentId
@@ -3423,39 +3407,27 @@ function isAppointmentInPast(startTimeValue) {
       });
     }
 
-appointmentTypeSelect.addEventListener('change', function() {
-  if (bookingModal.getAttribute('data-mode') === 'draft') {
-    syncBookingDraftTimes();
-    return;
-  }
+    appointmentTypeSelect.addEventListener('change', function() {
+      if (bookingModal.getAttribute('data-mode') === 'draft') {
+        syncBookingDraftTimes();
+        return;
+      }
+      if (bookingEndOverrideActive) {
+        bookingEndOverrideActive = false;
+      }
+      applyVisibleTimeInputsToHidden();
+      checkTimeSlotConflicts();
+    });
 
-  if (bookingEndOverrideActive) {
-    bookingEndOverrideActive = false;
-  }
-  applyVisibleTimeInputsToHidden();
-  checkTimeSlotConflicts();
-});
-
-    // === FIXED: Added provider dropdown change listener ===
     if (providerSelect) {
       providerSelect.addEventListener('change', function() {
-        // If working with a fresh slot draft, update its visual column split placement
         if (bookingModal.getAttribute('data-mode') === 'draft') {
           const placeholder = window.calendarInstance?.getEventById('booking-draft-placeholder');
           if (placeholder) {
             placeholder.setExtendedProp('provider_id', Number(providerSelect.value || 0));
           }
         }
-        
-        // Instantly check if this new provider is unavaialble/booked
         checkTimeSlotConflicts();
-      });
-    }
-
-    if (bookingStartTimeInput) {
-      bookingStartTimeInput.addEventListener('change', function() {
-        bookingEndOverrideActive = false;
-        applyVisibleTimeInputsToHidden();
       });
     }
 
@@ -3544,68 +3516,61 @@ appointmentTypeSelect.addEventListener('change', function() {
         selectedEndLabel.textContent = formatCalendarDate(calendar, ed);
 
         setTimeout(checkTimeSlotConflicts, 100);
-        
       } catch (e) {
         // ignore
       }
     }
 
-  function checkTimeSlotConflicts() {
-  const startIso = bookingStart.value.trim();
-  const endIso = bookingEnd.value.trim();
-  const selectedBookingProviderId = Number(providerSelect?.value || 0);
-  
-  if (!startIso || !endIso) return false;
+    function checkTimeSlotConflicts() {
+      const startIso = bookingStart.value.trim();
+      const endIso = bookingEnd.value.trim();
+      const selectedBookingProviderId = Number(providerSelect?.value || 0);
 
-  const draftStart = new Date(startIso.replace(' ', 'T') + 'Z');
-  const draftEnd = new Date(endIso.replace(' ', 'T') + 'Z');
+      if (!startIso || !endIso) return false;
 
-  if (Number.isNaN(draftStart.getTime())) return false;
+      const draftStart = new Date(startIso.replace(' ', 'T') + 'Z');
+      const draftEnd = new Date(endIso.replace(' ', 'T') + 'Z');
 
-  const hasTimeConflict = window.calendarInstance.getEvents().some(function(event) {
-    if (event.id === 'booking-draft-placeholder' || event.extendedProps?.isDraftPlaceholder) return false;
-    if (currentEditingAppointmentId && String(event.id) === String(currentEditingAppointmentId)) return false;
+      if (Number.isNaN(draftStart.getTime())) return false;
 
-    // CHECK BACKGROUND EVENTS (Breaks and Unavailabilities)
-    if (event.display === 'background') {
-      if (event.classNames.includes('unavail-event') || event.classNames.includes('standard-break-event')) {
-        // If the unavailability belongs to a specific provider, only conflict
-        // if it matches the provider being booked
-        const bgProviderId = Number(event.extendedProps?.provider_id || 0);
-        if (bgProviderId > 0 && selectedBookingProviderId > 0 && bgProviderId !== selectedBookingProviderId) {
-          return false; // different provider's unavailability — not a conflict
+      const hasTimeConflict = window.calendarInstance.getEvents().some(function(event) {
+        if (event.id === 'booking-draft-placeholder' || event.extendedProps?.isDraftPlaceholder) return false;
+        if (currentEditingAppointmentId && String(event.id) === String(currentEditingAppointmentId)) return false;
+
+        if (event.display === 'background') {
+          if (event.classNames.includes('unavail-event') || event.classNames.includes('standard-break-event')) {
+            const bgProviderId = Number(event.extendedProps?.provider_id || 0);
+            if (bgProviderId > 0 && selectedBookingProviderId > 0 && bgProviderId !== selectedBookingProviderId) {
+              return false;
+            }
+            return event.start < draftEnd && (event.end || event.start) > draftStart;
+          }
+          return false;
         }
+
+        const eventProviderId = Number(event.extendedProps?.provider_id || 0);
+        if (selectedBookingProviderId > 0 && eventProviderId > 0 && eventProviderId !== selectedBookingProviderId) {
+          return false;
+        }
+
         return event.start < draftEnd && (event.end || event.start) > draftStart;
+      });
+
+      const cardElement = bookingModal.querySelector('.booking-card');
+      if (hasTimeConflict) {
+        if (cardElement) cardElement.classList.add('is-invalid-time');
+        if (!submitBooking._running) {
+          setBookingAlert('🚨 Selected time overlaps with an appointment, break, or unavailability.', false);
+        }
+      } else {
+        if (cardElement) cardElement.classList.remove('is-invalid-time');
+        if (!submitBooking._running) {
+          setBookingAlert('');
+        }
       }
-      return false;
-    }
 
-    // CHECK APPOINTMENTS
-    const eventProviderId = Number(event.extendedProps?.provider_id || 0);
-    if (selectedBookingProviderId > 0 && eventProviderId > 0 && eventProviderId !== selectedBookingProviderId) {
-      return false;
+      return hasTimeConflict;
     }
-
-    return event.start < draftEnd && (event.end || event.start) > draftStart;
-  });
-
-  const cardElement = bookingModal.querySelector('.booking-card');
-  if (hasTimeConflict) {
-    if (cardElement) cardElement.classList.add('is-invalid-time'); 
-    if (makeBookingBtn) {
-        makeBookingBtn.disabled = true;
-        setBookingAlert('🚨 Selected time overlaps with an appointment, break, or unavailability.', true);
-    }
-    return true;
-  } else {
-    if (cardElement) cardElement.classList.remove('is-invalid-time'); 
-    if (makeBookingBtn) {
-        makeBookingBtn.disabled = false;
-        setBookingAlert('');
-    }
-    return false;
-  }
-}
   </script>
 
   <script src="assets/js/global.js"></script>

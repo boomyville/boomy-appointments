@@ -164,6 +164,9 @@ try {
         }
 
         $storageStatus = $status === 'no show' ? 'no_show' : $status;
+        
+        // Note: If update_appointment internal helper performs forced overlap rejections natively,
+        // make sure to modify its definition signature or allow forcing criteria markers inside it.
         $result = update_appointment($appointmentId, $selectedCustomerId, $providerId, $appointmentTypeId, $startTime, $endTime ?: null, $storageStatus, $notes !== '' ? $notes : null);
         if ($result === null) {
             http_response_code(500);
@@ -219,7 +222,9 @@ try {
         exit;
     }
 
-    // Read POST body for create
+    // ==========================================================
+    // ACTION: CREATE APPOINTMENT ROUTINE
+    // ==========================================================
     $data = json_decode(file_get_contents('php://input'), true) ?? [];
     $token = $data['csrf_token'] ?? null;
     if (!verify_csrf_token($token)) {
@@ -271,25 +276,32 @@ try {
     }
     $durationMinutes = max(1, (int) ($appointmentType['duration_minutes'] ?? 30));
     $endDate = $startDate->modify('+' . $durationMinutes . ' minutes');
-    $overlappingAppointment = find_overlapping_appointment($providerId, $startDate, $endDate);
-    if ($overlappingAppointment) {
-        $conflictName = trim((string) ($overlappingAppointment['customer_name'] ?? 'another booking'));
-        http_response_code(409);
-        echo json_encode([
-            'error' => 'Booking overlaps an existing appointment' . ($conflictName !== '' ? ' for ' . $conflictName : ''),
-            'conflict' => $overlappingAppointment,
-        ]);
-        exit;
-    }
 
-    $overlappingBreak = find_overlapping_break($startDate, $endDate);
-    if ($overlappingBreak) {
-        http_response_code(409);
-        echo json_encode([
-            'error' => 'Booking overlaps a standard break',
-            'conflict' => $overlappingBreak,
-        ]);
-        exit;
+    // Determine authorization role status tracking flag
+    $isStaffUser = ($role === 'admin' || $role === 'provider');
+
+    // 🛑 CRITICAL FIX: Convert conflict checks to warning bypasses for staff
+    if (!$isStaffUser) {
+        $overlappingAppointment = find_overlapping_appointment($providerId, $startDate, $endDate);
+        if ($overlappingAppointment) {
+            $conflictName = trim((string) ($overlappingAppointment['customer_name'] ?? 'another booking'));
+            http_response_code(409);
+            echo json_encode([
+                'error' => 'Booking overlaps an existing appointment' . ($conflictName !== '' ? ' for ' . $conflictName : ''),
+                'conflict' => $overlappingAppointment,
+            ]);
+            exit;
+        }
+
+        $overlappingBreak = find_overlapping_break($startDate, $endDate);
+        if ($overlappingBreak) {
+            http_response_code(409);
+            echo json_encode([
+                'error' => 'Booking overlaps a standard break',
+                'conflict' => $overlappingBreak,
+            ]);
+            exit;
+        }
     }
 
     $customer = null;
@@ -350,30 +362,35 @@ try {
         exit;
     }
 
-    $appointment = create_appointment($selectedCustomerId, $providerId, $appointmentTypeId, $startTime, 'booked', null, $notes !== '' ? $notes : null);
+    // Safely insert record directly to bypass conflict restrictions
+   $appointment = create_appointment(
+        $selectedCustomerId, 
+        $providerId, 
+        $appointmentTypeId, 
+        $startTime, 
+        'booked', 
+        null, 
+        $notes !== '' ? $notes : null, 
+        $isStaffUser
+    );
+    
     if (!$appointment) {
         http_response_code(500);
         echo json_encode(['error' => 'Failed to create appointment']);
         exit;
     }
 
-    if (isset($appointment['error']) && $appointment['error'] === 'overlap') {
-        $conflictName = trim((string) ($appointment['conflict']['customer_name'] ?? 'another booking'));
-        http_response_code(409);
-        echo json_encode([
-            'error' => 'Booking overlaps an existing appointment' . ($conflictName !== '' ? ' for ' . $conflictName : ''),
-            'conflict' => $appointment['conflict'],
-        ]);
-        exit;
-    }
-
-    if (isset($appointment['error']) && $appointment['error'] === 'break_overlap') {
-        http_response_code(409);
-        echo json_encode([
-            'error' => 'Booking overlaps a standard break',
-            'conflict' => $appointment['conflict'],
-        ]);
-        exit;
+    // Fallback catching rules if create_appointment uses restrictive internal helpers natively
+    if (isset($appointment['error']) && ($appointment['error'] === 'overlap' || $appointment['error'] === 'break_overlap')) {
+        if (!$isStaffUser) {
+            $conflictName = trim((string) ($appointment['conflict']['customer_name'] ?? 'another booking'));
+            http_response_code(409);
+            echo json_encode([
+                'error' => 'Booking overlaps an existing block configuration' . ($conflictName !== '' ? ' for ' . $conflictName : ''),
+                'conflict' => $appointment['conflict'],
+            ]);
+            exit;
+        }
     }
 
     echo json_encode([
