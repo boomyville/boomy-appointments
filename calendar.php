@@ -1937,7 +1937,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       return relativeX < (rect.width / 2) ? 'left' : 'right';
     }
 
-    function getFilteredCalendarEvents(rawEvents) {
+function getFilteredCalendarEvents(rawEvents) {
   const eventsArray = Array.isArray(rawEvents) ? rawEvents : [];
   const primaryId = Number(selectedPrimaryProviderId || 0);
   const secondaryId = Number(selectedSecondaryProviderId || 0);
@@ -1946,21 +1946,26 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
   return eventsArray.filter(function(event) {
     if (!event) return false;
 
-    // Breaks have no provider_id — always show them
+    // Background events (Breaks and Unavailabilities)
     if (event.display === 'background') {
       const eventProviderId = Number(
         (event.extendedProps && event.extendedProps.provider_id) || 0
       );
-      if (!eventProviderId) return true; // global breaks, always show
+      
+      // Global breaks always show
+      if (!eventProviderId) return true; 
 
-      // Provider-scoped unavailabilities — filter by selected provider(s)
+      // If viewing dual mode, check if it matches either column
       if (dualEnabled) {
         return eventProviderId === primaryId || eventProviderId === secondaryId;
       }
+      
+      // If a specific provider is selected in the dropdown, show only theirs.
+      // Otherwise, show all unavailabilities.
       return primaryId > 0 ? eventProviderId === primaryId : true;
     }
 
-    // Regular appointments
+    // Regular appointments filtering
     const providerValue = Number(
       (event.extendedProps && event.extendedProps.provider_id) || event.provider_id || 0
     );
@@ -2299,6 +2304,18 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
 
         if (currentUserRole === 'provider' && providerId) {
           params.set('provider_id', String(providerId));
+        } else {
+          // Explicitly track the primary and secondary dropdown values selected on screen
+          const selectedPrimary = document.getElementById('calendarProviderPrimary')?.value;
+          const selectedSecondary = document.getElementById('calendarProviderSecondary')?.value;
+          
+          let ids = [];
+          if (selectedPrimary) ids.push(selectedPrimary);
+          if (selectedSecondary && isThreeDayOrDayView()) ids.push(selectedSecondary);
+          
+          if (ids.length > 0) {
+            params.set('provider_id', ids.join(','));
+          }
         }
 
         fetch('calendar_api.php?' + params.toString(), { credentials: 'same-origin' })

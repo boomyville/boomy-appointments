@@ -69,14 +69,14 @@ try {
         }
     }
     // If no specific providers targeted, load all active providers for unavailability events
-if (empty($targetProviderIds)) {
-    try {
-        $allStmt = $db->query("SELECT id FROM users WHERE role IN ('admin','provider') AND is_active = 1");
-        $targetProviderIds = array_map('intval', $allStmt->fetchAll(PDO::FETCH_COLUMN));
-    } catch (Throwable $e) {
-        $targetProviderIds = [];
+    if (empty($targetProviderIds)) {
+        try {
+            $allStmt = $db->query("SELECT id FROM users WHERE role IN ('admin','provider') AND is_active = 1");
+            $targetProviderIds = array_map('intval', $allStmt->fetchAll(PDO::FETCH_COLUMN));
+        } catch (Throwable $e) {
+            $targetProviderIds = [];
+        }
     }
-}
 
     $stmt = $db->prepare($sql);
     $stmt->execute($params);
