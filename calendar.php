@@ -1253,6 +1253,36 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
           </div>
         </div>
 
+        <div class="booking-grid">
+          <div class="field">
+            <label for="providerSelect">Which provider?</label>
+            <select id="providerSelect" name="provider_id">
+            <?php foreach ($providers as $index => $provider): ?>
+              <option value="<?php echo (int) $provider['id']; ?>" <?php echo ((int) ($provider['is_active'] ?? 0) === 1 && $calendarDefaultId === (int) $provider['id']) ? 'selected' : ''; ?> <?php echo ((int) ($provider['is_active'] ?? 0) !== 1) ? 'disabled' : ''; ?>>
+                <?php echo htmlspecialchars($provider['full_name'] ?: $provider['email']); ?>
+                <?php if (!empty($provider['role'])): ?>
+                  (<?php echo htmlspecialchars($provider['role']); ?>)
+                <?php endif; ?>
+                  <?php if ((int) ($provider['is_active'] ?? 0) !== 1): ?>
+                    (inactive)
+                  <?php endif; ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="appointmentTypeSelect">Type of appointment</label>
+            <select id="appointmentTypeSelect" name="appointment_type_id">
+              <?php foreach ($appointmentTypes as $index => $appointmentType): ?>
+                <option value="<?php echo (int) $appointmentType['id']; ?>" data-duration="<?php echo (int) $appointmentType['duration_minutes']; ?>" <?php echo $index === 0 ? 'selected' : ''; ?>>
+                  <?php echo htmlspecialchars($appointmentType['name']); ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+         </div>
+
         <div class="booking-edit-only booking-status-row">
           <div class="field">
             <label for="appointmentStatusSelect">Status</label>
@@ -1349,34 +1379,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
             </div>
             
             <input type="hidden" id="selectedCustomerId" value="">
-          </div>
-
-          <div class="field">
-            <label for="providerSelect">Which provider?</label>
-            <select id="providerSelect" name="provider_id">
-            <?php foreach ($providers as $index => $provider): ?>
-              <option value="<?php echo (int) $provider['id']; ?>" <?php echo ((int) ($provider['is_active'] ?? 0) === 1 && $calendarDefaultId === (int) $provider['id']) ? 'selected' : ''; ?> <?php echo ((int) ($provider['is_active'] ?? 0) !== 1) ? 'disabled' : ''; ?>>
-                <?php echo htmlspecialchars($provider['full_name'] ?: $provider['email']); ?>
-                <?php if (!empty($provider['role'])): ?>
-                  (<?php echo htmlspecialchars($provider['role']); ?>)
-                <?php endif; ?>
-                  <?php if ((int) ($provider['is_active'] ?? 0) !== 1): ?>
-                    (inactive)
-                  <?php endif; ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-
-          <div class="field">
-            <label for="appointmentTypeSelect">Type of appointment</label>
-            <select id="appointmentTypeSelect" name="appointment_type_id">
-              <?php foreach ($appointmentTypes as $index => $appointmentType): ?>
-                <option value="<?php echo (int) $appointmentType['id']; ?>" data-duration="<?php echo (int) $appointmentType['duration_minutes']; ?>" <?php echo $index === 0 ? 'selected' : ''; ?>>
-                  <?php echo htmlspecialchars($appointmentType['name']); ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
           </div>
 
           <div class="field span-2">

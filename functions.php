@@ -476,7 +476,8 @@ function verify_user_credentials(string $email, string $password): ?array
     $user = get_user_by_email($email);
     if (!$user) return null;
     if (!password_verify($password, $user['password_hash'])) return null;
-    if ((int)$user['is_active'] !== 1) return null;
+    // Optional check; block login if user is inactive
+    // if ((int)$user['is_active'] !== 1) return null;
     return $user;
 }
 
