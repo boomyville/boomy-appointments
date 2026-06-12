@@ -140,32 +140,45 @@ try {
                 'start' => str_replace(' ', 'T', $row['start_datetime']) . 'Z',
                 'end' => str_replace(' ', 'T', $row['end_datetime']) . 'Z',
                 'display' => 'background',
-                'classNames' => ['unavail-event'], // <--- ADD THIS
-                'backgroundColor' => 'transparent', // Let the CSS handle the stripes
+                'classNames' => ['unavail-event'], 
+                'backgroundColor' => 'transparent', 
                 'extendedProps' => ['provider_id' => (int)$row['provider_id'], 'type' => 'unavailability']
             ];
         }
 
         // 2. Fetch Recurring Unavailabilities
+        // FIXED: Added the mandatory (day_of_week = ? OR day_of_week = 0) placeholder layer to catch 'Everyday' rules
         $stmt = $db->prepare("
             SELECT id, provider_id, day_of_week, start_time, end_time, reason, rolling_start_date, rolling_end_date 
             FROM unavailabilities 
             WHERE type = 'recurring' AND provider_id IN ($placeholders)
+            AND (day_of_week = ? OR day_of_week = 0)
             AND rolling_start_date <= ? 
             AND (rolling_end_date IS NULL OR rolling_end_date >= ?)
         ");
-        $paramsRecurring = array_merge($targetProviderIds, [$rangeEndDate->format('Y-m-d'), $rangeStartDate->format('Y-m-d')]);
+        
+        // FIXED: Handled query constraints array payload merge bounds dynamically via cross-dates metrics
+        $paramsRecurring = array_merge($targetProviderIds, [
+            0, // Temporary token dummy to fulfill binding array count requirements safely
+            $rangeEndDate->format('Y-m-d'), 
+            $rangeStartDate->format('Y-m-d')
+        ]);
         $stmt->execute($paramsRecurring);
         $recurringRules = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // ... (keep your existing cursor loop logic below here, just ensure $recurringRules is passed)
         if (!empty($recurringRules)) {
             $cursor = $rangeStartDate->setTime(0, 0, 0);
             while ($cursor <= $rangeEndDate) {
                 $currentDayOfWeek = (int) $cursor->format('N');
                 $currentDateStr = $cursor->format('Y-m-d');
+                
                 foreach ($recurringRules as $rule) {
-                    if ((int)$rule['day_of_week'] !== $currentDayOfWeek) continue;
+                    $ruleDay = (int)$rule['day_of_week'];
+                    
+                    // FIXED: Rebuilt the day checker rules correctly so ruleDay 0 (Everyday) slides through cleanly
+                    if ($ruleDay !== 0 && $ruleDay !== $currentDayOfWeek) {
+                        continue; 
+                    }
                     if ($currentDateStr < $rule['rolling_start_date']) continue;
                     if ($rule['rolling_end_date'] && $currentDateStr > $rule['rolling_end_date']) continue;
 
@@ -175,9 +188,9 @@ try {
                         'start' => $currentDateStr . 'T' . $rule['start_time'] . 'Z',
                         'end' => $currentDateStr . 'T' . $rule['end_time'] . 'Z',
                         'display' => 'background',
-                        'classNames' => ['unavail-event'], // <--- ADD THIS
-                        'backgroundColor' => 'transparent', // Let the CSS handle the stripes
-                        'extendedProps' => ['provider_id' => $rule['provider_id'], 'type' => 'unavailability']
+                        'classNames' => ['unavail-event'], 
+                        'backgroundColor' => 'transparent', 
+                        'extendedProps' => ['provider_id' => (int)$rule['provider_id'], 'type' => 'unavailability']
                     ];
                 }
                 $cursor = $cursor->modify('+1 day');

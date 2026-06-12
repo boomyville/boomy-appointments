@@ -1948,7 +1948,7 @@ function count_users(string $query = ''): int
 
 /**
  * Checks if a requested booking window overlaps with any provider unavailabilities
- * (Supports both single one-off blocks and recurring rolling constraints)
+ * (Supports both single one-off blocks and recurring rolling constraints, including Everyday rules)
  */
 function check_provider_unavailability(int $providerId, DateTimeImmutable $startDate, DateTimeImmutable $endDate): ?array
 {
@@ -1982,15 +1982,23 @@ function check_provider_unavailability(int $providerId, DateTimeImmutable $start
         $dayOfWeek = (int) $startDate->format('N'); // 1 (Monday) to 7 (Sunday)
         $bookingDateStr = $startDate->format('Y-m-d');
         
+        // This query contains exactly 4 placeholders (?)
         $stmt = $db->prepare("
             SELECT id, start_time, end_time, reason 
             FROM unavailabilities 
             WHERE provider_id = ? AND type = 'recurring'
-              AND day_of_week = ?
+              AND (day_of_week = ? OR day_of_week = 0)
               AND rolling_start_date <= ?
               AND (rolling_end_date IS NULL OR rolling_end_date >= ?)
         ");
-        $stmt->execute([$providerId, $dayOfWeek, $bookingDateStr, $bookingDateStr]);
+        
+        // FIXED: Passing exactly 4 elements to perfectly align with the query placeholders
+        $stmt->execute([
+            $providerId, 
+            $dayOfWeek, 
+            $bookingDateStr, 
+            $bookingDateStr
+        ]);
         $recurringRules = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         if (!empty($recurringRules)) {
@@ -2020,7 +2028,6 @@ function check_provider_unavailability(int $providerId, DateTimeImmutable $start
     }
     return null;
 }
-
 
 /**
  * Fetches all bookable users who are providers or admins

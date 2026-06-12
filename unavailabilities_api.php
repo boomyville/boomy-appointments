@@ -60,6 +60,9 @@ function handle_list_action(PDO $db): void
 /**
  * Creates single or recurring unavailabilities with transactional sanitization loops
  */
+/**
+ * Creates single or recurring unavailabilities with transactional sanitization loops
+ */
 function handle_create_action(PDO $db): void
 {
     $rawInput = file_get_contents('php://input');
@@ -97,7 +100,6 @@ function handle_create_action(PDO $db): void
             return;
         }
 
-        // Translate timestamps cleanly into local operational constraints
         $startParsed = date_create($startDt);
         $endParsed = date_create($endDt);
 
@@ -119,14 +121,14 @@ function handle_create_action(PDO $db): void
         ]);
 
     } else {
-        // Evaluate rolling validation patterns
         $dayOfWeek = isset($data['day_of_week']) ? (int) $data['day_of_week'] : 0;
         $startTime = trim((string) ($data['start_time'] ?? ''));
         $endTime = trim((string) ($data['end_time'] ?? ''));
         $rollingStart = trim((string) ($data['rolling_start_date'] ?? ''));
         $rollingEnd = trim((string) ($data['rolling_end_date'] ?? ''));
 
-        if ($dayOfWeek < 1 || $dayOfWeek > 7) {
+        // FIXED: Expanded acceptable validation parameters range down to 0 to include everyday strategy
+        if ($dayOfWeek < 0 || $dayOfWeek > 7) {
             http_response_code(422);
             echo json_encode(['ok' => false, 'error' => 'Invalid day of week parameter choice logged.']);
             return;

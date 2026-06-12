@@ -361,6 +361,7 @@ if (!empty($providers)) {
             <div class="field">
               <label for="modalDayOfWeek">Target Day of Week Pattern</label>
               <select id="modalDayOfWeek" name="day_of_week">
+                <option value="0">Everyday</option>
                 <option value="1">Every Monday</option>
                 <option value="2">Every Tuesday</option>
                 <option value="3">Every Wednesday</option>
@@ -421,7 +422,7 @@ if (!empty($providers)) {
     const globalAlert = document.getElementById('globalAlert');
     const modalAlert = document.getElementById('modalAlert');
 
-    const dayLabels = { 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday' };
+    const dayLabels = { 0: 'Everyday', 1: 'Monday', 2: 'Tuesday', 3: 'Wednesday', 4: 'Thursday', 5: 'Friday', 6: 'Saturday', 7: 'Sunday' };
 
     function displayFlashMessage(element, text, status = 'success') {
       element.textContent = text;
