@@ -23,7 +23,9 @@ try {
         exit;
     }
 
-    // GET single appointment
+    // ==========================================================
+    // ACTION: GET SINGLE APPOINTMENT
+    // ==========================================================
     if ($action === 'get' && $_SERVER['REQUEST_METHOD'] === 'GET') {
         $id = (int) ($_GET['id'] ?? 0);
         if ($id < 1) {
@@ -45,6 +47,9 @@ try {
         exit;
     }
 
+    // ==========================================================
+    // ACTION: SEND CONFIRMATION EMAIL
+    // ==========================================================
     if ($action === 'send_confirmation_email' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $data = json_decode(file_get_contents('php://input'), true) ?? [];
         $token = $data['csrf_token'] ?? null;
@@ -79,7 +84,9 @@ try {
         exit;
     }
 
-    // Update appointment
+    // ==========================================================
+    // ACTION: UPDATE APPOINTMENT ROUTINE
+    // ==========================================================
     if ($action === 'update' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $data = json_decode(file_get_contents('php://input'), true) ?? [];
         $token = $data['csrf_token'] ?? null;
@@ -125,7 +132,7 @@ try {
             exit;
         }
 
-        // customer handling (existing or create new)
+        // Customer handling (existing or create new)
         $customer = null;
         if ($selectedCustomerId > 0) {
             $customer = get_customer_by_id($selectedCustomerId);
@@ -163,11 +170,22 @@ try {
             exit;
         }
 
-        $storageStatus = $status === 'no show' ? 'no_show' : $status;
-        
-        // Note: If update_appointment internal helper performs forced overlap rejections natively,
-        // make sure to modify its definition signature or allow forcing criteria markers inside it.
-        $result = update_appointment($appointmentId, $selectedCustomerId, $providerId, $appointmentTypeId, $startTime, $endTime ?: null, $storageStatus, $notes !== '' ? $notes : null);
+        $currentStatusValue = $data['status'] ?? 'booked';
+        $storageStatus = $currentStatusValue === 'no show' ? 'no_show' : $currentStatusValue;
+        $isStaffUser = ($role === 'admin' || $role === 'provider');
+
+        $result = update_appointment(
+            $appointmentId, 
+            $selectedCustomerId, 
+            $providerId, 
+            $appointmentTypeId, 
+            $startTime, 
+            $endTime ?: null, 
+            $storageStatus, 
+            $notes !== '' ? $notes : null,
+            $isStaffUser
+        );
+
         if ($result === null) {
             http_response_code(500);
             echo json_encode(['error' => 'Failed to update appointment']);
@@ -188,7 +206,9 @@ try {
         exit;
     }
 
-    // Delete appointment
+    // ==========================================================
+    // ACTION: DELETE APPOINTMENT ROUTINE
+    // ==========================================================
     if ($action === 'delete' && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $data = json_decode(file_get_contents('php://input'), true) ?? [];
         $token = $data['csrf_token'] ?? null;
@@ -223,183 +243,188 @@ try {
     }
 
     // ==========================================================
-    // ACTION: CREATE APPOINTMENT ROUTINE
+    // ACTION: CREATE APPOINTMENT ROUTINE (Default Fallback)
     // ==========================================================
-    $data = json_decode(file_get_contents('php://input'), true) ?? [];
-    $token = $data['csrf_token'] ?? null;
-    if (!verify_csrf_token($token)) {
-        http_response_code(400);
-        echo json_encode(['error' => 'csrf']);
-        exit;
-    }
-
-    $selectedCustomerId = (int) ($data['selected_customer_id'] ?? 0);
-    $customerName = trim((string) ($data['customer_name'] ?? ''));
-    $customerEmail = trim((string) ($data['customer_email'] ?? ''));
-    $customerMobile = trim((string) ($data['customer_mobile'] ?? ''));
-    $dateOfBirth = trim((string) ($data['date_of_birth'] ?? ''));
-    $gender = trim((string) ($data['customer_gender'] ?? ''));
-    $providerId = (int) ($data['provider_id'] ?? 0);
-    $appointmentTypeId = (int) ($data['appointment_type_id'] ?? 0);
-    $startTime = trim((string) ($data['start_time'] ?? ''));
-    $notes = trim((string) ($data['notes'] ?? ''));
-
-    if ($providerId < 1) {
-        http_response_code(422);
-        echo json_encode(['error' => 'provider is required']);
-        exit;
-    }
-
-    if ($appointmentTypeId < 1) {
-        http_response_code(422);
-        echo json_encode(['error' => 'appointment type is required']);
-        exit;
-    }
-
-    if ($startTime === '') {
-        http_response_code(422);
-        echo json_encode(['error' => 'start time is required']);
-        exit;
-    }
-
-    $appointmentType = get_appointment_type_by_id($appointmentTypeId);
-    if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1) {
-        http_response_code(422);
-        echo json_encode(['error' => 'appointment type not found']);
-        exit;
-    }
-
-    $timezone = new DateTimeZone(get_app_timezone_name());
-    $startDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $startTime, $timezone);
-    if (!$startDate) {
-        $startDate = new DateTimeImmutable($startTime, $timezone);
-    }
-    $durationMinutes = max(1, (int) ($appointmentType['duration_minutes'] ?? 30));
-    $endDate = $startDate->modify('+' . $durationMinutes . ' minutes');
-
-    // Determine authorization role status tracking flag
-    $isStaffUser = ($role === 'admin' || $role === 'provider');
-
-    // 🛑 CRITICAL FIX: Convert conflict checks to warning bypasses for staff
-    if (!$isStaffUser) {
-        $overlappingAppointment = find_overlapping_appointment($providerId, $startDate, $endDate);
-        if ($overlappingAppointment) {
-            $conflictName = trim((string) ($overlappingAppointment['customer_name'] ?? 'another booking'));
-            http_response_code(409);
-            echo json_encode([
-                'error' => 'Booking overlaps an existing appointment' . ($conflictName !== '' ? ' for ' . $conflictName : ''),
-                'conflict' => $overlappingAppointment,
-            ]);
+    if ($action === 'create' && $_SERVER['REQUEST_METHOD'] === 'POST') {
+        $data = json_decode(file_get_contents('php://input'), true) ?? [];
+        $token = $data['csrf_token'] ?? null;
+        if (!verify_csrf_token($token)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'csrf']);
             exit;
         }
 
-        $overlappingBreak = find_overlapping_break($startDate, $endDate);
-        if ($overlappingBreak) {
-            http_response_code(409);
-            echo json_encode([
-                'error' => 'Booking overlaps a standard break',
-                'conflict' => $overlappingBreak,
-            ]);
-            exit;
-        }
-    }
+        $selectedCustomerId = (int) ($data['selected_customer_id'] ?? 0);
+        $customerName = trim((string) ($data['customer_name'] ?? ''));
+        $customerEmail = trim((string) ($data['customer_email'] ?? ''));
+        $customerMobile = trim((string) ($data['customer_mobile'] ?? ''));
+        $dateOfBirth = trim((string) ($data['date_of_birth'] ?? ''));
+        $gender = trim((string) ($data['customer_gender'] ?? ''));
+        $providerId = (int) ($data['provider_id'] ?? 0);
+        $appointmentTypeId = (int) ($data['appointment_type_id'] ?? 0);
+        $startTime = trim((string) ($data['start_time'] ?? ''));
+        $notes = trim((string) ($data['notes'] ?? ''));
 
-    $customer = null;
-    if ($selectedCustomerId > 0) {
-        $customer = get_customer_by_id($selectedCustomerId);
-        if (!$customer) {
+        if ($providerId < 1) {
             http_response_code(422);
-            echo json_encode(['error' => 'customer not found']);
+            echo json_encode(['error' => 'provider is required']);
             exit;
         }
-    } else {
-        if ($customerName === '') {
+        if ($appointmentTypeId < 1) {
             http_response_code(422);
-            echo json_encode(['error' => 'customer name is required']);
+            echo json_encode(['error' => 'appointment type is required']);
             exit;
         }
-
-        if ($customerEmail !== '' && !filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
+        if ($startTime === '') {
             http_response_code(422);
-            echo json_encode(['error' => 'invalid customer email']);
+            echo json_encode(['error' => 'start time is required']);
             exit;
         }
 
-        if ($dateOfBirth !== '') {
-            $dob = DateTimeImmutable::createFromFormat('Y-m-d', $dateOfBirth);
-            $dobErrors = DateTimeImmutable::getLastErrors();
-            if (!$dob || ($dobErrors['warning_count'] ?? 0) > 0 || ($dobErrors['error_count'] ?? 0) > 0) {
-                http_response_code(422);
-                echo json_encode(['error' => 'invalid date of birth']);
-                exit;
-            }
-        }
-
-        $customerFieldSettings = get_customer_field_settings();
-        if ($customerFieldSettings['gender']['display'] || $customerFieldSettings['gender']['required'] || $gender !== '') {
-            $genderError = validate_customer_field('gender', $gender);
-            if ($genderError) {
-                http_response_code(422);
-                echo json_encode(['error' => $genderError]);
-                exit;
-            }
-        }
-
-        $createdCustomerId = create_customer($customerName, $customerEmail ?: null, $customerMobile ?: null, $dateOfBirth ?: null, $gender ?: null);
-        if (!$createdCustomerId) {
-            http_response_code(500);
-            echo json_encode(['error' => 'Failed to create customer']);
+        $appointmentType = get_appointment_type_by_id($appointmentTypeId);
+        if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1) {
+            http_response_code(422);
+            echo json_encode(['error' => 'appointment type not found']);
             exit;
         }
 
-        $customer = get_customer_by_id($createdCustomerId);
-        $selectedCustomerId = $createdCustomerId;
-    }
+        $timezone = new DateTimeZone(get_app_timezone_name());
+        $startDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $startTime, $timezone);
+        if (!$startDate) {
+            $startDate = new DateTimeImmutable($startTime, $timezone);
+        }
+        $durationMinutes = max(1, (int) ($appointmentType['duration_minutes'] ?? 30));
+        $endDate = $startDate->modify('+' . $durationMinutes . ' minutes');
 
-    if (!$customer) {
-        http_response_code(500);
-        echo json_encode(['error' => 'Failed to load customer']);
-        exit;
-    }
+        $isStaffUser = ($role === 'admin' || $role === 'provider');
 
-    // Safely insert record directly to bypass conflict restrictions
-   $appointment = create_appointment(
-        $selectedCustomerId, 
-        $providerId, 
-        $appointmentTypeId, 
-        $startTime, 
-        'booked', 
-        null, 
-        $notes !== '' ? $notes : null, 
-        $isStaffUser
-    );
-    
-    if (!$appointment) {
-        http_response_code(500);
-        echo json_encode(['error' => 'Failed to create appointment']);
-        exit;
-    }
-
-    // Fallback catching rules if create_appointment uses restrictive internal helpers natively
-    if (isset($appointment['error']) && ($appointment['error'] === 'overlap' || $appointment['error'] === 'break_overlap')) {
         if (!$isStaffUser) {
-            $conflictName = trim((string) ($appointment['conflict']['customer_name'] ?? 'another booking'));
-            http_response_code(409);
-            echo json_encode([
-                'error' => 'Booking overlaps an existing block configuration' . ($conflictName !== '' ? ' for ' . $conflictName : ''),
-                'conflict' => $appointment['conflict'],
-            ]);
+            $overlappingAppointment = find_overlapping_appointment($providerId, $startDate, $endDate);
+            if ($overlappingAppointment) {
+                $conflictName = trim((string) ($overlappingAppointment['customer_name'] ?? 'another booking'));
+                http_response_code(409);
+                echo json_encode([
+                    'error' => 'Booking overlaps an existing appointment' . ($conflictName !== '' ? ' for ' . $conflictName : ''),
+                    'conflict' => $overlappingAppointment,
+                ]);
+                exit;
+            }
+
+            $overlappingBreak = find_overlapping_break($startDate, $endDate);
+            if ($overlappingBreak) {
+                http_response_code(409);
+                echo json_encode([
+                    'error' => 'Booking overlaps a standard break',
+                    'conflict' => $overlappingBreak,
+                ]);
+                exit;
+            }
+        }
+
+        $customer = null;
+        if ($selectedCustomerId > 0) {
+            $customer = get_customer_by_id($selectedCustomerId);
+            if (!$customer) {
+                http_response_code(422);
+                echo json_encode(['error' => 'customer not found']);
+                exit;
+            }
+        } else {
+            if ($customerName === '') {
+                http_response_code(422);
+                echo json_encode(['error' => 'customer name is required']);
+                exit;
+            }
+
+            if ($customerEmail !== '' && !filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
+                http_response_code(422);
+                echo json_encode(['error' => 'invalid customer email']);
+                exit;
+            }
+
+            if ($dateOfBirth !== '') {
+                $dob = DateTimeImmutable::createFromFormat('Y-m-d', $dateOfBirth);
+                $dobErrors = DateTimeImmutable::getLastErrors();
+                if (!$dob || ($dobErrors['warning_count'] ?? 0) > 0 || ($dobErrors['error_count'] ?? 0) > 0) {
+                    http_response_code(422);
+                    echo json_encode(['error' => 'invalid date of birth']);
+                    exit;
+                }
+            }
+
+            $customerFieldSettings = get_customer_field_settings();
+            if ($customerFieldSettings['gender']['display'] || $customerFieldSettings['gender']['required'] || $gender !== '') {
+                $genderError = validate_customer_field('gender', $gender);
+                if ($genderError) {
+                    http_response_code(422);
+                    echo json_encode(['error' => $genderError]);
+                    exit;
+                }
+            }
+
+            $createdCustomerId = create_customer($customerName, $customerEmail ?: null, $customerMobile ?: null, $dateOfBirth ?: null, $gender ?: null);
+            if (!$createdCustomerId) {
+                http_response_code(500);
+                echo json_encode(['error' => 'Failed to create customer']);
+                exit;
+            }
+
+            $customer = get_customer_by_id($createdCustomerId);
+            $selectedCustomerId = $createdCustomerId;
+        }
+
+        if (!$customer) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Failed to load customer']);
             exit;
         }
+
+        $currentStatusValue = $data['status'] ?? 'booked';
+        $storageStatus = $currentStatusValue === 'no show' ? 'no_show' : $currentStatusValue;
+
+        $appointment = create_appointment(
+            $selectedCustomerId, 
+            $providerId, 
+            $appointmentTypeId, 
+            $startTime, 
+            $storageStatus, 
+            null, 
+            $notes !== '' ? $notes : null, 
+            $isStaffUser
+        );
+        
+        if (!$appointment) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Failed to create appointment']);
+            exit;
+        }
+
+        if (isset($appointment['error']) && ($appointment['error'] === 'overlap' || $appointment['error'] === 'break_overlap')) {
+            if (!$isStaffUser) {
+                $conflictName = trim((string) ($appointment['conflict']['customer_name'] ?? 'another booking'));
+                http_response_code(409);
+                echo json_encode([
+                    'error' => 'Booking overlaps an existing block configuration' . ($conflictName !== '' ? ' for ' . $conflictName : ''),
+                    'conflict' => $appointment['conflict'],
+                ]);
+                exit;
+            }
+        }
+
+        echo json_encode([
+            'ok' => true,
+            'customer' => $customer,
+            'appointment' => $appointment,
+            'message' => 'Booking created successfully'
+        ]);
+        exit;
     }
 
-    echo json_encode([
-        'ok' => true,
-        'customer' => $customer,
-        'appointment' => $appointment,
-        'message' => 'Booking created successfully'
-    ]);
+    // Default response for unmatched actions or methods
+    http_response_code(400);
+    echo json_encode(['error' => 'invalid action or method']);
     exit;
+
 } catch (Throwable $e) {
     http_response_code(500);
     echo json_encode(['error' => $e->getMessage()]);

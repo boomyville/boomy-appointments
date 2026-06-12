@@ -1831,6 +1831,7 @@ function update_appointment(int $appointmentId, int $customerId, int $providerId
         $durationMinutes = max(1, (int) ($appointmentType['duration_minutes'] ?? 30));
         $resolvedEndDate = null;
         $endTimeValue = trim((string) ($endTime ?? ''));
+        
         if ($endTimeValue !== '') {
             $resolvedEndDate = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $endTimeValue, $timezone);
             if (!$resolvedEndDate) {
@@ -1838,12 +1839,19 @@ function update_appointment(int $appointmentId, int $customerId, int $providerId
             }
         }
 
-        $endDate = $resolvedEndDate ?: $startDate->modify('+' . $durationMinutes . ' minutes');
-        
-        // Pass override flag here
-        $windowError = validate_appointment_window($providerId, $startDate, $endDate, $appointmentId, $allowStaffOverride);
-        if ($windowError) {
-            return $windowError;
+        //  FIX 2: Fall back to the existing record's end_time if no new end_time is supplied over the request
+        if ($resolvedEndDate === null && !empty($existingAppointment['end_time'])) {
+            $endDate = new DateTimeImmutable($existingAppointment['end_time'], $timezone);
+        } else {
+            $endDate = $resolvedEndDate ?: $startDate->modify('+' . $durationMinutes . ' minutes');
+        }
+
+        //  FIX 1: If a staff override is active, skip all boundary checks entirely
+        if (!$allowStaffOverride) {
+            $windowError = validate_appointment_window($providerId, $startDate, $endDate, $appointmentId, $allowStaffOverride);
+            if ($windowError) {
+                return $windowError;
+            }
         }
 
         $finalStatus = $status ?: (string) ($existingAppointment['status'] ?? 'booked');
@@ -1854,7 +1862,7 @@ function update_appointment(int $appointmentId, int $customerId, int $providerId
             $providerId,
             $appointmentTypeId,
             $startDate->format('Y-m-d H:i:s'),
-            $endDate->format('Y-m-d H:i:s'),
+            $endDate->format('Y-m-d H:i:s'), // Will never be null now!
             $finalStatus,
             $notes !== null && trim($notes) !== '' ? trim($notes) : null,
             $appointmentId,
@@ -1871,6 +1879,8 @@ function update_appointment(int $appointmentId, int $customerId, int $providerId
             'notes' => $notes !== null && trim($notes) !== '' ? trim($notes) : null,
         ];
     } catch (Throwable $e) {
+        // Optional tracking logging trace during local development:
+        // error_log("SQL Update Fail Trace: " . $e->getMessage());
         return null;
     }
 }
@@ -2213,43 +2223,44 @@ function update_customer_meta(int $customerId, array $meta): void
  */
 function process_automatic_no_shows(): void
 {
+    $lastRun = (int) ($_SESSION['auto_no_show_last_run'] ?? 0);
+    if ((time() - $lastRun) < 60) { // Only run every minutes
+        return;
+    }
+    $_SESSION['auto_no_show_last_run'] = time();
+
     try {
-        // Evaluate configuration toggle preference dynamically from database
         if ((string) get_setting('auto_no_show', '0') === '1') {
             $db = get_db();
-            
-            // Get the true localized application time matching your appointments timezone
             $appTimezone = get_app_timezone_name();
             $tz = new DateTimeZone($appTimezone);
             $dt = new DateTimeImmutable('now', $tz);
             $now = $dt->format('Y-m-d H:i:s');
 
-            // Explicit target checklist matching your schema strings
-            $targetStatuses = ['unconfirmed', 'confirmed', 'booked'];
-            
-            // Build absolute named placeholders map array dynamically
+            $targetStatuses = ['unconfirmed', 'booked'];
             $namedPlaceholders = [];
             $bindValues = [':now' => $now];
-            
+
             foreach ($targetStatuses as $index => $status) {
                 $key = ':status' . $index;
                 $namedPlaceholders[] = $key;
                 $bindValues[$key] = $status;
             }
 
-            // Construct definitive target query — SET status explicitly to 'no_show' with an underscore!
-            $query = "UPDATE `appointments` 
-                      SET `status` = 'no_show' 
-                      WHERE `end_time` < :now 
-                      AND `status` IN (" . implode(', ', $namedPlaceholders) . ")";
-                      
+            // Only sweep appointments not manually touched in the last 5 minutes
+            $bindValues[':now2'] = $now;
+            $query = "UPDATE appointments 
+                      SET status = 'no_show' 
+                      WHERE end_time < :now 
+                      AND status IN (" . implode(', ', $namedPlaceholders) . ")
+                      AND updated_at < DATE_SUB(:now2, INTERVAL 5 MINUTE)";
+
             $stmt = $db->prepare($query);
             $stmt->execute($bindValues);
         }
     } catch (Throwable $e) {
-        // Log to server errors in dev to give visibility without blocking clients
         if (defined('DEVELOPMENT_MODE') && DEVELOPMENT_MODE) {
-            error_log('Auto No-Show Routine Error Trace: ' . $e->getMessage());
+            error_log('Auto No-Show Routine Error: ' . $e->getMessage());
         }
     }
 }

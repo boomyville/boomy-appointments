@@ -361,6 +361,29 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       overflow: hidden; 
     }
 
+    .fc-status-cycler-dot {
+      position: absolute;
+      bottom: 4px;
+      right: 4px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 1.5px solid #ffffff;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+      z-index: 10; /* Ensures it sits neatly above text maps */
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .fc-status-cycler-dot:hover {
+      transform: scale(1.25);
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+    }
+    
+    html[data-theme="dark"] .fc-status-cycler-dot {
+      border-color: #1e293b;
+    }
+
     .booking-event__status {
       font-size: 0.68rem;
       font-weight: 800;
@@ -2226,7 +2249,7 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
 
         return transformedEvent;
       },
-      eventContent: function(arg) {
+eventContent: function(arg) {
         if (arg.event.display === 'background') {
           return { domNodes: [] };
         }
@@ -2242,8 +2265,126 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
         status.className = 'booking-event__status';
         status.textContent = String(arg.event.extendedProps.status || 'booked').replace(/_/g, ' ');
 
+        // Build the Colored Indicator Dot
+        const statusDot = document.createElement('div');
+        statusDot.className = 'fc-status-cycler-dot';
+        statusDot.setAttribute('title', 'Click to toggle next status state');
+
+        // Read dynamic status to color the indicator dot on initial load
+        const initialStatus = String(arg.event.extendedProps.status || 'booked').trim().toLowerCase().replace(/_/g, ' ');
+        let dotColor = '#3b82f6'; // default 'booked' blue
+
+        if (initialStatus === 'confirmed') dotColor = '#d4af37';   // Gold
+        if (initialStatus === 'present')   dotColor = '#10b981';   // Emerald Green
+        if (initialStatus === 'completed') dotColor = '#9ca3af';   // Muted Gray
+        if (initialStatus === 'no show')   dotColor = '#dc143c';   // Crimson Red
+
+        statusDot.style.backgroundColor = dotColor;
+
+        // Intercept click bubble sequences cleanly
+        statusDot.addEventListener('click', async function(jsEvent) {
+          jsEvent.stopPropagation(); 
+          jsEvent.preventDefault();
+
+          const rawId = String(arg.event.id || '');
+          if (!rawId || rawId.includes('break') || rawId.includes('unavail') || rawId === 'booking-draft-placeholder') {
+            return;
+          }
+          const appointmentId = parseInt(rawId, 10);
+          if (isNaN(appointmentId) || appointmentId < 1) return;
+
+          //  FIX: Calculate the absolute live status context AT THE TIME OF THE CLICK
+          const liveStatus = String(arg.event.extendedProps.status || 'booked').trim().toLowerCase().replace(/_/g, ' ');
+
+          // Sequential mapping rule state transitions
+          const cycleMap = {
+            'booked': 'confirmed',
+            'confirmed': 'present',
+            'present': 'completed',
+            'completed': 'no show',
+            'no show': 'booked'
+          };
+
+          const nextStatus = cycleMap[liveStatus] || 'booked';
+
+          statusDot.style.opacity = '0.5';
+          statusDot.style.pointerEvents = 'none';
+
+          try {
+            const startIso = arg.event.start.toISOString();
+            const endIso = arg.event.end ? arg.event.end.toISOString() : null;
+
+            const formattedStart = startIso.replace('T', ' ').substring(0, 19);
+            const formattedEnd = endIso ? endIso.replace('T', ' ').substring(0, 19) : null;
+
+            const customerId = parseInt(arg.event.extendedProps.customer_id, 10) || 0;
+            const providerId = parseInt(arg.event.extendedProps.provider_id, 10) || parseInt(selectedPrimaryProviderId, 10) || 0;
+            const appointmentTypeId = parseInt(arg.event.extendedProps.appointment_type_id, 10) || parseInt(defaultAppointmentTypeId, 10) || 0;
+
+            const response = await fetch('appointments_api.php?action=update', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                csrf_token: document.querySelector('input[name="csrf_token"]').value,
+                appointment_id: appointmentId,
+                selected_customer_id: customerId,
+                provider_id: providerId,
+                appointment_type_id: appointmentTypeId,
+                start_time: formattedStart, 
+                end_time: formattedEnd,     
+                status: nextStatus, 
+                notes: arg.event.extendedProps.notes || ''
+              })
+            });
+
+            const json = await response.json();
+            
+            if (!response.ok || json.ok === false) {
+              throw new Error(json.error || 'Server rejected inline state shift cycle.');
+            }
+
+            // Cleanly force full redraw update across views
+            try {
+              await window.calendarInstance.refetchEvents();
+            } catch (refetchErr) {
+              // refetch can fail if the event ref is stale; ignore
+            }
+
+            if (nextStatus === 'present') {
+              const appt = json.appointment || arg.event;
+              const cust = json.customer || { id: customerId };
+              if (!bookingModal.open) {
+              openBookingModal(new Date(arg.event.start), arg.event.end, {
+                mode: 'edit',
+                title: (appointmentId ? ('Appt #' + appointmentId) : 'Appointment') + ' • present',
+                appointment: {
+                  id: appointmentId,
+                  status: 'present',
+                  notes: arg.event.extendedProps.notes,
+                  provider_id: providerId,
+                  appointment_type_id: appointmentTypeId,
+                  start_time: appt.start_time || formattedStart,
+                  end_time: appt.end_time || formattedEnd
+                },
+                customer: cust
+              });
+            }
+              }
+
+          } catch (err) {
+
+            console.error('Status dot error:', err);
+            alert('Error updating status: ' + err.message);
+          } finally {
+            statusDot.style.opacity = '1';
+            statusDot.style.pointerEvents = 'auto';
+          }
+        });
+
         wrapper.appendChild(title);
         wrapper.appendChild(status);
+        wrapper.appendChild(statusDot);
+        
         return { domNodes: [wrapper] };
       },
       eventClassNames: function(arg) {
