@@ -346,7 +346,35 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       border-bottom-color: #ef4444 !important;
       color: #ef4444 !important;
     }
+.day-unavail-toggle {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 6px;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.06);
+  color: #b91c1c;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s;
+  box-sizing: border-box;
+}
 
+.day-unavail-toggle.is-unavailable {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #7f1d1d;
+}
+
+.day-unavail-toggle:hover {
+  background: rgba(239, 68, 68, 0.14);
+}
+
+.day-unavail-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
     /* Week/Day Specific Layout (Flex Grid Setup) */
     .booking-event {
       display: flex;
@@ -2444,16 +2472,20 @@ eventContent: function(arg) {
         if (isSameServerCalendarDay(arg.date, serverNow)) {
           arg.el.classList.add('server-today');
         }
+        injectUnavailButtons(arg);
       },
-      dayHeaderDidMount: function(arg) {
-        const serverNow = getServerNowDate();
-        if (isSameServerCalendarDay(arg.date, serverNow)) {
-          arg.el.classList.add('server-today');
-        }
-      },
+dayHeaderDidMount: function(arg) {
+  const serverNow = getServerNowDate();
+  if (isSameServerCalendarDay(arg.date, serverNow)) {
+    arg.el.classList.add('server-today');
+  }
+  injectUnavailButtons(arg);
+},
       datesSet: function() {
         syncProviderFilterVisibility();
         calendar.refetchEvents();
+
+  setTimeout(reinjectAllUnavailButtons, 50); 
       },
       selectConstraint: 'businessHours',
       headerToolbar: {
@@ -2735,6 +2767,8 @@ if (event.display === 'background') return;
       calendarProviderSecondary.addEventListener('change', function() {
         selectedSecondaryProviderId = calendarProviderSecondary.value ? Number(calendarProviderSecondary.value) : null;
         calendar.refetchEvents();
+
+    reinjectAllUnavailButtons();
       });
     }
 
@@ -2754,7 +2788,183 @@ if (event.display === 'background') return;
         // fallback
       }
     })();
+// ============================================================
+// DAY CELL UNAVAILABILITY TOGGLE BUTTONS
+// ============================================================
+async function toggleDayUnavailability(dateStr, providerId) {
+  // Find a SINGLE-type unavailability that covers this specific date
+  const existingEvent = window.calendarInstance.getEvents().find(function(event) {
+    if (!event.classNames.includes('unavail-event')) return false;
+    const epId = Number(event.extendedProps?.provider_id || 0);
+    if (epId !== Number(providerId)) return false;
+    // Only match single-type — never delete recurring rules
+    if (event.extendedProps?.unavailability_type === 'recurring') return false;
+    // Parse the id — only match 'unavail-single-NNN' format
+    if (!String(event.id).startsWith('unavail-single-')) return false;
+    const eventDateStr = event.start.toISOString().slice(0, 10);
+    return eventDateStr === dateStr;
+  });
 
+  if (existingEvent) {
+    // Parse the numeric ID from 'unavail-single-123'
+    const match = String(existingEvent.id).match(/^unavail-single-(\d+)$/);
+    const unavailId = match ? Number(match[1]) : 0;
+    if (!unavailId) {
+      alert('Cannot identify single unavailability record to remove.');
+      return;
+    }
+    const resp = await fetch('unavailabilities_api.php?action=delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        csrf_token: document.querySelector('input[name="csrf_token"]').value,
+        id: unavailId
+      })
+    });
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'Failed to remove unavailability.');
+  } else {
+    const startDatetime = dateStr + ' ' + visibleStartTime.slice(0, 5) + ':00';
+    const endDatetime   = dateStr + ' ' + visibleEndTime.slice(0, 5) + ':00';
+    const resp = await fetch('unavailabilities_api.php?action=create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        csrf_token: document.querySelector('input[name="csrf_token"]').value,
+        provider_id: providerId,
+        type: 'single',
+        start_datetime: startDatetime,
+        end_datetime: endDatetime,
+        reason: 'Day unavailability'
+      })
+    });
+    const json = await resp.json();
+    if (!json.ok) throw new Error(json.error || 'Failed to create unavailability.');
+  }
+
+  await window.calendarInstance.refetchEvents();
+
+  reinjectAllUnavailButtons();  // ← ADD THIS LINE
+}
+
+function reinjectAllUnavailButtons() {
+  if (!window.calendarInstance) return;
+  const viewType = window.calendarInstance.view?.type || '';
+  if (viewType === 'dayGridMonth') return;
+
+  // Remove all existing wraps
+  calendarEl.querySelectorAll('.day-unavail-toggle-wrap').forEach(el => el.remove());
+
+  // Re-inject into every visible column header
+  calendarEl.querySelectorAll('.fc-col-header-cell').forEach(function(el) {
+    const dateAttr = el.getAttribute('data-date');
+    if (!dateAttr) return;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'day-unavail-toggle-wrap';
+    wrap.style.cssText = 'display:flex;padding:4px 6px 2px;gap:0;';
+
+    const dual = isDualProviderSplitEnabled();
+
+    if (dual) {
+      const primaryProvider = providers.find(p => Number(p.id) === Number(selectedPrimaryProviderId));
+      const secondaryProvider = providers.find(p => Number(p.id) === Number(selectedSecondaryProviderId));
+      const primaryLabel = primaryProvider ? (primaryProvider.full_name || primaryProvider.email).split(' ')[0] : 'P1';
+      const secondaryLabel = secondaryProvider ? (secondaryProvider.full_name || secondaryProvider.email).split(' ')[0] : 'P2';
+      wrap.appendChild(buildUnavailButton(dateAttr, selectedPrimaryProviderId, primaryLabel, 'left'));
+      wrap.appendChild(buildUnavailButton(dateAttr, selectedSecondaryProviderId, secondaryLabel, 'right'));
+    } else {
+      const primaryProvider = providers.find(p => Number(p.id) === Number(selectedPrimaryProviderId));
+      const primaryLabel = primaryProvider ? (primaryProvider.full_name || primaryProvider.email).split(' ')[0] : 'Provider';
+      wrap.appendChild(buildUnavailButton(dateAttr, selectedPrimaryProviderId, primaryLabel, null));
+    }
+
+    el.insertBefore(wrap, el.firstChild);
+  });
+}
+
+function isDayUnavailableForProvider(dateStr, providerId) {
+  return window.calendarInstance.getEvents().some(function(event) {
+    if (!event.classNames.includes('unavail-event')) return false;
+    if (!String(event.id).startsWith('unavail-single-')) return false;
+    const epId = Number(event.extendedProps?.provider_id || 0);
+    if (epId !== Number(providerId)) return false;
+    const eventDateStr = event.start.toISOString().slice(0, 10);
+    return eventDateStr === dateStr;
+  });
+}
+
+function buildUnavailButton(dateStr, providerId, providerLabel, half) {
+  const isUnavail = isDayUnavailableForProvider(dateStr, providerId);
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'day-unavail-toggle' + (isUnavail ? ' is-unavailable' : '');
+  btn.setAttribute('data-date', dateStr);
+  btn.setAttribute('data-provider-id', String(providerId));
+btn.textContent = isUnavail ? '✓ ' + providerLabel : '🚫 ' + providerLabel;
+btn.title = (isUnavail ? 'Remove unavailability for ' : 'Mark unavailable: ') + providerLabel;
+
+  if (half === 'left') {
+    btn.style.cssText = 'width:50%;border-radius:8px 0 0 8px;border-right:0;';
+  } else if (half === 'right') {
+    btn.style.cssText = 'width:50%;border-radius:0 8px 8px 0;';
+  } else {
+    btn.style.cssText = 'width:100%;border-radius:8px;';
+  }
+
+  btn.addEventListener('click', async function(e) {
+    e.stopPropagation();
+    btn.disabled = true;
+    btn.textContent = '...';
+    try {
+      await toggleDayUnavailability(dateStr, providerId);
+    } catch (err) {
+      alert(err.message || 'Failed to toggle unavailability.');
+      btn.disabled = false;
+    }
+  });
+
+  return btn;
+}
+
+function injectUnavailButtons(arg) {
+  if (!isStaff) return;
+  const viewType = window.calendarInstance?.view?.type || '';
+  if (viewType === 'dayGridMonth') return;
+
+  // Only inject into the fc-col-header-cell, not the all-day daygrid cell
+  if (!arg.el.classList.contains('fc-col-header-cell') && 
+      !arg.el.closest('.fc-col-header-cell')) return;
+
+  const dateStr = arg.date.toISOString().slice(0, 10);
+
+  // Remove any previously injected buttons for this cell
+  arg.el.querySelectorAll('.day-unavail-toggle-wrap').forEach(el => el.remove());
+
+  const wrap = document.createElement('div');
+  wrap.className = 'day-unavail-toggle-wrap';
+  wrap.style.cssText = 'display:flex;padding:4px 6px 2px;gap:0;';
+
+  const dual = isDualProviderSplitEnabled();
+
+  if (dual) {
+    const primaryProvider = providers.find(p => Number(p.id) === Number(selectedPrimaryProviderId));
+    const secondaryProvider = providers.find(p => Number(p.id) === Number(selectedSecondaryProviderId));
+    const primaryLabel = primaryProvider ? (primaryProvider.full_name || primaryProvider.email).split(' ')[0] : 'P1';
+    const secondaryLabel = secondaryProvider ? (secondaryProvider.full_name || secondaryProvider.email).split(' ')[0] : 'P2';
+
+    wrap.appendChild(buildUnavailButton(dateStr, selectedPrimaryProviderId, primaryLabel, 'left'));
+    wrap.appendChild(buildUnavailButton(dateStr, selectedSecondaryProviderId, secondaryLabel, 'right'));
+  } else {
+    const primaryProvider = providers.find(p => Number(p.id) === Number(selectedPrimaryProviderId));
+    const primaryLabel = primaryProvider ? (primaryProvider.full_name || primaryProvider.email).split(' ')[0] : 'Provider';
+    wrap.appendChild(buildUnavailButton(dateStr, selectedPrimaryProviderId, primaryLabel, null));
+  }
+
+  // Inject into the day cell top area
+  const frame = arg.el.querySelector('.fc-daygrid-day-frame') || arg.el;
+  frame.insertBefore(wrap, frame.firstChild);
+}
     const newCustomerFirstName = document.getElementById('newCustomerFirstName');
     const newCustomerLastName = document.getElementById('newCustomerLastName');
     const newCustomerDob = document.getElementById('newCustomerDob');

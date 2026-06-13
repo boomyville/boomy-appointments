@@ -142,7 +142,7 @@ try {
                 'display' => 'background',
                 'classNames' => ['unavail-event'], 
                 'backgroundColor' => 'transparent', 
-                'extendedProps' => ['provider_id' => (int)$row['provider_id'], 'type' => 'unavailability']
+                'extendedProps' => ['provider_id' => (int)$row['provider_id'], 'type' => 'unavailability', 'unavailability_type' => 'single', 'unavailability_id' => (int)$row['id']]
             ];
         }
 
@@ -190,7 +190,7 @@ try {
                         'display' => 'background',
                         'classNames' => ['unavail-event'], 
                         'backgroundColor' => 'transparent', 
-                        'extendedProps' => ['provider_id' => (int)$rule['provider_id'], 'type' => 'unavailability']
+                        'extendedProps' => ['provider_id' => (int)$rule['provider_id'], 'type' => 'unavailability', 'unavailability_id' => (int)$rule['id']]
                     ];
                 }
                 $cursor = $cursor->modify('+1 day');
