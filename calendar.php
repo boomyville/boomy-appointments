@@ -1423,6 +1423,21 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     </div>
   </dialog>
 
+<dialog id="closeConfirmationModal" class="booking-warning-modal">
+    <div class="booking-warning-card">
+      <div class="booking-warning-card__head">
+        <h2>Discard changes?</h2>
+      </div>
+      <div class="booking-warning-card__body">
+        <p>Are you sure you want to close this window? Any unsaved draft information or modifications will be completely discarded.</p>
+      </div>
+      <div class="booking-warning-card__footer">
+        <button type="button" id="abortCloseBtn">No, stay here</button>
+        <button type="button" id="confirmCloseBtn" class="primary" style="background: #dc2626; border-color: #dc2626;">Yes, close anyway</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="bookingWarningModal" class="booking-warning-modal">
     <div class="booking-warning-card">
       <div class="booking-warning-card__head">
@@ -1518,6 +1533,12 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     const bookingStart = document.getElementById('bookingStart');
     const bookingEnd = document.getElementById('bookingEnd');
     const closeBookingModalTop = document.getElementById('closeBookingModalTop');
+
+    // Define the new exit confirmation modal targets
+    const closeConfirmationModal = document.getElementById('closeConfirmationModal');
+    const confirmCloseBtn = document.getElementById('confirmCloseBtn');
+    const abortCloseBtn = document.getElementById('abortCloseBtn');
+
     const makeBookingBtn = document.getElementById('makeBookingBtn');
     const providerSelect = document.getElementById('providerSelect');
     const appointmentTypeSelect = document.getElementById('appointmentTypeSelect');
@@ -2066,6 +2087,7 @@ function getFilteredCalendarEvents(rawEvents) {
     function openBookingModal(startDate, endDate, options = {}) {
       const calendar = window.calendarInstance;
       const mode = options.mode || 'draft';
+
       const derivedEndDate = mode === 'draft'
         ? addMinutes(startDate, getSelectedDurationMinutes())
         : (endDate || addMinutes(startDate, getSelectedDurationMinutes()));
@@ -2074,6 +2096,7 @@ function getFilteredCalendarEvents(rawEvents) {
       currentBookingEndDate = derivedEndDate;
 
       bookingModal.setAttribute('data-mode', mode);
+
       bookingModalTitle.textContent = options.title || (mode === 'appointment' ? 'Appointment details' : 'New booking draft');
       if (makeBookingBtn) {
         makeBookingBtn.textContent = mode === 'edit' ? 'Save changes' : 'Make booking';
@@ -3292,6 +3315,7 @@ function isAppointmentInPast(startTimeValue) {
    setCustomerMode('create');
 
     function setDraftMode() {
+
       const cardElement = bookingModal.querySelector('.booking-card');
       if (cardElement) cardElement.classList.remove('is-invalid-time');
       const draft = window.calendarInstance?.getEventById('booking-draft-placeholder');
@@ -3321,25 +3345,7 @@ function isAppointmentInPast(startTimeValue) {
       setCustomerMode('create');
     }
 
-    if (closeBookingModalTop) {
-      closeBookingModalTop.addEventListener('click', () => {
-        if (typeof bookingModal.close === 'function') {
-          bookingModal.close();
-        } else {
-          bookingModal.removeAttribute('open');
-        }
-        setDraftMode();
-      });
-    }
-
-    closeBookingModal.addEventListener('click', () => {
-      if (typeof bookingModal.close === 'function') {
-        bookingModal.close();
-      } else {
-        bookingModal.removeAttribute('open');
-      }
-      setDraftMode();
-    });
+    
 
     submitBooking._running = false;
 
@@ -3711,6 +3717,101 @@ function isAppointmentInPast(startTimeValue) {
       }
 
       return hasTimeConflict;
+    }
+
+    // ==========================================================
+    // FIXED: CENTRALISED MODAL EXIT HANDLERS & BARRIERS
+    // ==========================================================
+    
+   function requestCloseModalBarrier() {
+  const modalMode = bookingModal.getAttribute('data-mode');
+  
+  // Always confirm when editing an existing appointment
+  if (modalMode === 'edit') {
+    if (typeof closeConfirmationModal.showModal === 'function') {
+      closeConfirmationModal.showModal();
+    } else {
+      closeConfirmationModal.setAttribute('open', 'open');
+    }
+    return;
+  }
+
+  // For draft mode, only confirm if they've typed something
+  const firstNameEl = document.getElementById('newCustomerFirstName');
+  const lastNameEl  = document.getElementById('newCustomerLastName');
+  const notesEl     = document.getElementById('bookingNotes');
+
+  const draftFirstNameClean = firstNameEl ? firstNameEl.value.trim() : '';
+  const draftLastNameClean  = lastNameEl  ? lastNameEl.value.trim()  : '';
+  const draftNotesClean     = notesEl     ? notesEl.value.trim()     : '';
+  
+  if (!draftFirstNameClean && !draftLastNameClean && !draftNotesClean) {
+    executeForcedModalShutdown();
+    return;
+  }
+
+  if (typeof closeConfirmationModal.showModal === 'function') {
+    closeConfirmationModal.showModal();
+  } else {
+    closeConfirmationModal.setAttribute('open', 'open');
+  }
+}
+
+    function executeForcedModalShutdown() {
+      if (bookingModal) {
+        if (typeof bookingModal.close === 'function') {
+          bookingModal.close();
+        } else {
+          bookingModal.removeAttribute('open');
+        }
+      }
+      if (closeConfirmationModal) {
+        if (typeof closeConfirmationModal.close === 'function') {
+          closeConfirmationModal.close();
+        } else {
+          closeConfirmationModal.removeAttribute('open');
+        }
+      }
+      setDraftMode();
+    }
+
+    // 🛑 GLOBAL DELEGATION INTERCEPT: Binds listeners cleanly to document layout wrappers 
+    // to guarantee event properties can never break or slide off when FullCalendar re-renders elements.
+    document.addEventListener('click', function(e) {
+
+      const targetId = e.target ? e.target.id : '';
+      
+      if (targetId === 'closeBookingModalTop' || targetId === 'closeBookingModal') {
+        e.preventDefault();
+        e.stopPropagation();
+        requestCloseModalBarrier();
+      }
+      
+      if (targetId === 'confirmCloseBtn') {
+        e.preventDefault();
+        executeForcedModalShutdown();
+      }
+      
+      if (targetId === 'abortCloseBtn') {
+        e.preventDefault();
+        if (typeof closeConfirmationModal.close === 'function') {
+          closeConfirmationModal.close();
+        } else {
+          closeConfirmationModal.removeAttribute('open');
+        }
+      }
+    });
+
+    // Handle native browser escape hardware key intercepts gracefully
+    if (closeConfirmationModal) {
+      closeConfirmationModal.addEventListener('cancel', (e) => {
+        e.preventDefault();
+        if (typeof closeConfirmationModal.close === 'function') {
+          closeConfirmationModal.close();
+        } else {
+          closeConfirmationModal.removeAttribute('open');
+        }
+      });
     }
   </script>
 
