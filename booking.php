@@ -925,7 +925,17 @@ function escapeHtml(value) {
       }
       return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date);
     }
-
+function validateEmail(email) {
+  if (!email || email.length > 100) return false;
+  const parts = email.split('@');
+  if (parts.length !== 2) return false;
+  const [username, domain] = parts;
+  if (!username || !domain) return false;
+  if (/\s/.test(username)) return false;
+  if (!domain.includes('.')) return false;
+  if (!/^[a-zA-Z0-9.\-]+$/.test(domain)) return false;
+  return true;
+}
     function combineCustomerName() {
       return [els.newFirstName.value.trim(), els.newMiddleName.value.trim(), els.newLastName.value.trim()].filter(Boolean).join(' ');
     }
@@ -1222,7 +1232,16 @@ function escapeHtml(value) {
           return false;
         }
       }
+// After the required-field loop, before the final email/mobile check:
+const emailToCheck = state.customerMode === 'existing'
+  ? els.existingEmail.value.trim()
+  : els.newEmail.value.trim();
 
+if (emailToCheck && !validateEmail(emailToCheck)) {
+  setToast('Invalid email', 'Email must be lowercase, max 100 characters, and contain a valid domain.');
+  (state.customerMode === 'existing' ? els.existingEmail : els.newEmail).focus();
+  return false;
+}
       if (!els.newEmail.value.trim() || !els.newMobile.value.trim()) {
         setToast('Missing customer details', 'Email and mobile are always needed to check for duplicates.');
         return false;

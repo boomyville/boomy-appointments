@@ -386,7 +386,17 @@ function booking_validate_new_customer_data(array $data): array
     }
     return [$errors, booking_compose_customer_name($data)];
 }
-
+function booking_validate_email(string $email): bool
+{
+    if (strlen($email) > 100) return false;
+    if (substr_count($email, '@') !== 1) return false;
+    [$username, $domain] = explode('@', $email);
+    if (strlen($username) < 1 || strlen($domain) < 1) return false;
+    if (preg_match('/\s/', $username)) return false;
+    if (!str_contains($domain, '.')) return false;
+    if (!preg_match('/^[a-zA-Z0-9.\-]+$/', $domain)) return false;
+    return true;
+}
 function booking_send_verification_email(array $appointment, array $provider, array $appointmentType, array $matches): bool
 {
     if (!email_transport_is_ready()) return false;
@@ -552,9 +562,8 @@ if ($action === 'month' && $method === 'GET') {
         $mobile = trim((string) ($data['customer_mobile'] ?? ''));
 
         if ($email === '' || $mobile === '') booking_api_response(['error' => 'email and mobile are required'], 422);
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) booking_api_response(['error' => 'invalid email'], 422);
-
-        $matches = booking_find_exact_customer_matches($email, $mobile);
+  if (!booking_validate_email($email)) booking_api_response(['error' => 'invalid email'], 422);
+         $matches = booking_find_exact_customer_matches($email, $mobile);
         $matchCount = count($matches);
 
         if ($mode === 'existing') {

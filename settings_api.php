@@ -28,7 +28,6 @@ if (!function_exists('normalize_booking_calendar_height_setting')) {
     }
 }
 
-// Allow initial PHPMailer setup from the login page before any admin exists.
 $action = $_GET['action'] ?? 'get';
 
 if (empty($_SESSION['user'])) {
@@ -155,14 +154,13 @@ try {
             exit;
         }
 
-        // only admin can save
         if (empty($_SESSION['user']['role']) || $_SESSION['user']['role'] !== 'admin') {
             http_response_code(403);
             echo json_encode(['error' => 'forbidden']);
             exit;
         }
 
-        // Allowed fields per tab
+        // Allowed fields array mapping structure
         $allowed = [
             'general' => ['site_name', 'root_url', 'organization_email', 'organization_number', 'date_format'],
             'customer_registration' => [
@@ -182,13 +180,14 @@ try {
                 'password_min_length', 'password_max_length', 'password_require_lowercase', 'password_require_uppercase', 'password_require_number', 'password_require_symbol',
                 'email_whitelist_enabled', 'email_domain_whitelist', 'email_domain_blacklist'
             ],
-            'phpmailer' => ['smtp_host', 'smtp_port', 'smtp_encryption', 'smtp_username', 'smtp_password', 'mail_from_address', 'mail_from_name']
+            'phpmailer' => [
+                'smtp_host', 'smtp_port', 'smtp_encryption', 'smtp_username', 'smtp_password', 'mail_from_address', 'mail_from_name'
+            ]
         ];
 
         $tab = $data['tab'] ?? 'general';
         $fields_to_save = $allowed[$tab] ?? $allowed['general'];
 
-        // Validate lengths and dependencies
         if ($tab === 'customer_registration') {
             foreach (['firstname', 'lastname', 'middlename', 'phone'] as $field) {
                 $min_key = "booking_{$field}_min";
@@ -224,12 +223,8 @@ try {
                 exit;
             }
 
-            if (strlen($start_time) === 5) {
-                $start_time .= ':00';
-            }
-            if (strlen($end_time) === 5) {
-                $end_time .= ':00';
-            }
+            if (strlen($start_time) === 5) $start_time .= ':00';
+            if (strlen($end_time) === 5) $end_time .= ':00';
 
             if ($end_time <= $start_time) {
                 http_response_code(422);
@@ -286,7 +281,7 @@ try {
             $data['booking_snap_minutes'] = (string) $snap_minutes;
             $data['auto_no_show'] = isset($data['auto_no_show']) && $data['auto_no_show'] === '1' ? '1' : '0';
             $data['prevent_same_user_booking'] = (string) max(0, (int)($data['prevent_same_user_booking'] ?? 0));
-            $db = get_db();
+            
             $existingTypes = [];
             try {
                 $stmt = $db->query('SELECT id, name, duration_minutes, color_hex, is_active FROM appointment_types ORDER BY id ASC');
@@ -360,9 +355,7 @@ try {
 
                 $db->commit();
             } catch (Throwable $e) {
-                if ($db->inTransaction()) {
-                    $db->rollBack();
-                }
+                if ($db->inTransaction()) $db->rollBack();
                 http_response_code(422);
                 echo json_encode(['error' => $e->getMessage()]);
                 exit;
@@ -377,20 +370,18 @@ try {
                 echo json_encode(['error' => 'Password max length must be >= min length']);
                 exit;
             }
-            // Clean up domain lists (strip whitespace, remove empty lines)
             if (isset($data['email_domain_whitelist'])) {
-                $lines = array_filter(array_map('trim', explode('\n', $data['email_domain_whitelist'])));
-                $data['email_domain_whitelist'] = implode('\n', $lines);
+                $lines = array_filter(array_map('trim', explode("\n", $data['email_domain_whitelist'])));
+                $data['email_domain_whitelist'] = implode("\n", $lines);
             }
             if (isset($data['email_domain_blacklist'])) {
-                $lines = array_filter(array_map('trim', explode('\n', $data['email_domain_blacklist'])));
-                $data['email_domain_blacklist'] = implode('\n', $lines);
+                $lines = array_filter(array_map('trim', explode("\n", $data['email_domain_blacklist'])));
+                $data['email_domain_blacklist'] = implode("\n", $lines);
             }
         }
 
-        // Save fields
+        // Processing Loop
         foreach ($fields_to_save as $k) {
-            // Define if this specific key is a checkbox type toggle
             $isCheckbox = (
                 strpos($k, '_display') !== false || 
                 strpos($k, '_required') !== false || 
@@ -407,9 +398,14 @@ try {
                 if ($isCheckbox) {
                     $value = $value === '1' ? '1' : '0';
                 }
+                
+                // Safety logic layer for masked fields
+                if ($k === 'smtp_password' && trim((string)$value) === '') {
+                    continue; 
+                }
+                
                 set_setting($k, $value);
             } elseif ($isCheckbox) {
-                // Checkbox not present in the payload request means it was explicitly unchecked by the user
                 set_setting($k, '0');
             }
         }
@@ -432,7 +428,6 @@ try {
     }
 
     if ($action === 'test_email') {
-        // Verify admin
         if (empty($_SESSION['user']['role']) || $_SESSION['user']['role'] !== 'admin') {
             http_response_code(403);
             echo json_encode(['error' => 'forbidden']);
@@ -457,15 +452,12 @@ try {
         ';
         $body_plain = "Test Email\n\nThis is a test email to verify your SMTP configuration is working correctly.\n\nIf you received this, your email settings are properly configured!";
 
-        // Send email and get debug info
         $result = send_email($to_email, $subject, $body_html, $body_plain);
 
         if ($result === true) {
-            // gather diagnostics even on success for visibility
             $diag = email_diagnostics($to_email, $subject);
             echo json_encode(['ok' => true, 'sent_to' => $to_email, 'message' => 'Test email sent successfully', 'debug' => $diag]);
         } else if (is_array($result)) {
-            // Return debug messages collected during send
             http_response_code(422);
             echo json_encode([
                 'error' => 'Failed to send email',
@@ -480,19 +472,16 @@ try {
     }
 
     if ($action === 'login_attempts') {
-        // only admin
         if (empty($_SESSION['user']['role']) || $_SESSION['user']['role'] !== 'admin') {
             http_response_code(403);
             echo json_encode(['error' => 'forbidden']);
             exit;
         }
 
-        // GET: list attempts with pagination
         if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $page = max(1, (int)($_GET['page'] ?? 1));
             $per = 50;
             $offset = ($page - 1) * $per;
-            $db = get_db();
             $stmt = $db->prepare('SELECT COUNT(*) AS c FROM login_attempts');
             $stmt->execute();
             $total = (int)$stmt->fetchColumn();
@@ -506,7 +495,6 @@ try {
             exit;
         }
 
-        // POST: perform delete commands
         $raw = file_get_contents('php://input');
         $data = $raw ? json_decode($raw, true) : $_POST;
         $token = $data['csrf_token'] ?? null;
@@ -517,7 +505,6 @@ try {
         }
 
         $cmd = $data['command'] ?? '';
-        $db = get_db();
         if ($cmd === 'delete_all') {
             $db->exec('TRUNCATE TABLE login_attempts');
             echo json_encode(['ok' => true]);
@@ -536,7 +523,6 @@ try {
     }
 
     if ($action === 'change_password') {
-        // Change password for the current logged-in user (requires current password)
         $raw = file_get_contents('php://input');
         $data = $raw ? json_decode($raw, true) : $_POST;
         $token = $data['csrf_token'] ?? null;
@@ -563,7 +549,6 @@ try {
             exit;
         }
 
-        // Verify current password
         $user = verify_user_credentials($email, $current);
         if (!$user) {
             http_response_code(401);
@@ -571,7 +556,6 @@ try {
             exit;
         }
 
-        // Validate new password using centralized rules
         $pass_err = validate_password($new);
         if ($pass_err !== true) {
             http_response_code(422);
@@ -579,9 +563,7 @@ try {
             exit;
         }
 
-        // Update password
         $hash = password_hash($new, PASSWORD_DEFAULT);
-        $db = get_db();
         $stmt = $db->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
         if (!$stmt->execute([$hash, $user['id']])) {
             http_response_code(500);

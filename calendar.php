@@ -45,7 +45,6 @@ if ($defaultProviderId === null && !empty($providers)) {
   $defaultProviderId = (int) $providers[0]['id'];
 }
 
-
 $calendarDefaultId = $providerId ?? $defaultProviderId;
 
 $defaultAppointmentTypeId = !empty($appointmentTypes) ? (int) $appointmentTypes[0]['id'] : null;
@@ -58,11 +57,9 @@ $appointmentEmailDeliveryReady = email_transport_is_ready();
 function render_customer_field_label(string $label, array $fieldSettings): string
 {
   $safeLabel = htmlspecialchars($label, ENT_QUOTES, 'UTF-8');
-
   if (!empty($fieldSettings['required'])) {
     return $safeLabel . ' <span style="color:red;">*</span>';
   }
-
   return $safeLabel . ' <span style="color: #6b7280; font-weight: 600;">(optional)</span>';
 }
 ?>
@@ -146,12 +143,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
     }
 
-    .layout {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 18px;
-    }
-
     .panel {
       background: var(--panel);
       border: 1px solid var(--panel-border);
@@ -212,36 +203,36 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       border-color: rgba(36, 87, 255, 0.5);
     }
 
-    /* Fix: Use precise class targeting */.fc-bg-event.unavail-event {
-  background: repeating-linear-gradient(
-    45deg,
-    rgba(245, 158, 11, 0.2),
-    rgba(245, 158, 11, 0.2) 10px,
-    rgba(239, 68, 68, 0.3) 10px,
-    rgba(239, 68, 68, 0.3) 20px
-  ) !important;
-  opacity: 1 !important;
-  isolation: isolate;
-}
+    .fc-bg-event.unavail-event {
+      background: repeating-linear-gradient(
+        45deg,
+        rgba(245, 158, 11, 0.2),
+        rgba(245, 158, 11, 0.2) 10px,
+        rgba(239, 68, 68, 0.3) 10px,
+        rgba(239, 68, 68, 0.3) 20px
+      ) !important;
+      opacity: 1 !important;
+      isolation: isolate;
+    }
 
-.fc-bg-event.unavail-event::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--fc-page-bg-color, #fff);
-  z-index: -1;
-}
+    .fc-bg-event.unavail-event::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--fc-page-bg-color, #fff);
+      z-index: -1;
+    }
 
-.fc-bg-event.standard-break-event {
-  background: repeating-linear-gradient(
-    45deg,
-    rgba(245, 158, 11, 0.2),
-    rgba(245, 158, 11, 0.2) 10px,
-    rgba(239, 68, 68, 0.3) 10px,
-    rgba(239, 68, 68, 0.3) 20px
-  ) !important;
-  opacity: 1 !important;
-}
+    .fc-bg-event.standard-break-event {
+      background: repeating-linear-gradient(
+        45deg,
+        rgba(245, 158, 11, 0.2),
+        rgba(245, 158, 11, 0.2) 10px,
+        rgba(239, 68, 68, 0.3) 10px,
+        rgba(239, 68, 68, 0.3) 20px
+      ) !important;
+      opacity: 1 !important;
+    }
 
     .fc .fc-timegrid-event-harness.provider-split-left {
       left: 0% !important;
@@ -311,6 +302,34 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       font-size: 0.95rem;
     }
 
+    .fc-daygrid-day-events {
+      cursor: pointer;
+      min-height: 24px;
+    }
+
+    .daily-note-pill {
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: rgba(36, 87, 255, 0.12);
+      color: var(--accent);
+      border: 1px solid rgba(36, 87, 255, 0.25);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: calc(100% - 8px);
+      display: block;
+      margin: 4px auto;
+      cursor: pointer;
+      box-sizing: border-box;
+      text-align: left;
+    }
+
+    html[data-theme="dark"] .daily-note-pill {
+      background: rgba(36, 87, 255, 0.2);
+    }
+
     .fc .fc-daygrid-day.fc-day-today,
     .fc .fc-timegrid-col.fc-day-today {
       background: rgba(36, 87, 255, 0.10) !important;
@@ -346,36 +365,37 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       border-bottom-color: #ef4444 !important;
       color: #ef4444 !important;
     }
-.day-unavail-toggle {
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 4px 6px;
-  border: 1px solid rgba(239, 68, 68, 0.25);
-  background: rgba(239, 68, 68, 0.06);
-  color: #b91c1c;
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  transition: background 0.15s;
-  box-sizing: border-box;
-}
 
-.day-unavail-toggle.is-unavailable {
-  background: rgba(239, 68, 68, 0.18);
-  border-color: rgba(239, 68, 68, 0.45);
-  color: #7f1d1d;
-}
+    .day-unavail-toggle {
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 4px 6px;
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      background: rgba(239, 68, 68, 0.06);
+      color: #b91c1c;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: background 0.15s;
+      box-sizing: border-box;
+    }
 
-.day-unavail-toggle:hover {
-  background: rgba(239, 68, 68, 0.14);
-}
+    .day-unavail-toggle.is-unavailable {
+      background: rgba(239, 68, 68, 0.18);
+      border-color: rgba(239, 68, 68, 0.45);
+      color: #7f1d1d;
+    }
 
-.day-unavail-toggle:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-    /* Week/Day Specific Layout (Flex Grid Setup) */
+    .day-unavail-toggle:hover {
+      background: rgba(239, 68, 68, 0.14);
+    }
+
+    .day-unavail-toggle:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     .booking-event {
       display: flex;
       flex-direction: column;
@@ -399,7 +419,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       border: 1.5px solid #ffffff;
       cursor: pointer;
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-      z-index: 10; /* Ensures it sits neatly above text maps */
+      z-index: 10;
       transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
 
@@ -427,7 +447,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       height: 100%; 
     }
 
-    /* Month view structural modifications to fix cell heights */
     .fc-daygrid-event-dot {
       border-color: currentColor !important; 
     }
@@ -438,7 +457,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       border: none !important;
     }
 
-    /* Target ONLY the month grid elements to turn off forced row stretching */
     .fc-daygrid-body .fc-daygrid-event {
       height: auto !important; 
       margin-top: 2px !important;
@@ -466,7 +484,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       height: auto !important;
     }
 
-    /* Status border implementations */
     .fc .fc-timegrid-event.appointment-status-booked,
     .fc .fc-daygrid-event.appointment-status-booked,
     .fc .fc-timegrid-event.appointment-status-unconfirmed,
@@ -1215,8 +1232,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
   <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
   <?php
     $current_page = 'calendar.php';
-    
-    // Add this right before the navigation include:
     if ((int) get_setting('disable_online_booking', '0') === 1) {
         echo '<div style="background-color: #f59e0b; color: #fff; text-align: center; padding: 8px 12px; font-weight: bold; font-size: 0.9rem; border-bottom: 1px solid rgba(0,0,0,0.1);">
                 ⚠️ Public Online Bookings are Deactivated. Admin calendar bookings remain available.
@@ -1231,52 +1246,76 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     } elseif (is_file($navIncludes)) {
         include $navIncludes;
     }
-
   ?>
   
-  <div class="admin-container">
-    <div class="admin-header">
+  <div class="page-shell">
+    <div class="hero">
       <div>
         <h1>Appointments Calendar</h1>
         <p>Click a time slot to start a booking draft. Provider and appointment type options are loaded from the database.</p>
       </div>
     </div>
 
-    <div class="admin-panel">
-      <div class="panel-header-row">
-        <div class="calendar-provider-filters" aria-label="Calendar provider filters">
-          <div class="calendar-provider-filters__row">
-            <label for="calendarProviderPrimary">Provider</label>
-            <select id="calendarProviderPrimary" name="calendar_provider_primary">
-              <?php foreach ($providers as $provider): ?>
-                <?php $providerListLabel = trim((string) ($provider['full_name'] ?? '')) !== '' ? (string) $provider['full_name'] : (string) ($provider['email'] ?? ''); ?>
-                <option value="<?php echo (int) $provider['id']; ?>" <?php echo ($calendarDefaultId === (int) $provider['id']) ? 'selected' : ''; ?>>
-                  <?php echo htmlspecialchars($providerListLabel, ENT_QUOTES, 'UTF-8'); ?>
-                  <?php if (!empty($provider['role'])): ?>
-                    (<?php echo htmlspecialchars((string) $provider['role'], ENT_QUOTES, 'UTF-8'); ?>)
-                  <?php endif; ?>
-                  <?php if ((int) ($provider['is_active'] ?? 0) !== 1): ?>
-                    (inactive)
-                  <?php endif; ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-header-row">
+          <div class="calendar-provider-filters" aria-label="Calendar provider filters">
+            <div class="calendar-provider-filters__row">
+              <label for="calendarProviderPrimary">Provider</label>
+              <select id="calendarProviderPrimary" name="calendar_provider_primary">
+                <?php foreach ($providers as $provider): ?>
+                  <?php $providerListLabel = trim((string) ($provider['full_name'] ?? '')) !== '' ? (string) $provider['full_name'] : (string) ($provider['email'] ?? ''); ?>
+                  <option value="<?php echo (int) $provider['id']; ?>" <?php echo ($calendarDefaultId === (int) $provider['id']) ? 'selected' : ''; ?>>
+                    <?php echo htmlspecialchars($providerListLabel, ENT_QUOTES, 'UTF-8'); ?>
+                    <?php if (!empty($provider['role'])): ?>
+                      (<?php echo htmlspecialchars((string) $provider['role'], ENT_QUOTES, 'UTF-8'); ?>)
+                    <?php endif; ?>
+                    <?php if ((int) ($provider['is_active'] ?? 0) !== 1): ?>
+                      (inactive)
+                    <?php endif; ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="calendar-provider-filters__row" id="calendarProviderSecondaryWrap" style="display:none;">
+              <label for="calendarProviderSecondary">Other</label>
+              <select id="calendarProviderSecondary" name="calendar_provider_secondary">
+                <option value="">None</option>
+              </select>
+            </div>
           </div>
-          <div class="calendar-provider-filters__row" id="calendarProviderSecondaryWrap" style="display:none;">
-            <label for="calendarProviderSecondary">Other</label>
-            <select id="calendarProviderSecondary" name="calendar_provider_secondary">
-              <option value="">None</option>
-            </select>
+          <div class="server-clock" aria-live="polite">
+            <span>Server time</span>
+            <strong id="serverClockValue"></strong>
           </div>
-        </div>
-        <div class="server-clock" aria-live="polite">
-          <span>Server time</span>
-          <strong id="serverClockValue"></strong>
         </div>
       </div>
       <div id="calendar"></div>
     </div>
   </div>
+
+  <dialog id="dailyNoteModal" class="booking-warning-modal">
+    <div class="booking-warning-card">
+      <div class="booking-warning-card__head">
+        <h2 id="dailyNoteModalTitle">Daily Note</h2>
+      </div>
+      <div class="booking-warning-card__body" style="display:grid;gap:10px;">
+        <div class="field">
+          <label for="dailyNoteTitle">Title <span style="color:var(--muted);font-size:0.8em;" id="dailyNoteTitleCount">(0/40)</span></label>
+          <input id="dailyNoteTitle" type="text" maxlength="40" placeholder="Short title...">
+        </div>
+        <div class="field">
+          <label for="dailyNoteMessage">Message <span style="color:var(--muted);font-size:0.8em;">(optional)</span></label>
+          <textarea id="dailyNoteMessage" rows="4" placeholder="Optional details..."></textarea>
+        </div>
+      </div>
+      <div class="booking-warning-card__footer">
+        <button type="button" id="dailyNoteDeleteBtn" style="background:rgba(239,68,68,0.1);color:#dc2626;border-color:rgba(239,68,68,0.2);display:none;">Delete</button>
+        <button type="button" id="dailyNoteCancelBtn">Cancel</button>
+        <button type="button" id="dailyNoteSaveBtn" class="primary">Save</button>
+      </div>
+    </div>
+  </dialog>
 
   <dialog id="bookingModal" class="booking-modal">
     <div class="booking-card">
@@ -1308,12 +1347,12 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
           <div class="field">
             <label for="providerSelect">Which provider?</label>
             <select id="providerSelect" name="provider_id">
-            <?php foreach ($providers as $index => $provider): ?>
-              <option value="<?php echo (int) $provider['id']; ?>" <?php echo ((int) ($provider['is_active'] ?? 0) === 1 && $calendarDefaultId === (int) $provider['id']) ? 'selected' : ''; ?> <?php echo ((int) ($provider['is_active'] ?? 0) !== 1) ? 'disabled' : ''; ?>>
-                <?php echo htmlspecialchars($provider['full_name'] ?: $provider['email']); ?>
-                <?php if (!empty($provider['role'])): ?>
-                  (<?php echo htmlspecialchars($provider['role']); ?>)
-                <?php endif; ?>
+              <?php foreach ($providers as $index => $provider): ?>
+                <option value="<?php echo (int) $provider['id']; ?>" <?php echo ((int) ($provider['is_active'] ?? 0) === 1 && $calendarDefaultId === (int) $provider['id']) ? 'selected' : ''; ?> <?php echo ((int) ($provider['is_active'] ?? 0) !== 1) ? 'disabled' : ''; ?>>
+                  <?php echo htmlspecialchars($provider['full_name'] ?: $provider['email']); ?>
+                  <?php if (!empty($provider['role'])): ?>
+                    (<?php echo htmlspecialchars($provider['role']); ?>)
+                  <?php endif; ?>
                   <?php if ((int) ($provider['is_active'] ?? 0) !== 1): ?>
                     (inactive)
                   <?php endif; ?>
@@ -1332,7 +1371,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
               <?php endforeach; ?>
             </select>
           </div>
-         </div>
+        </div>
 
         <div class="booking-edit-only booking-status-row">
           <div class="field">
@@ -1366,20 +1405,20 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
                 $showLastNameField = !empty($lastNameFieldSettings['display']);
               ?>
               <?php if ($showFirstNameField || $showLastNameField): ?>
-              <div class="customer-name-grid <?php echo ($showFirstNameField && $showLastNameField) ? '' : 'is-single-field'; ?>">
-                <?php if ($showFirstNameField): ?>
-                <div class="field">
-                  <label for="newCustomerFirstName"><?php echo render_customer_field_label('First name', $firstNameFieldSettings); ?></label>
-                  <input id="newCustomerFirstName" name="new_customer_first_name" type="text" placeholder="First name">
+                <div class="customer-name-grid <?php echo ($showFirstNameField && $showLastNameField) ? '' : 'is-single-field'; ?>">
+                  <?php if ($showFirstNameField): ?>
+                    <div class="field">
+                      <label for="newCustomerFirstName"><?php echo render_customer_field_label('First name', $firstNameFieldSettings); ?></label>
+                      <input id="newCustomerFirstName" name="new_customer_first_name" type="text" placeholder="First name">
+                    </div>
+                  <?php endif; ?>
+                  <?php if ($showLastNameField): ?>
+                    <div class="field">
+                      <label for="newCustomerLastName"><?php echo render_customer_field_label('Last name', $lastNameFieldSettings); ?></label>
+                      <input id="newCustomerLastName" name="new_customer_last_name" type="text" placeholder="Last name">
+                    </div>
+                  <?php endif; ?>
                 </div>
-                <?php endif; ?>
-                <?php if ($showLastNameField): ?>
-                <div class="field">
-                  <label for="newCustomerLastName"><?php echo render_customer_field_label('Last name', $lastNameFieldSettings); ?></label>
-                  <input id="newCustomerLastName" name="new_customer_last_name" type="text" placeholder="Last name">
-                </div>
-                <?php endif; ?>
-              </div>
               <?php endif; ?>
               <?php $dobFieldSettings = $customerFieldSettings['date_of_birth'] ?? ['display' => true, 'required' => false]; ?>
               <div class="field"<?php echo !empty($dobFieldSettings['display']) ? '' : ' style="display:none;"'; ?>>
@@ -1388,16 +1427,16 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
               </div>
               <?php $genderFieldSettings = $customerFieldSettings['gender'] ?? ['display' => false, 'required' => false]; ?>
               <?php if (!empty($genderFieldSettings['display'])): ?>
-              <div class="field">
-                <label for="newCustomerGender"><?php echo render_customer_field_label('Gender', $genderFieldSettings); ?></label>
-                <select id="newCustomerGender" name="customer_gender">
-                  <option value="">Select gender</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
-                  <option value="unknown">Unknown</option>
-                </select>
-              </div>
+                <div class="field">
+                  <label for="newCustomerGender"><?php echo render_customer_field_label('Gender', $genderFieldSettings); ?></label>
+                  <select id="newCustomerGender" name="customer_gender">
+                    <option value="">Select gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                    <option value="unknown">Unknown</option>
+                  </select>
+                </div>
               <?php endif; ?>
               <?php $emailFieldSettings = $customerFieldSettings['email'] ?? ['display' => true, 'required' => false]; ?>
               <div class="field"<?php echo !empty($emailFieldSettings['display']) ? '' : ' style="display:none;"'; ?>>
@@ -1451,7 +1490,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     </div>
   </dialog>
 
-<dialog id="closeConfirmationModal" class="booking-warning-modal">
+  <dialog id="closeConfirmationModal" class="booking-warning-modal">
     <div class="booking-warning-card">
       <div class="booking-warning-card__head">
         <h2>Discard changes?</h2>
@@ -1513,9 +1552,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     const serverTimezoneName = <?php echo json_encode($serverTimezoneName); ?>;
     let serverNowIso = <?php echo json_encode($serverNowIso); ?>;
 
-    /**
-     * Resolves layout formats cleanly across views by tracking token index rules
-     */
     const calendarDisplayFormat = (function(phpFormatString) {
       const format = String(phpFormatString || 'd/m/Y H:i').trim();
       
@@ -1562,7 +1598,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     const bookingEnd = document.getElementById('bookingEnd');
     const closeBookingModalTop = document.getElementById('closeBookingModalTop');
 
-    // Define the new exit confirmation modal targets
     const closeConfirmationModal = document.getElementById('closeConfirmationModal');
     const confirmCloseBtn = document.getElementById('confirmCloseBtn');
     const abortCloseBtn = document.getElementById('abortCloseBtn');
@@ -2009,46 +2044,40 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       return relativeX < (rect.width / 2) ? 'left' : 'right';
     }
 
-function getFilteredCalendarEvents(rawEvents) {
-  const eventsArray = Array.isArray(rawEvents) ? rawEvents : [];
-  const primaryId = Number(selectedPrimaryProviderId || 0);
-  const secondaryId = Number(selectedSecondaryProviderId || 0);
-  const dualEnabled = isThreeDayOrDayView() && secondaryId > 0;
+    function getFilteredCalendarEvents(rawEvents) {
+      const eventsArray = Array.isArray(rawEvents) ? rawEvents : [];
+      const primaryId = Number(selectedPrimaryProviderId || 0);
+      const secondaryId = Number(selectedSecondaryProviderId || 0);
+      const dualEnabled = isThreeDayOrDayView() && secondaryId > 0;
 
-  return eventsArray.filter(function(event) {
-    if (!event) return false;
+      return eventsArray.filter(function(event) {
+        if (!event) return false;
 
-    // Background events (Breaks and Unavailabilities)
-    if (event.display === 'background') {
-      const eventProviderId = Number(
-        (event.extendedProps && event.extendedProps.provider_id) || 0
-      );
-      
-      // Global breaks always show
-      if (!eventProviderId) return true; 
+        if (event.display === 'background') {
+          const eventProviderId = Number(
+            (event.extendedProps && event.extendedProps.provider_id) || 0
+          );
+          
+          if (!eventProviderId) return true; 
 
-      // If viewing dual mode, check if it matches either column
-      if (dualEnabled) {
-        return eventProviderId === primaryId || eventProviderId === secondaryId;
-      }
-      
-      // If a specific provider is selected in the dropdown, show only theirs.
-      // Otherwise, show all unavailabilities.
-      return primaryId > 0 ? eventProviderId === primaryId : true;
+          if (dualEnabled) {
+            return eventProviderId === primaryId || eventProviderId === secondaryId;
+          }
+          
+          return primaryId > 0 ? eventProviderId === primaryId : true;
+        }
+
+        const providerValue = Number(
+          (event.extendedProps && event.extendedProps.provider_id) || event.provider_id || 0
+        );
+        if (!providerValue) return false;
+
+        if (dualEnabled) {
+          return providerValue === primaryId || providerValue === secondaryId;
+        }
+        return primaryId > 0 ? providerValue === primaryId : true;
+      });
     }
-
-    // Regular appointments filtering
-    const providerValue = Number(
-      (event.extendedProps && event.extendedProps.provider_id) || event.provider_id || 0
-    );
-    if (!providerValue) return false;
-
-    if (dualEnabled) {
-      return providerValue === primaryId || providerValue === secondaryId;
-    }
-    return primaryId > 0 ? providerValue === primaryId : true;
-  });
-}
 
     function addMinutes(date, minutes) {
       return new Date(date.getTime() + minutes * 60000);
@@ -2210,7 +2239,7 @@ function getFilteredCalendarEvents(rawEvents) {
       }
     }
     
-const calendar = new FullCalendar.Calendar(calendarEl, {
+    const calendar = new FullCalendar.Calendar(calendarEl, {
       now: getServerClockDate(getServerNowDate()),
       initialView: isStaff ? 'timeGridWeek' : 'timeGridDay',
       height: calendarHeight,
@@ -2221,11 +2250,7 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       selectable: false, 
       slotDuration: '00:30:00',
       snapDuration: minutesToDuration(bookingSnapMinutes),
-      
-      // 1. FORCE DAY-FIRST LOCALE SO BROWSER ENGINES EXPECT D/M BY DEFAULT
       locale: 'en-au', 
-
-      // 2. APPLY YOUR DYNAMIC DB FORMAT TO THE MAIN TOOLBAR TITLE
       titleFormat: calendarDisplayFormat.title,
 
       viewDidMount: function(arg) {
@@ -2240,27 +2265,23 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
         }
       },
 
-      // 3. EXPLICITLY OVERRIDE COLUMN HEADERS PER VIEW TYPE TO FORCE YOUR DB FORMAT
       views: {
         dayGridMonth: {
           height: 'auto',        
           contentHeight: 'auto', 
           expandRows: false,
-          dayHeaderFormat: { weekday: 'short' } // Just "Mon", "Tue"
+          dayHeaderFormat: { weekday: 'short' }
         },
         timeGridWeek: {
-          // Combines "Mon" + your format ("1/6" or "6/1") explicitly
           dayHeaderFormat: Object.assign({ weekday: 'short' }, calendarDisplayFormat.column)
         },
         timeGridDay: {
-          // Combines "Monday" + your format explicitly
           dayHeaderFormat: Object.assign({ weekday: 'long' }, calendarDisplayFormat.column)
         },
         timeGridThreeDay: {
           type: 'timeGrid',
           duration: { days: 3 },
           buttonText: '3 day',
-          // Combines "Mon" + your format explicitly
           dayHeaderFormat: Object.assign({ weekday: 'short' }, calendarDisplayFormat.column)
         }
       },
@@ -2300,7 +2321,7 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
 
         return transformedEvent;
       },
-eventContent: function(arg) {
+      eventContent: function(arg) {
         if (arg.event.display === 'background') {
           return { domNodes: [] };
         }
@@ -2316,23 +2337,20 @@ eventContent: function(arg) {
         status.className = 'booking-event__status';
         status.textContent = String(arg.event.extendedProps.status || 'booked').replace(/_/g, ' ');
 
-        // Build the Colored Indicator Dot
         const statusDot = document.createElement('div');
         statusDot.className = 'fc-status-cycler-dot';
         statusDot.setAttribute('title', 'Click to toggle next status state');
 
-        // Read dynamic status to color the indicator dot on initial load
         const initialStatus = String(arg.event.extendedProps.status || 'booked').trim().toLowerCase().replace(/_/g, ' ');
-        let dotColor = '#3b82f6'; // default 'booked' blue
+        let dotColor = '#3b82f6';
 
-        if (initialStatus === 'confirmed') dotColor = '#d4af37';   // Gold
-        if (initialStatus === 'present')   dotColor = '#10b981';   // Emerald Green
-        if (initialStatus === 'completed') dotColor = '#9ca3af';   // Muted Gray
-        if (initialStatus === 'no show')   dotColor = '#dc143c';   // Crimson Red
+        if (initialStatus === 'confirmed') dotColor = '#d4af37';   
+        if (initialStatus === 'present')   dotColor = '#10b981';   
+        if (initialStatus === 'completed') dotColor = '#9ca3af';   
+        if (initialStatus === 'no show')   dotColor = '#dc143c';   
 
         statusDot.style.backgroundColor = dotColor;
 
-        // Intercept click bubble sequences cleanly
         statusDot.addEventListener('click', async function(jsEvent) {
           jsEvent.stopPropagation(); 
           jsEvent.preventDefault();
@@ -2344,10 +2362,8 @@ eventContent: function(arg) {
           const appointmentId = parseInt(rawId, 10);
           if (isNaN(appointmentId) || appointmentId < 1) return;
 
-          //  FIX: Calculate the absolute live status context AT THE TIME OF THE CLICK
           const liveStatus = String(arg.event.extendedProps.status || 'booked').trim().toLowerCase().replace(/_/g, ' ');
 
-          // Sequential mapping rule state transitions
           const cycleMap = {
             'booked': 'confirmed',
             'confirmed': 'present',
@@ -2394,36 +2410,34 @@ eventContent: function(arg) {
               throw new Error(json.error || 'Server rejected inline state shift cycle.');
             }
 
-            // Cleanly force full redraw update across views
             try {
               await window.calendarInstance.refetchEvents();
             } catch (refetchErr) {
-              // refetch can fail if the event ref is stale; ignore
+              // fallback ignore
             }
 
             if (nextStatus === 'present') {
               const appt = json.appointment || arg.event;
               const cust = json.customer || { id: customerId };
               if (!bookingModal.open) {
-              openBookingModal(new Date(arg.event.start), arg.event.end, {
-                mode: 'edit',
-                title: (appointmentId ? ('Appt #' + appointmentId) : 'Appointment') + ' • present',
-                appointment: {
-                  id: appointmentId,
-                  status: 'present',
-                  notes: arg.event.extendedProps.notes,
-                  provider_id: providerId,
-                  appointment_type_id: appointmentTypeId,
-                  start_time: appt.start_time || formattedStart,
-                  end_time: appt.end_time || formattedEnd
-                },
-                customer: cust
-              });
-            }
+                openBookingModal(new Date(arg.event.start), arg.event.end, {
+                  mode: 'edit',
+                  title: (appointmentId ? ('Appt #' + appointmentId) : 'Appointment') + ' • present',
+                  appointment: {
+                    id: appointmentId,
+                    status: 'present',
+                    notes: arg.event.extendedProps.notes,
+                    provider_id: providerId,
+                    appointment_type_id: appointmentTypeId,
+                    start_time: appt.start_time || formattedStart,
+                    end_time: appt.end_time || formattedEnd
+                  },
+                  customer: cust
+                });
               }
+            }
 
           } catch (err) {
-
             console.error('Status dot error:', err);
             alert('Error updating status: ' + err.message);
           } finally {
@@ -2474,18 +2488,19 @@ eventContent: function(arg) {
         }
         injectUnavailButtons(arg);
       },
-dayHeaderDidMount: function(arg) {
-  const serverNow = getServerNowDate();
-  if (isSameServerCalendarDay(arg.date, serverNow)) {
-    arg.el.classList.add('server-today');
-  }
-  injectUnavailButtons(arg);
-},
+      dayHeaderDidMount: function(arg) {
+        const serverNow = getServerNowDate();
+        if (isSameServerCalendarDay(arg.date, serverNow)) {
+          arg.el.classList.add('server-today');
+        }
+        injectUnavailButtons(arg);
+      },
       datesSet: function() {
         syncProviderFilterVisibility();
         calendar.refetchEvents();
 
-  setTimeout(reinjectAllUnavailButtons, 50); 
+        setTimeout(reinjectAllUnavailButtons, 50); 
+        setTimeout(refreshDailyNotePills, 50); 
       },
       selectConstraint: 'businessHours',
       headerToolbar: {
@@ -2501,7 +2516,6 @@ dayHeaderDidMount: function(arg) {
         if (currentUserRole === 'provider' && providerId) {
           params.set('provider_id', String(providerId));
         } else {
-          // Explicitly track the primary and secondary dropdown values selected on screen
           const selectedPrimary = document.getElementById('calendarProviderPrimary')?.value;
           const selectedSecondary = document.getElementById('calendarProviderSecondary')?.value;
           
@@ -2530,7 +2544,6 @@ dayHeaderDidMount: function(arg) {
           });
       },
       eventDidMount: function(arg) {
-        // Background event splitting (from previous fix)
         if (arg.event.display === 'background') {
           if (isDualProviderSplitEnabled()) {
             const bgProviderId = Number(arg.event.extendedProps?.provider_id || 0);
@@ -2586,7 +2599,7 @@ dayHeaderDidMount: function(arg) {
           editable: true,
           extendedProps: {
             isDraftPlaceholder: true,
-            provider_id: pendingDraftProviderId  // ← add this
+            provider_id: pendingDraftProviderId 
           }
         });
 
@@ -2603,9 +2616,9 @@ dayHeaderDidMount: function(arg) {
       editable: isStaff,
       eventClick: function(info) {
         const event = info.event;
-if (event.display === 'background') return;
+        if (event.display === 'background') return;
 
-  if (event.extendedProps?.isDraftPlaceholder || event.id === 'booking-draft-placeholder') {
+        if (event.extendedProps?.isDraftPlaceholder || event.id === 'booking-draft-placeholder') {
           currentBookingStartDate = event.start;
           currentBookingEndDate = event.end ? event.end : addMinutes(event.start, bookingSnapMinutes);
           
@@ -2767,8 +2780,8 @@ if (event.display === 'background') return;
       calendarProviderSecondary.addEventListener('change', function() {
         selectedSecondaryProviderId = calendarProviderSecondary.value ? Number(calendarProviderSecondary.value) : null;
         calendar.refetchEvents();
-
-    reinjectAllUnavailButtons();
+        reinjectAllUnavailButtons();
+        refreshDailyNotePills();
       });
     }
 
@@ -2785,186 +2798,178 @@ if (event.display === 'background') return;
           }
         });
       } catch (e) {
-        // fallback
+        // fallback ignore
       }
     })();
-// ============================================================
-// DAY CELL UNAVAILABILITY TOGGLE BUTTONS
-// ============================================================
-async function toggleDayUnavailability(dateStr, providerId) {
-  // Find a SINGLE-type unavailability that covers this specific date
-  const existingEvent = window.calendarInstance.getEvents().find(function(event) {
-    if (!event.classNames.includes('unavail-event')) return false;
-    const epId = Number(event.extendedProps?.provider_id || 0);
-    if (epId !== Number(providerId)) return false;
-    // Only match single-type — never delete recurring rules
-    if (event.extendedProps?.unavailability_type === 'recurring') return false;
-    // Parse the id — only match 'unavail-single-NNN' format
-    if (!String(event.id).startsWith('unavail-single-')) return false;
-    const eventDateStr = event.start.toISOString().slice(0, 10);
-    return eventDateStr === dateStr;
-  });
 
-  if (existingEvent) {
-    // Parse the numeric ID from 'unavail-single-123'
-    const match = String(existingEvent.id).match(/^unavail-single-(\d+)$/);
-    const unavailId = match ? Number(match[1]) : 0;
-    if (!unavailId) {
-      alert('Cannot identify single unavailability record to remove.');
-      return;
-    }
-    const resp = await fetch('unavailabilities_api.php?action=delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        csrf_token: document.querySelector('input[name="csrf_token"]').value,
-        id: unavailId
-      })
-    });
-    const json = await resp.json();
-    if (!json.ok) throw new Error(json.error || 'Failed to remove unavailability.');
-  } else {
-    const startDatetime = dateStr + ' ' + visibleStartTime.slice(0, 5) + ':00';
-    const endDatetime   = dateStr + ' ' + visibleEndTime.slice(0, 5) + ':00';
-    const resp = await fetch('unavailabilities_api.php?action=create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        csrf_token: document.querySelector('input[name="csrf_token"]').value,
-        provider_id: providerId,
-        type: 'single',
-        start_datetime: startDatetime,
-        end_datetime: endDatetime,
-        reason: 'Day unavailability'
-      })
-    });
-    const json = await resp.json();
-    if (!json.ok) throw new Error(json.error || 'Failed to create unavailability.');
-  }
+    // ============================================================
+    // DAY CELL UNAVAILABILITY TOGGLE BUTTONS
+    // ============================================================
+    async function toggleDayUnavailability(dateStr, providerId) {
+      const existingEvent = window.calendarInstance.getEvents().find(function(event) {
+        if (!event.classNames.includes('unavail-event')) return false;
+        const epId = Number(event.extendedProps?.provider_id || 0);
+        if (epId !== Number(providerId)) return false;
+        if (event.extendedProps?.unavailability_type === 'recurring') return false;
+        if (!String(event.id).startsWith('unavail-single-')) return false;
+        const eventDateStr = event.start.toISOString().slice(0, 10);
+        return eventDateStr === dateStr;
+      });
 
-  await window.calendarInstance.refetchEvents();
+      if (existingEvent) {
+        const match = String(existingEvent.id).match(/^unavail-single-(\d+)$/);
+        const unavailId = match ? Number(match[1]) : 0;
+        if (!unavailId) {
+          alert('Cannot identify single unavailability record to remove.');
+          return;
+        }
+        const resp = await fetch('unavailabilities_api.php?action=delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            csrf_token: document.querySelector('input[name="csrf_token"]').value,
+            id: unavailId
+          })
+        });
+        const json = await resp.json();
+        if (!json.ok) throw new Error(json.error || 'Failed to remove unavailability.');
+      } else {
+        const startDatetime = dateStr + ' ' + visibleStartTime.slice(0, 5) + ':00';
+        const endDatetime   = dateStr + ' ' + visibleEndTime.slice(0, 5) + ':00';
+        const resp = await fetch('unavailabilities_api.php?action=create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            csrf_token: document.querySelector('input[name="csrf_token"]').value,
+            provider_id: providerId,
+            type: 'single',
+            start_datetime: startDatetime,
+            end_datetime: endDatetime,
+            reason: 'Day unavailability'
+          })
+        });
+        const json = await resp.json();
+        if (!json.ok) throw new Error(json.error || 'Failed to create unavailability.');
+      }
 
-  reinjectAllUnavailButtons();  // ← ADD THIS LINE
-}
-
-function reinjectAllUnavailButtons() {
-  if (!window.calendarInstance) return;
-  const viewType = window.calendarInstance.view?.type || '';
-  if (viewType === 'dayGridMonth') return;
-
-  // Remove all existing wraps
-  calendarEl.querySelectorAll('.day-unavail-toggle-wrap').forEach(el => el.remove());
-
-  // Re-inject into every visible column header
-  calendarEl.querySelectorAll('.fc-col-header-cell').forEach(function(el) {
-    const dateAttr = el.getAttribute('data-date');
-    if (!dateAttr) return;
-
-    const wrap = document.createElement('div');
-    wrap.className = 'day-unavail-toggle-wrap';
-    wrap.style.cssText = 'display:flex;padding:4px 6px 2px;gap:0;';
-
-    const dual = isDualProviderSplitEnabled();
-
-    if (dual) {
-      const primaryProvider = providers.find(p => Number(p.id) === Number(selectedPrimaryProviderId));
-      const secondaryProvider = providers.find(p => Number(p.id) === Number(selectedSecondaryProviderId));
-      const primaryLabel = primaryProvider ? (primaryProvider.full_name || primaryProvider.email).split(' ')[0] : 'P1';
-      const secondaryLabel = secondaryProvider ? (secondaryProvider.full_name || secondaryProvider.email).split(' ')[0] : 'P2';
-      wrap.appendChild(buildUnavailButton(dateAttr, selectedPrimaryProviderId, primaryLabel, 'left'));
-      wrap.appendChild(buildUnavailButton(dateAttr, selectedSecondaryProviderId, secondaryLabel, 'right'));
-    } else {
-      const primaryProvider = providers.find(p => Number(p.id) === Number(selectedPrimaryProviderId));
-      const primaryLabel = primaryProvider ? (primaryProvider.full_name || primaryProvider.email).split(' ')[0] : 'Provider';
-      wrap.appendChild(buildUnavailButton(dateAttr, selectedPrimaryProviderId, primaryLabel, null));
+      await window.calendarInstance.refetchEvents();
+      reinjectAllUnavailButtons();  
+      refreshDailyNotePills();     
     }
 
-    el.insertBefore(wrap, el.firstChild);
-  });
-}
+    function reinjectAllUnavailButtons() {
+      if (!window.calendarInstance) return;
+      const viewType = window.calendarInstance.view?.type || '';
+      if (viewType === 'dayGridMonth') return;
 
-function isDayUnavailableForProvider(dateStr, providerId) {
-  return window.calendarInstance.getEvents().some(function(event) {
-    if (!event.classNames.includes('unavail-event')) return false;
-    if (!String(event.id).startsWith('unavail-single-')) return false;
-    const epId = Number(event.extendedProps?.provider_id || 0);
-    if (epId !== Number(providerId)) return false;
-    const eventDateStr = event.start.toISOString().slice(0, 10);
-    return eventDateStr === dateStr;
-  });
-}
+      calendarEl.querySelectorAll('.day-unavail-toggle-wrap').forEach(el => el.remove());
 
-function buildUnavailButton(dateStr, providerId, providerLabel, half) {
-  const isUnavail = isDayUnavailableForProvider(dateStr, providerId);
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = 'day-unavail-toggle' + (isUnavail ? ' is-unavailable' : '');
-  btn.setAttribute('data-date', dateStr);
-  btn.setAttribute('data-provider-id', String(providerId));
-btn.textContent = isUnavail ? '✓ ' + providerLabel : '🚫 ' + providerLabel;
-btn.title = (isUnavail ? 'Remove unavailability for ' : 'Mark unavailable: ') + providerLabel;
+      calendarEl.querySelectorAll('.fc-col-header-cell').forEach(function(el) {
+        const dateAttr = el.getAttribute('data-date');
+        if (!dateAttr) return;
 
-  if (half === 'left') {
-    btn.style.cssText = 'width:50%;border-radius:8px 0 0 8px;border-right:0;';
-  } else if (half === 'right') {
-    btn.style.cssText = 'width:50%;border-radius:0 8px 8px 0;';
-  } else {
-    btn.style.cssText = 'width:100%;border-radius:8px;';
-  }
+        const wrap = document.createElement('div');
+        wrap.className = 'day-unavail-toggle-wrap';
+        wrap.style.cssText = 'display:flex;padding:4px 6px 2px;gap:0;';
 
-  btn.addEventListener('click', async function(e) {
-    e.stopPropagation();
-    btn.disabled = true;
-    btn.textContent = '...';
-    try {
-      await toggleDayUnavailability(dateStr, providerId);
-    } catch (err) {
-      alert(err.message || 'Failed to toggle unavailability.');
-      btn.disabled = false;
+        const dual = isDualProviderSplitEnabled();
+
+        if (dual) {
+          const primaryProvider = providers.find(p => Number(p.id) === Number(selectedPrimaryProviderId));
+          const secondaryProvider = providers.find(p => Number(p.id) === Number(selectedSecondaryProviderId));
+          const primaryLabel = primaryProvider ? (primaryProvider.full_name || primaryProvider.email).split(' ')[0] : 'P1';
+          const secondaryLabel = secondaryProvider ? (secondaryProvider.full_name || secondaryProvider.email).split(' ')[0] : 'P2';
+          wrap.appendChild(buildUnavailButton(dateAttr, selectedPrimaryProviderId, primaryLabel, 'left'));
+          wrap.appendChild(buildUnavailButton(dateAttr, selectedSecondaryProviderId, secondaryLabel, 'right'));
+        } else {
+          const primaryProvider = providers.find(p => Number(p.id) === Number(selectedPrimaryProviderId));
+          const primaryLabel = primaryProvider ? (primaryProvider.full_name || primaryProvider.email).split(' ')[0] : 'Provider';
+          wrap.appendChild(buildUnavailButton(dateAttr, selectedPrimaryProviderId, primaryLabel, null));
+        }
+
+        el.insertBefore(wrap, el.firstChild);
+      });
     }
-  });
 
-  return btn;
-}
+    function isDayUnavailableForProvider(dateStr, providerId) {
+      return window.calendarInstance.getEvents().some(function(event) {
+        if (!event.classNames.includes('unavail-event')) return false;
+        if (!String(event.id).startsWith('unavail-single-')) return false;
+        const epId = Number(event.extendedProps?.provider_id || 0);
+        if (epId !== Number(providerId)) return false;
+        const eventDateStr = event.start.toISOString().slice(0, 10);
+        return eventDateStr === dateStr;
+      });
+    }
 
-function injectUnavailButtons(arg) {
-  if (!isStaff) return;
-  const viewType = window.calendarInstance?.view?.type || '';
-  if (viewType === 'dayGridMonth') return;
+    function buildUnavailButton(dateStr, providerId, providerLabel, half) {
+      const isUnavail = isDayUnavailableForProvider(dateStr, providerId);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'day-unavail-toggle' + (isUnavail ? ' is-unavailable' : '');
+      btn.setAttribute('data-date', dateStr);
+      btn.setAttribute('data-provider-id', String(providerId));
+      btn.textContent = isUnavail ? '✓ ' + providerLabel : '🚫 ' + providerLabel;
+      btn.title = (isUnavail ? 'Remove unavailability for ' : 'Mark unavailable: ') + providerLabel;
 
-  // Only inject into the fc-col-header-cell, not the all-day daygrid cell
-  if (!arg.el.classList.contains('fc-col-header-cell') && 
-      !arg.el.closest('.fc-col-header-cell')) return;
+      if (half === 'left') {
+        btn.style.cssText = 'width:50%;border-radius:8px 0 0 8px;border-right:0;';
+      } else if (half === 'right') {
+        btn.style.cssText = 'width:50%;border-radius:0 8px 8px 0;';
+      } else {
+        btn.style.cssText = 'width:100%;border-radius:8px;';
+      }
 
-  const dateStr = arg.date.toISOString().slice(0, 10);
+      btn.addEventListener('click', async function(e) {
+        e.stopPropagation();
+        btn.disabled = true;
+        btn.textContent = '...';
+        try {
+          await toggleDayUnavailability(dateStr, providerId);
+        } catch (err) {
+          alert(err.message || 'Failed to toggle unavailability.');
+          btn.disabled = false;
+        }
+      });
 
-  // Remove any previously injected buttons for this cell
-  arg.el.querySelectorAll('.day-unavail-toggle-wrap').forEach(el => el.remove());
+      return btn;
+    }
 
-  const wrap = document.createElement('div');
-  wrap.className = 'day-unavail-toggle-wrap';
-  wrap.style.cssText = 'display:flex;padding:4px 6px 2px;gap:0;';
+    function injectUnavailButtons(arg) {
+      if (!isStaff) return;
+      const viewType = window.calendarInstance?.view?.type || '';
+      if (viewType === 'dayGridMonth') return;
 
-  const dual = isDualProviderSplitEnabled();
+      if (!arg.el.classList.contains('fc-col-header-cell') && 
+          !arg.el.closest('.fc-col-header-cell')) return;
 
-  if (dual) {
-    const primaryProvider = providers.find(p => Number(p.id) === Number(selectedPrimaryProviderId));
-    const secondaryProvider = providers.find(p => Number(p.id) === Number(selectedSecondaryProviderId));
-    const primaryLabel = primaryProvider ? (primaryProvider.full_name || primaryProvider.email).split(' ')[0] : 'P1';
-    const secondaryLabel = secondaryProvider ? (secondaryProvider.full_name || secondaryProvider.email).split(' ')[0] : 'P2';
+      const dateStr = arg.date.toISOString().slice(0, 10);
 
-    wrap.appendChild(buildUnavailButton(dateStr, selectedPrimaryProviderId, primaryLabel, 'left'));
-    wrap.appendChild(buildUnavailButton(dateStr, selectedSecondaryProviderId, secondaryLabel, 'right'));
-  } else {
-    const primaryProvider = providers.find(p => Number(p.id) === Number(selectedPrimaryProviderId));
-    const primaryLabel = primaryProvider ? (primaryProvider.full_name || primaryProvider.email).split(' ')[0] : 'Provider';
-    wrap.appendChild(buildUnavailButton(dateStr, selectedPrimaryProviderId, primaryLabel, null));
-  }
+      arg.el.querySelectorAll('.day-unavail-toggle-wrap').forEach(el => el.remove());
 
-  // Inject into the day cell top area
-  const frame = arg.el.querySelector('.fc-daygrid-day-frame') || arg.el;
-  frame.insertBefore(wrap, frame.firstChild);
-}
+      const wrap = document.createElement('div');
+      wrap.className = 'day-unavail-toggle-wrap';
+      wrap.style.cssText = 'display:flex;padding:4px 6px 2px;gap:0;';
+
+      const dual = isDualProviderSplitEnabled();
+
+      if (dual) {
+        const primaryProvider = providers.find(p => Number(p.id) === Number(selectedPrimaryProviderId));
+        const secondaryProvider = providers.find(p => Number(p.id) === Number(selectedSecondaryProviderId));
+        const primaryLabel = primaryProvider ? (primaryProvider.full_name || primaryProvider.email).split(' ')[0] : 'P1';
+        const secondaryLabel = secondaryProvider ? (secondaryProvider.full_name || secondaryProvider.email).split(' ')[0] : 'P2';
+
+        wrap.appendChild(buildUnavailButton(dateStr, selectedPrimaryProviderId, primaryLabel, 'left'));
+        wrap.appendChild(buildUnavailButton(dateStr, selectedSecondaryProviderId, secondaryLabel, 'right'));
+      } else {
+        const primaryProvider = providers.find(p => Number(p.id) === Number(selectedPrimaryProviderId));
+        const primaryLabel = primaryProvider ? (primaryProvider.full_name || primaryProvider.email).split(' ')[0] : 'Provider';
+        wrap.appendChild(buildUnavailButton(dateStr, selectedPrimaryProviderId, primaryLabel, null));
+      }
+
+      const frame = arg.el.querySelector('.fc-daygrid-day-frame') || arg.el;
+      frame.insertBefore(wrap, frame.firstChild);
+    }
     const newCustomerFirstName = document.getElementById('newCustomerFirstName');
     const newCustomerLastName = document.getElementById('newCustomerLastName');
     const newCustomerDob = document.getElementById('newCustomerDob');
@@ -3332,19 +3337,19 @@ function injectUnavailButtons(arg) {
       notesExpanded = !notesExpanded;
       syncNotesVisibility();
     }
-function isAppointmentInPast(startTimeValue) {
-  const raw = String(startTimeValue || '').trim();
-  if (!raw) return false;
+    
+    function isAppointmentInPast(startTimeValue) {
+      const raw = String(startTimeValue || '').trim();
+      if (!raw) return false;
 
-  // Parse as server local time, not UTC
-  const normalized = raw.replace(' ', 'T');
-  const serverClockDate = new Date(normalized + 'Z');
-  const instant = serverClockDateToInstant(serverClockDate);
+      const normalized = raw.replace(' ', 'T');
+      const serverClockDate = new Date(normalized + 'Z');
+      const instant = serverClockDateToInstant(serverClockDate);
 
-  if (Number.isNaN(instant.getTime())) return false;
+      if (Number.isNaN(instant.getTime())) return false;
 
-  return instant.getTime() < getServerNowDate().getTime();
-}
+      return instant.getTime() < getServerNowDate().getTime();
+    }
 
     function isBookingWithinDeadline(startTimeValue) {
       const startDate = parseDateValue(startTimeValue);
@@ -3410,32 +3415,6 @@ function isAppointmentInPast(startTimeValue) {
       updateCustomerSearchSelection();
     }
 
-    function renderCustomerSearchResults(customers) {
-      if (!customerSearchResults || !customerSearchState) {
-        return;
-      }
-
-      if (!customers.length) {
-        renderCustomerSearchState('No matching customers found.');
-        return;
-      }
-
-      customerSearchState.textContent = `Found ${customers.length} matching customer${customers.length === 1 ? '' : 's'}.`;
-      customerSearchResults.innerHTML = '';
-
-      customers.forEach(customer => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'customer-search-result';
-        button.setAttribute('data-customer-id', String(customer.id));
-        button.innerHTML = `<strong>${escapeHtml(customer.full_name || 'Unnamed customer')}</strong><span>${escapeHtml(formatCustomerContact(customer))}</span>`;
-        button.addEventListener('click', () => showSelectedCustomer(customer));
-        customerSearchResults.appendChild(button);
-      });
-
-      updateCustomerSearchSelection();
-    }
-
     async function searchExistingCustomers(query) {
       const term = String(query || '').trim();
       const requestId = ++customerSearchRequestId;
@@ -3471,6 +3450,32 @@ function isAppointmentInPast(startTimeValue) {
       }
     }
 
+    function renderCustomerSearchResults(customers) {
+      if (!customerSearchResults || !customerSearchState) {
+        return;
+      }
+
+      if (!customers.length) {
+        renderCustomerSearchState('No matching customers found.');
+        return;
+      }
+
+      customerSearchState.textContent = `Found ${customers.length} matching customer${customers.length === 1 ? '' : 's'}.`;
+      customerSearchResults.innerHTML = '';
+
+      customers.forEach(customer => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'customer-search-result';
+        button.setAttribute('data-customer-id', String(customer.id));
+        button.innerHTML = `<strong>${escapeHtml(customer.full_name || 'Unnamed customer')}</strong><span>${escapeHtml(formatCustomerContact(customer))}</span>`;
+        button.addEventListener('click', () => showSelectedCustomer(customer));
+        customerSearchResults.appendChild(button);
+      });
+
+      updateCustomerSearchSelection();
+    }
+
     function setCustomerMode(mode) {
       currentCustomerMode = mode;
       createCustomerTab.classList.toggle('is-active', mode === 'create');
@@ -3496,7 +3501,6 @@ function isAppointmentInPast(startTimeValue) {
       }
     }
 
-
     createCustomerTab.addEventListener('click', () => setCustomerMode('create'));
     existingCustomerTab.addEventListener('click', () => setCustomerMode('existing'));
 
@@ -3521,11 +3525,9 @@ function isAppointmentInPast(startTimeValue) {
     }
 
     clearSelectedCustomerBtn.addEventListener('click', clearSelectedCustomer);
-
-   setCustomerMode('create');
+    setCustomerMode('create');
 
     function setDraftMode() {
-
       const cardElement = bookingModal.querySelector('.booking-card');
       if (cardElement) cardElement.classList.remove('is-invalid-time');
       const draft = window.calendarInstance?.getEventById('booking-draft-placeholder');
@@ -3555,11 +3557,9 @@ function isAppointmentInPast(startTimeValue) {
       setCustomerMode('create');
     }
 
-    
-
     submitBooking._running = false;
 
-  async function submitBooking() {
+    async function submitBooking() {
       if (submitBooking._running) return;
       submitBooking._running = true;
 
@@ -3598,7 +3598,6 @@ function isAppointmentInPast(startTimeValue) {
         return;
       }
 
-      // 1. Compile warnings dynamically using updated calendar data tracks
       const confirmationQueue = [];
 
       if (checkTimeSlotConflicts()) {
@@ -3617,7 +3616,6 @@ function isAppointmentInPast(startTimeValue) {
         confirmationQueue.push('The new customer profile is missing required info fields: ' + missingFields.join(', ') + '.');
       }
 
-      // 2. Process all confirmations sequentially BEFORE disabling UI button actions
       async function processWarningsSequentially(queue) {
         for (let i = 0; i < queue.length; i++) {
           setBookingAlert(queue[i], false);
@@ -3637,7 +3635,6 @@ function isAppointmentInPast(startTimeValue) {
         return;
       }
 
-      // 3. Clear alert states and flip submission button flags safely
       setBookingAlert('');
       makeBookingBtn.disabled = true;
       makeBookingBtn.textContent = mode === 'edit' ? 'Save changes...' : 'Saving...';
@@ -3678,7 +3675,6 @@ function isAppointmentInPast(startTimeValue) {
         const savedCustomerEmail = String(json.customer && json.customer.email ? json.customer.email : '').trim();
         const savedCustomerName = String(json.customer && json.customer.full_name ? json.customer.full_name : customerName || 'this customer').trim();
 
-        // 4. Trigger email routine confirmation prompts seamlessly
         if (savedAppointmentId > 0) {
           while (true) {
             const sendEmail = await showAppointmentEmailPrompt({
@@ -3874,7 +3870,7 @@ function isAppointmentInPast(startTimeValue) {
 
         setTimeout(checkTimeSlotConflicts, 100);
       } catch (e) {
-        // ignore
+        // fallback ignore
       }
     }
 
@@ -3929,43 +3925,37 @@ function isAppointmentInPast(startTimeValue) {
       return hasTimeConflict;
     }
 
-    // ==========================================================
-    // FIXED: CENTRALISED MODAL EXIT HANDLERS & BARRIERS
-    // ==========================================================
-    
-   function requestCloseModalBarrier() {
-  const modalMode = bookingModal.getAttribute('data-mode');
-  
-  // Always confirm when editing an existing appointment
-  if (modalMode === 'edit') {
-    if (typeof closeConfirmationModal.showModal === 'function') {
-      closeConfirmationModal.showModal();
-    } else {
-      closeConfirmationModal.setAttribute('open', 'open');
+    function requestCloseModalBarrier() {
+      const modalMode = bookingModal.getAttribute('data-mode');
+      
+      if (modalMode === 'edit') {
+        if (typeof closeConfirmationModal.showModal === 'function') {
+          closeConfirmationModal.showModal();
+        } else {
+          closeConfirmationModal.setAttribute('open', 'open');
+        }
+        return;
+      }
+
+      const firstNameEl = document.getElementById('newCustomerFirstName');
+      const lastNameEl  = document.getElementById('newCustomerLastName');
+      const notesEl     = document.getElementById('bookingNotes');
+
+      const draftFirstNameClean = firstNameEl ? firstNameEl.value.trim() : '';
+      const draftLastNameClean  = lastNameEl  ? lastNameEl.value.trim()  : '';
+      const draftNotesClean     = notesEl     ? notesEl.value.trim()     : '';
+      
+      if (!draftFirstNameClean && !draftLastNameClean && !draftNotesClean) {
+        executeForcedModalShutdown();
+        return;
+      }
+
+      if (typeof closeConfirmationModal.showModal === 'function') {
+        closeConfirmationModal.showModal();
+      } else {
+        closeConfirmationModal.setAttribute('open', 'open');
+      }
     }
-    return;
-  }
-
-  // For draft mode, only confirm if they've typed something
-  const firstNameEl = document.getElementById('newCustomerFirstName');
-  const lastNameEl  = document.getElementById('newCustomerLastName');
-  const notesEl     = document.getElementById('bookingNotes');
-
-  const draftFirstNameClean = firstNameEl ? firstNameEl.value.trim() : '';
-  const draftLastNameClean  = lastNameEl  ? lastNameEl.value.trim()  : '';
-  const draftNotesClean     = notesEl     ? notesEl.value.trim()     : '';
-  
-  if (!draftFirstNameClean && !draftLastNameClean && !draftNotesClean) {
-    executeForcedModalShutdown();
-    return;
-  }
-
-  if (typeof closeConfirmationModal.showModal === 'function') {
-    closeConfirmationModal.showModal();
-  } else {
-    closeConfirmationModal.setAttribute('open', 'open');
-  }
-}
 
     function executeForcedModalShutdown() {
       if (bookingModal) {
@@ -3985,10 +3975,7 @@ function isAppointmentInPast(startTimeValue) {
       setDraftMode();
     }
 
-    // 🛑 GLOBAL DELEGATION INTERCEPT: Binds listeners cleanly to document layout wrappers 
-    // to guarantee event properties can never break or slide off when FullCalendar re-renders elements.
     document.addEventListener('click', function(e) {
-
       const targetId = e.target ? e.target.id : '';
       
       if (targetId === 'closeBookingModalTop' || targetId === 'closeBookingModal') {
@@ -4012,7 +3999,6 @@ function isAppointmentInPast(startTimeValue) {
       }
     });
 
-    // Handle native browser escape hardware key intercepts gracefully
     if (closeConfirmationModal) {
       closeConfirmationModal.addEventListener('cancel', (e) => {
         e.preventDefault();
@@ -4021,6 +4007,197 @@ function isAppointmentInPast(startTimeValue) {
         } else {
           closeConfirmationModal.removeAttribute('open');
         }
+      });
+    }
+
+    // ============================================================
+    // DAILY NOTES LOGIC
+    // ============================================================
+    const dailyNoteModal   = document.getElementById('dailyNoteModal');
+    const dailyNoteTitle   = document.getElementById('dailyNoteTitle');
+    const dailyNoteTitleCount = document.getElementById('dailyNoteTitleCount');
+    const dailyNoteMessage = document.getElementById('dailyNoteMessage');
+    const dailyNoteSaveBtn = document.getElementById('dailyNoteSaveBtn');
+    const dailyNoteDeleteBtn = document.getElementById('dailyNoteDeleteBtn');
+    const dailyNoteCancelBtn = document.getElementById('dailyNoteCancelBtn');
+    const dailyNoteModalTitle = document.getElementById('dailyNoteModalTitle');
+
+    let dailyNoteContext = null; 
+
+    dailyNoteTitle.addEventListener('input', function() {
+      dailyNoteTitleCount.textContent = '(' + dailyNoteTitle.value.length + '/40)';
+    });
+
+    async function openDailyNoteModal(dateStr, providerId) {
+      dailyNoteContext = { dateStr, providerId };
+      dailyNoteModalTitle.textContent = 'Daily Note — ' + dateStr;
+      dailyNoteTitle.value = '';
+      dailyNoteMessage.value = '';
+      dailyNoteTitleCount.textContent = '(0/40)';
+      dailyNoteDeleteBtn.style.display = 'none';
+      dailyNoteSaveBtn.disabled = false;
+      dailyNoteSaveBtn.textContent = 'Save';
+
+      try {
+        const params = new URLSearchParams({ action: 'get', date: dateStr });
+        if (providerId) params.set('provider_id', String(providerId));
+        const resp = await fetch('daily_notes_api.php?' + params, { credentials: 'same-origin' });
+        const json = await resp.json();
+        if (json.ok && json.note) {
+          dailyNoteTitle.value = json.note.title || '';
+          dailyNoteMessage.value = json.note.message || '';
+          dailyNoteTitleCount.textContent = '(' + dailyNoteTitle.value.length + '/40)';
+          dailyNoteDeleteBtn.style.display = '';
+        }
+      } catch (e) {
+        // fail silently fallback layout
+      }
+
+      if (typeof dailyNoteModal.showModal === 'function') {
+        dailyNoteModal.showModal();
+      } else {
+        dailyNoteModal.setAttribute('open', 'open');
+      }
+    }
+
+    function closeDailyNoteModal() {
+      if (typeof dailyNoteModal.close === 'function') {
+        dailyNoteModal.close();
+      } else {
+        dailyNoteModal.removeAttribute('open');
+      }
+      dailyNoteContext = null;
+    }
+
+    dailyNoteCancelBtn.addEventListener('click', closeDailyNoteModal);
+
+    dailyNoteModal.addEventListener('cancel', function(e) {
+      e.preventDefault();
+      closeDailyNoteModal();
+    });
+
+    dailyNoteSaveBtn.addEventListener('click', async function() {
+      if (!dailyNoteContext) return;
+      const title = dailyNoteTitle.value.trim();
+      if (!title) {
+        dailyNoteTitle.focus();
+        return;
+      }
+      dailyNoteSaveBtn.disabled = true;
+      dailyNoteSaveBtn.textContent = 'Saving...';
+      try {
+        const resp = await fetch('daily_notes_api.php?action=save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            csrf_token: document.querySelector('input[name="csrf_token"]').value,
+            date: dailyNoteContext.dateStr,
+            provider_id: dailyNoteContext.providerId || '',
+            title: title,
+            message: dailyNoteMessage.value.trim()
+          })
+        });
+        const json = await resp.json();
+        if (!json.ok) throw new Error(json.error || 'Failed to save');
+        closeDailyNoteModal();
+        refreshDailyNotePills();
+      } catch (err) {
+        alert(err.message || 'Failed to save note.');
+        dailyNoteSaveBtn.disabled = false;
+        dailyNoteSaveBtn.textContent = 'Save';
+      }
+    });
+
+    dailyNoteDeleteBtn.addEventListener('click', async function() {
+      if (!dailyNoteContext) return;
+      if (!confirm('Delete this daily note?')) return;
+      dailyNoteDeleteBtn.disabled = true;
+      dailyNoteDeleteBtn.textContent = 'Deleting...';
+      try {
+        const resp = await fetch('daily_notes_api.php?action=delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            csrf_token: document.querySelector('input[name="csrf_token"]').value,
+            date: dailyNoteContext.dateStr,
+            provider_id: dailyNoteContext.providerId || ''
+          })
+        });
+        const json = await resp.json();
+        if (!json.ok) throw new Error(json.error || 'Failed to delete');
+        closeDailyNoteModal();
+        refreshDailyNotePills();
+      } catch (err) {
+        alert(err.message || 'Failed to delete note.');
+        dailyNoteDeleteBtn.disabled = false;
+        dailyNoteDeleteBtn.textContent = 'Delete';
+      }
+    });
+
+    async function refreshDailyNotePills() {
+      if (!window.calendarInstance) return;
+      const view = window.calendarInstance.view;
+      const startStr = view.activeStart.toISOString().slice(0, 10);
+      const endStr   = view.activeEnd.toISOString().slice(0, 10);
+      const params = new URLSearchParams({ action: 'range', start: startStr, end: endStr });
+      if (selectedPrimaryProviderId) params.set('provider_id', String(selectedPrimaryProviderId));
+
+      let notesByDate = {};
+      try {
+        const resp = await fetch('daily_notes_api.php?' + params, { credentials: 'same-origin' });
+        const json = await resp.json();
+        if (json.ok && json.notes) {
+          for (const note of json.notes) {
+            notesByDate[note.note_date] = note;
+          }
+        }
+      } catch (e) {
+        // fail silently fallback layout
+      }
+
+      // FIX: Target ONLY the daygrid containers (.fc-daygrid-day) to prevent duplicating into the timed column body
+      calendarEl.querySelectorAll('.fc-daygrid-day').forEach(function(cell) {
+        const dateAttr = cell.getAttribute('data-date');
+        if (!dateAttr) return;
+
+        // Clear any old pills inside this cell first
+        cell.querySelectorAll('.daily-note-pill').forEach(el => el.remove());
+        const note = notesByDate[dateAttr];
+
+        if (note) {
+          const pill = document.createElement('div');
+          pill.className = 'daily-note-pill';
+          pill.textContent = '📝 ' + note.title;
+          pill.title = note.message || note.title;
+          
+          pill.addEventListener('click', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            openDailyNoteModal(dateAttr, selectedPrimaryProviderId);
+          });
+
+          // Find the events container inside the all-day / month frame
+          const eventsEl = cell.querySelector('.fc-daygrid-day-events');
+          if (eventsEl) {
+            eventsEl.insertBefore(pill, eventsEl.firstChild);
+          } else {
+            cell.insertBefore(pill, cell.firstChild);
+          }
+        }
+      });
+
+      // Handle raw clicks inside empty all-day lanes safely to create a note
+      calendarEl.querySelectorAll('.fc-daygrid-day').forEach(function(cell) {
+        const dateAttr = cell.getAttribute('data-date');
+        if (!dateAttr || cell.querySelector('.daily-note-pill')) return;
+        const eventsEl = cell.querySelector('.fc-daygrid-day-events');
+        if (!eventsEl || eventsEl.__noteClickAttached) return;
+        eventsEl.__noteClickAttached = true;
+        
+        eventsEl.addEventListener('click', function(e) {
+          if (e.target.closest('.fc-event')) return;
+          openDailyNoteModal(dateAttr, selectedPrimaryProviderId);
+        });
       });
     }
   </script>

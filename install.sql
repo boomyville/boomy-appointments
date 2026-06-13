@@ -246,4 +246,15 @@ INSERT INTO `appointment_types` (`name`,`duration_minutes`,`color_hex`) VALUES
 ('Contact Lens Fitting & Review',30,'#e66100'),
 ('Emergency Red Eye Evaluation',15,'#c01c28');
 
--- Done
+CREATE TABLE `daily_notes` (
+  `id` INT UNSIGNED AUTO_INCREMENT,
+  `note_date` DATE NOT NULL,
+  `provider_id` INT UNSIGNED NULL,
+  `title` VARCHAR(40) NOT NULL DEFAULT '',
+  `message` TEXT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_daily_note_date_provider` (`note_date`, `provider_id`),
+  CONSTRAINT `fk_daily_note_provider` FOREIGN KEY (`provider_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
