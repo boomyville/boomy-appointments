@@ -124,7 +124,6 @@ CREATE TABLE `breaks` (
   KEY `idx_breaks_active` (`is_active`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 7. APPOINTMENTS
 CREATE TABLE `appointments` (
   `id` INT UNSIGNED AUTO_INCREMENT,
   `customer_id` INT UNSIGNED NOT NULL,
@@ -140,7 +139,8 @@ CREATE TABLE `appointments` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_appointment_hash` (`hash_key`),
   KEY `idx_appt_chronology` (`provider_id`,`start_time`,`end_time`),
-  CONSTRAINT `fk_appt_customer` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+  -- FIX: Changed ON DELETE RESTRICT to ON DELETE CASCADE
+  CONSTRAINT `fk_appt_customer` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_appt_provider` FOREIGN KEY (`provider_id`) REFERENCES `users` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT `fk_appt_type` FOREIGN KEY (`appointment_type_id`) REFERENCES `appointment_types` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

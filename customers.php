@@ -80,7 +80,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .panel-header small { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
     .panel-body { padding: 18px; }
 
-    /* ── Shared modal base ── */
+    /* Shared modal configs */
     .modal-dialog {
       width: min(640px, calc(100vw - 24px));
       border: 0;
@@ -100,8 +100,9 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .modal-card__footer { display: flex; justify-content: flex-end; gap: 12px; padding: 0 18px 18px; }
     .modal-card__footer button { border: 0; border-radius: 999px; padding: 9px 14px; background: rgba(226, 232, 240, 0.9); color: var(--text); font: inherit; font-weight: 700; cursor: pointer; }
     .modal-card__footer button.primary { background: var(--accent); color: #fff; }
+    .modal-card__footer button.danger { background: #dc2626; color: #fff; }
+    .modal-card__footer button.danger:hover { background: #b91c1c; }
 
-    /* ── Edit modal form ── */
     #customerForm { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     #customerForm .field { min-width: 0; }
     @media (max-width: 640px) { #customerForm { grid-template-columns: 1fr; } }
@@ -110,9 +111,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .field input, .field textarea, .field select { width: 100%; border: 1px solid rgba(15, 23, 42, 0.15); border-radius: 14px; padding: 10px 12px; font: inherit; color: var(--text); background: var(--panel); box-sizing: border-box; font-size: 0.92rem; }
     .field input:focus, .field textarea:focus, .field select:focus { outline: 3px solid rgba(36, 87, 255, 0.14); border-color: rgba(36, 87, 255, 0.5); }
 
-    /* ── Meta modal ── */
     #metaModal { width: min(680px, calc(100vw - 24px)); }
-
     .meta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     @media (max-width: 560px) { .meta-grid { grid-template-columns: 1fr; } }
 
@@ -126,11 +125,9 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .meta-item .meta-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 4px; }
     .meta-item .meta-value { font-size: 0.9rem; word-break: break-all; line-height: 1.45; }
     .meta-item .meta-value.empty { color: var(--muted); font-style: italic; }
-
     .meta-item.span-2 { grid-column: span 2; }
     @media (max-width: 560px) { .meta-item.span-2 { grid-column: span 1; } }
 
-    /* ── Signal pills ── */
     .signal-pills { display: flex; flex-wrap: wrap; gap: 5px; }
     .pill {
       display: inline-flex;
@@ -148,17 +145,14 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .pill.green  { background: rgba(16, 185, 129, 0.12); color: #065f46; border: 1px solid rgba(16, 185, 129, 0.25); }
     .pill.yellow { background: rgba(245, 158, 11, 0.12); color: #78350f; border: 1px solid rgba(245, 158, 11, 0.28); }
     .pill.red    { background: rgba(239, 68, 68, 0.10);  color: #7f1d1d; border: 1px solid rgba(239, 68, 68, 0.22); }
-
     .pill.green  .pill-dot { background: #10b981; }
     .pill.yellow .pill-dot { background: #f59e0b; }
     .pill.red    .pill-dot { background: #ef4444; }
 
-    /* dark mode pills */
     html[data-theme="dark"] .pill.green  { background: rgba(16, 185, 129, 0.18); color: #6ee7b7; border-color: rgba(16, 185, 129, 0.35); }
     html[data-theme="dark"] .pill.yellow { background: rgba(245, 158, 11, 0.18); color: #fcd34d; border-color: rgba(245, 158, 11, 0.35); }
     html[data-theme="dark"] .pill.red    { background: rgba(239, 68, 68, 0.18);  color: #fca5a5; border-color: rgba(239, 68, 68, 0.32); }
 
-    /* signals section inside meta modal */
     .signals-section { display: grid; gap: 8px; }
     .signal-row {
       display: flex;
@@ -184,7 +178,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
 
     .no-signals { color: var(--muted); font-size: 0.9rem; padding: 10px 0; }
 
-    /* ── Table ── */
     .customers-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
     .customers-table thead { background: rgba(15, 23, 42, 0.04); }
     .customers-table th { padding: 12px; text-align: left; font-weight: 700; color: var(--text); border-bottom: 2px solid var(--panel-border); }
@@ -196,26 +189,28 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .action-group button:hover { background: rgba(36, 87, 255, 0.07); }
     .action-group button.info-btn { background: rgba(36, 87, 255, 0.07); border-color: rgba(36, 87, 255, 0.2); color: var(--accent); }
     .action-group button.info-btn:hover { background: rgba(36, 87, 255, 0.14); }
+    
+    .action-group button.delete-btn { background: rgba(239, 68, 68, 0.05); border-color: rgba(239, 68, 68, 0.15); color: #b91c1c; }
+    .action-group button.delete-btn:hover { background: rgba(239, 68, 68, 0.12); }
 
-    /* ── Misc ── */
     .alert { padding: 14px 16px; border-radius: 16px; margin-bottom: 16px; }
     .alert.info    { background: rgba(36, 87, 255, 0.08);  border: 1px solid rgba(36, 87, 255, 0.2);  color: var(--text); }
     .alert.error   { background: rgba(239, 68, 68, 0.08);  border: 1px solid rgba(239, 68, 68, 0.2);  color: #7f1d1d; }
     .alert.success { background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); color: #065f46; }
 
     .override-note { background: var(--panel); border: 1px solid var(--panel-border); border-left: 3px solid rgba(245, 158, 11, 0.6); padding: 12px 14px; border-radius: 16px; margin: 10px 0; font-size: 0.9rem; color: var(--text); }
+    .danger-panel { background: rgba(239, 68, 68, 0.04); border: 1px solid rgba(239, 68, 68, 0.18); border-left: 4px solid #dc2626; padding: 16px; border-radius: 16px; margin: 4px 0; }
 
     html[data-theme="dark"] .modal-dialog { box-shadow: 0 28px 80px rgba(0, 0, 0, 0.32); }
     html[data-theme="dark"] .modal-card__footer button { background: rgba(30, 50, 80, 0.6); color: var(--text); }
     html[data-theme="dark"] .modal-card__footer button.primary { background: var(--accent); color: #fff; }
     html[data-theme="dark"] .override-note { background: rgba(20, 40, 70, 0.45); }
     html[data-theme="dark"] .field input, html[data-theme="dark"] .field textarea { background: rgba(15, 23, 42, 0.5); border-color: rgba(226, 232, 240, 0.12); }
-    html[data-theme="dark"] .field select {
-  background: rgba(15, 23, 42, 0.5);
-  border-color: rgba(226, 232, 240, 0.12);
-}
-html[data-theme="dark"] .meta-item { background: rgba(255, 255, 255, 0.03); }
+    html[data-theme="dark"] .field select { background: rgba(15, 23, 42, 0.5); border-color: rgba(226, 232, 240, 0.12); }
+    html[data-theme="dark"] .meta-item { background: rgba(255, 255, 255, 0.03); }
     html[data-theme="dark"] .action-group button { background: rgba(255,255,255,0.06); }
+    html[data-theme="dark"] .action-group button.delete-btn { color: #fca5a5; background: rgba(239, 68, 68, 0.1); }
+    html[data-theme="dark"] .danger-panel { background: rgba(239, 68, 68, 0.08); }
   </style>
 </head>
 <body>
@@ -380,6 +375,24 @@ html[data-theme="dark"] .meta-item { background: rgba(255, 255, 255, 0.03); }
     </div>
   </dialog>
 
+  <dialog id="deleteModal" class="modal-dialog">
+    <div class="modal-card">
+      <div class="modal-card__head">
+        <h2>Delete Customer Record</h2>
+      </div>
+      <div class="modal-card__body">
+        <div class="danger-panel">
+          <strong style="color:#c92a2a;">Warning: This action is permanent!</strong>
+          <p style="margin:8px 0 0; font-size:0.92rem;" id="deleteModalWarningText">Loading analysis context...</p>
+        </div>
+      </div>
+      <div class="modal-card__footer">
+        <button type="button" id="deleteModalCancelBtn">Cancel</button>
+        <button type="button" id="deleteModalConfirmBtn" class="danger">Delete Permanently</button>
+      </div>
+    </div>
+  </dialog>
+
   <script src="assets/js/global.js"></script>
   <script>
     // ── DOM refs ──────────────────────────────────────────────────────────────
@@ -408,6 +421,12 @@ html[data-theme="dark"] .meta-item { background: rgba(255, 255, 255, 0.03); }
     const modalAlert          = document.getElementById('modalAlert');
     const customersPagination = document.getElementById('customersPagination');
     
+    // New Deletion Modal Refs
+    const deleteModal            = document.getElementById('deleteModal');
+    const deleteModalWarningText = document.getElementById('deleteModalWarningText');
+    const deleteModalCancelBtn   = document.getElementById('deleteModalCancelBtn');
+    const deleteModalConfirmBtn  = document.getElementById('deleteModalConfirmBtn');
+
     const showSignalsToggle   = document.getElementById('showSignalsToggle');
     const thSignals           = document.getElementById('thSignals');
 
@@ -417,6 +436,7 @@ html[data-theme="dark"] .meta-item { background: rgba(255, 255, 255, 0.03); }
     let currentSearch= '';
     let currentCustomerMode      = 'create';
     let currentEditingCustomerId = null;
+    let customerIdPendingDelete  = null;
 
     const isDobColumnVisible = Boolean(settings.date_of_birth && settings.date_of_birth.display);
 
@@ -464,23 +484,9 @@ html[data-theme="dark"] .meta-item { background: rgba(255, 255, 255, 0.03); }
       if (el) el.value = value ?? '';
     }
 
-    // ── Signal pills (used in table column) ───────────────────────────────────
-    const SIGNAL_ICONS = {
-      shared_email:  '✉',
-      shared_mobile: '📱',
-      shared_ip:     '🌐',
-      shared_device: '💻',
-    };
-
-    const SIGNAL_LABELS = {
-      shared_email:  'Email',
-      shared_mobile: 'Mobile',
-      shared_ip:     'IP',
-      shared_device: 'Device',
-    };
-
     function buildPillsHtml(signals) {
       if (!signals || !signals.length) return '<span style="color:var(--muted); font-size:0.8rem;">—</span>';
+      const SIGNAL_LABELS = { shared_email: 'Email', shared_mobile: 'Mobile', shared_ip: 'IP', shared_device: 'Device' };
       return signals.map(s =>
         `<span class="pill ${s.severity}" title="${escapeHtml(s.label)}: ${s.count} customers share this">
           <span class="pill-dot"></span>${escapeHtml(SIGNAL_LABELS[s.type] || s.label)} ×${s.count}
@@ -488,8 +494,6 @@ html[data-theme="dark"] .meta-item { background: rgba(255, 255, 255, 0.03); }
       ).join('');
     }
 
-    // Cache of already-fetched signals keyed by customer id so re-renders don't
-    // re-fetch for every row that's already been loaded.
     const signalCache = {};
 
     async function fetchSignals(customerId) {
@@ -506,7 +510,7 @@ html[data-theme="dark"] .meta-item { background: rgba(255, 255, 255, 0.03); }
       }
     }
 
-    // ── Table ─────────────────────────────────────────────────────────────────
+    // ── Table Render ──────────────────────────────────────────────────────────
     function populateTable(customers) {
       customersTableBody.innerHTML = '';
       const isSignalsVisible = showSignalsToggle.checked;
@@ -537,6 +541,7 @@ html[data-theme="dark"] .meta-item { background: rgba(255, 255, 255, 0.03); }
             <div class="action-group">
               <button type="button" class="customer-edit-btn">Edit</button>
               <button type="button" class="info-btn customer-info-btn">Info</button>
+              <button type="button" class="delete-btn customer-delete-btn">Delete</button>
             </div>
           </td>
         `;
@@ -544,13 +549,13 @@ html[data-theme="dark"] .meta-item { background: rgba(255, 255, 255, 0.03); }
 
         row.querySelector('.customer-edit-btn').addEventListener('click', () => openCustomerModal('edit', c));
         row.querySelector('.customer-info-btn').addEventListener('click', () => openMetaModal(c));
+        row.querySelector('.customer-delete-btn').addEventListener('click', () => openDeleteModal(c));
 
         customersTableBody.appendChild(row);
       });
 
       customersTable.style.display = 'table';
 
-      // Fetch signals asynchronously for visible rows if the column is turned on
       if (isSignalsVisible) {
         customers.forEach(c => {
           fetchSignals(c.id).then(signals => {
@@ -561,7 +566,68 @@ html[data-theme="dark"] .meta-item { background: rgba(255, 255, 255, 0.03); }
       }
     }
 
-    // ── Pagination ────────────────────────────────────────────────────────────
+    // ── Open Delete Modal Context ─────────────────────────────────────────────
+    async function openDeleteModal(customer) {
+      customerIdPendingDelete = customer.id;
+      deleteModalConfirmBtn.disabled = true;
+      deleteModalWarningText.innerHTML = `Analyzing account connections for <strong>${escapeHtml(customer.full_name)}</strong>…`;
+      deleteModal.showModal();
+
+      try {
+        const resp = await fetch(`customers_api.php?action=delete_preview&id=${customer.id}`);
+        const data = await resp.json();
+
+        if (!resp.ok) throw new Error(data.error || 'Failed to fetch impact details.');
+
+        if (data.appointment_count > 0) {
+          const lastDateText = data.last_appointment ? formatDateTime(data.last_appointment) : 'N/A';
+          deleteModalWarningText.innerHTML = `
+            You are about to delete customer record <strong>${escapeHtml(customer.full_name)}</strong>.<br><br>
+            ⚠️ <span style="color:#b91c1c; font-weight:700;">CRITICAL CASCADE WARNING:</span> 
+            This customer has <strong>${data.appointment_count}</strong> associated appointment(s) registered. 
+            Proceeding will permanently delete all history and calendar bookings linked to this individual.<br><br>
+            <strong>Most recent appointment instance:</strong> ${escapeHtml(lastDateText)}`;
+        } else {
+          deleteModalWarningText.innerHTML = `Are you sure you want to delete <strong>${escapeHtml(customer.full_name)}</strong>? This customer has no existing appointments attached.`;
+        }
+        deleteModalConfirmBtn.disabled = false;
+      } catch (err) {
+        deleteModalWarningText.innerHTML = `<span style="color:#b91c1c;">Error analyzing dependencies: ${escapeHtml(err.message)}</span>`;
+        deleteModalConfirmBtn.disabled = false; // Let them try deleting anyway if cascade handles it
+      }
+    }
+
+    // ── Execute Delete Handler ────────────────────────────────────────────────
+    async function handleConfirmDelete() {
+      if (!customerIdPendingDelete) return;
+      try {
+        deleteModalConfirmBtn.disabled = true;
+        deleteModalCancelBtn.disabled = true;
+
+        const resp = await fetch('customers_api.php?action=delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customer_id: customerIdPendingDelete })
+        });
+        const json = await resp.json();
+        
+        if (!resp.ok) throw new Error(json.error || 'Failed to complete record deletion.');
+
+        delete signalCache[customerIdPendingDelete];
+        deleteModal.close();
+        showAlert(alertContainer, 'Customer and all cascade dependencies successfully removed.', 'success');
+        loadCustomers(searchInput.value.trim(), currentPage);
+      } catch (err) {
+        deleteModal.close();
+        showAlert(alertContainer, 'Error: ' + err.message, 'error');
+      } finally {
+        deleteModalConfirmBtn.disabled = false;
+        deleteModalCancelBtn.disabled = false;
+        customerIdPendingDelete = null;
+      }
+    }
+
+    // ── Pagination & Loading ──────────────────────────────────────────────────
     function buildPagination(total) {
       const totalPages = Math.max(1, Math.ceil(total / pageSize));
       customersPagination.innerHTML = `
@@ -609,7 +675,6 @@ html[data-theme="dark"] .meta-item { background: rgba(255, 255, 255, 0.03); }
       }
     }
 
-    // ── Edit modal ────────────────────────────────────────────────────────────
     function getFormData() {
       const data = {};
       customerForm.querySelectorAll('input, select').forEach(f => { data[f.name] = f.value; });
@@ -667,7 +732,6 @@ html[data-theme="dark"] .meta-item { background: rgba(255, 255, 255, 0.03); }
           showAlert(modalAlert, json.error || 'Error saving customer', 'error');
           return;
         }
-        // Bust signal cache for this customer since data may have changed
         if (isEdit) delete signalCache[currentEditingCustomerId];
         showAlert(alertContainer, isEdit ? 'Customer updated successfully!' : 'Customer created successfully!', 'success');
         resetForm();
@@ -678,73 +742,33 @@ html[data-theme="dark"] .meta-item { background: rgba(255, 255, 255, 0.03); }
       }
     }
 
-    // ── Meta / signals modal ──────────────────────────────────────────────────
+    // ── Customer Meta Modal Render ────────────────────────────────────────────
     function metaValue(val) {
       const v = String(val ?? '').trim();
       return v ? `<span class="meta-value">${escapeHtml(v)}</span>` : `<span class="meta-value empty">Not recorded</span>`;
     }
 
-    const SIGNAL_TYPE_LABELS = {
-      shared_email:  'Shared email address',
-      shared_mobile: 'Shared mobile number',
-      shared_ip:     'Shared IP address',
-      shared_device: 'Shared device fingerprint',
-    };
-
-    const SIGNAL_SEVERITY_ICONS = { green: '🟢', yellow: '🟡', red: '🔴' };
-
     function renderMetaModalContent(customer, signals) {
       const rows = [
-        { label: 'Full name',    value: customer.full_name,      span: false },
-        { label: 'Email',        value: customer.email,          span: false },
-        { label: 'Mobile',       value: customer.mobile,         span: false },
+        { label: 'Full name',    value: customer.full_name,       span: false },
+        { label: 'Email',        value: customer.email,           span: false },
+        { label: 'Mobile',       value: customer.mobile,          span: false },
         { label: 'Gender',       value: formatGender(customer.gender), span: false },
-        { label: 'Date of birth',value: customer.date_of_birth,  span: false },
+        { label: 'Date of birth',value: customer.date_of_birth,   span: false },
         { label: 'Date added',   value: formatDateTime(customer.date_added), span: false },
         { label: 'Last seen',    value: formatDateTime(customer.last_seen_at), span: false },
-        { label: 'IP address',   value: customer.last_ip,        span: false },
-        { label: 'Timezone',     value: customer.last_timezone,  span: false },
-        { label: 'Screen',       value: customer.last_screen,    span: false },
-        { label: 'Locale',       value: customer.last_locale,    span: false },
+        { label: 'IP address',   value: customer.last_ip,         span: false },
+        { label: 'Timezone',     value: customer.last_timezone,   span: false },
+        { label: 'Screen',       value: customer.last_screen,     span: false },
+        { label: 'Locale',       value: customer.last_locale,     span: false },
         { label: 'User agent',   value: customer.last_user_agent, span: true },
       ];
 
-      const metaHtml = `
-        <div class="meta-grid">
-          ${rows.map(r => `
-            <div class="meta-item${r.span ? ' span-2' : ''}">
-              <div class="meta-label">${escapeHtml(r.label)}</div>
-              ${metaValue(r.value)}
-            </div>`).join('')}
-        </div>`;
+      const metaHtml = `<div class="meta-grid">${rows.map(r => `<div class="meta-item${r.span ? ' span-2' : ''}"><div class="meta-label">${escapeHtml(r.label)}</div>${metaValue(r.value)}</div>`).join('')}</div>`;
 
-      let signalsHtml = '';
-      if (!signals.length) {
-        signalsHtml = `<p class="no-signals">No duplicate signals detected for this customer.</p>`;
-      } else {
-        signalsHtml = `<div class="signals-section">` +
-          signals.map(s => `
-            <div class="signal-row ${s.severity}">
-              <div class="signal-icon">${SIGNAL_SEVERITY_ICONS[s.severity] || '⚪'}</div>
-              <div class="signal-body">
-                <div class="signal-title">${escapeHtml(SIGNAL_TYPE_LABELS[s.type] || s.label)} — ${s.count} customer${s.count !== 1 ? 's' : ''} share this</div>
-                <div class="signal-detail">${escapeHtml(s.value)}</div>
-              </div>
-            </div>`).join('') +
-          `</div>`;
-      }
+      let signalsHtml = !signals.length ? `<p class="no-signals">No duplicate signals detected for this customer.</p>` : `<div class="signals-section">` + signals.map(s => `<div class="signal-row ${s.severity}"><div class="signal-icon">${{green:'🟢',yellow:'🟡',red:'🔴'}[s.severity] || '⚪'}</div><div class="signal-body"><div class="signal-title">${escapeHtml(s.label)} — ${s.count} share this</div><div class="signal-detail">${escapeHtml(s.value)}</div></div></div>`).join('') + `</div>`;
 
-      return `
-        <div style="display:grid; gap:18px;">
-          <div>
-            <div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:10px;">Session & contact metadata</div>
-            ${metaHtml}
-          </div>
-          <div>
-            <div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:10px;">Duplicate signals</div>
-            ${signalsHtml}
-          </div>
-        </div>`;
+      return `<div style="display:grid; gap:18px;"><div><div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:10px;">Session & contact metadata</div>${metaHtml}</div><div><div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:10px;">Duplicate signals</div>${signalsHtml}</div></div>`;
     }
 
     async function openMetaModal(customer) {
@@ -757,23 +781,19 @@ html[data-theme="dark"] .meta-item { background: rgba(255, 255, 255, 0.03); }
           fetch(`customers_api.php?action=meta&id=${customer.id}`),
           fetch(`customers_api.php?action=signals&id=${customer.id}`)
         ]);
-
         const metaJson = metaResp.ok ? await metaResp.json() : {};
         const sigJson  = sigResp.ok  ? await sigResp.json()  : {};
-
         const fullCustomer = metaJson.customer || customer;
         const signals      = sigJson.signals   || [];
 
-        // Update cache too
         signalCache[customer.id] = signals;
-
         metaModalBody.innerHTML = renderMetaModalContent(fullCustomer, signals);
       } catch (err) {
         metaModalBody.innerHTML = `<div class="alert error">Failed to load customer info: ${escapeHtml(err.message)}</div>`;
       }
     }
 
-    // ── Event wiring ──────────────────────────────────────────────────────────
+    // ── Event Wiring ──────────────────────────────────────────────────────────
     addCustomerBtn.addEventListener('click', () => openCustomerModal('create'));
     cancelButton.addEventListener('click',   () => customerModal.close());
     submitButton.addEventListener('click',   submitCustomer);
@@ -781,19 +801,17 @@ html[data-theme="dark"] .meta-item { background: rgba(255, 255, 255, 0.03); }
     metaModalClose.addEventListener('click',       () => metaModal.close());
     metaModalCloseFooter.addEventListener('click', () => metaModal.close());
 
+    // Wire up the new validation dialog buttons
+    deleteModalCancelBtn.addEventListener('click', () => deleteModal.close());
+    deleteModalConfirmBtn.addEventListener('click', handleConfirmDelete);
+
     searchBtn.addEventListener('click', () => loadCustomers(searchInput.value.trim(), 1));
     clearBtn.addEventListener('click',  () => { searchInput.value = ''; loadCustomers('', 1); });
     sortSelect?.addEventListener('change', () => loadCustomers(searchInput.value.trim(), 1));
     searchInput.addEventListener('keypress', e => { if (e.key === 'Enter') loadCustomers(searchInput.value.trim(), 1); });
 
-    // Handle toggle switch behavior explicitly
     showSignalsToggle.addEventListener('change', () => {
-      if (showSignalsToggle.checked) {
-        thSignals.style.display = '';
-      } else {
-        thSignals.style.display = 'none';
-      }
-      // Re-render the existing active layout context immediately
+      thSignals.style.display = showSignalsToggle.checked ? '' : 'none';
       loadCustomers(searchInput.value.trim(), currentPage);
     });
 
