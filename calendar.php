@@ -1922,6 +1922,26 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     setInterval(updateServerClock, 1000);
     setInterval(syncServerClock, 60000);
 
+    // Logic for auto refresh page when modal is not open, to ensure calendar data is up to date for users who keep the page open for a long time
+    function isAnyBookingDialogOpen() {
+      return Boolean(
+        (bookingModal && bookingModal.open) ||
+        (dailyNoteModal && dailyNoteModal.open) ||
+        (bookingWarningModal && bookingWarningModal.open) ||
+        (appointmentEmailModal && appointmentEmailModal.open) ||
+        (closeConfirmationModal && closeConfirmationModal.open)
+      );
+    }
+
+    setInterval(function() {
+      if (isAnyBookingDialogOpen()) {
+        return;
+      }
+      if (window.calendarInstance) {
+        window.calendarInstance.refetchEvents();
+      }
+    }, 60000);
+
     function getSelectedDurationMinutes() {
       const option = appointmentTypeSelect.options[appointmentTypeSelect.selectedIndex];
       const parsed = Number(option?.dataset?.duration || fallbackDurationMinutes);

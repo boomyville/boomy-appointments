@@ -768,8 +768,6 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
     <h3>This email and mobile combination already exists</h3>
     <p id="duplicateModalText">Choose whether to continue, cancel, or switch to the existing customer profile.</p>
     
-    <!-- The duplicateMatchList container has been completely removed from here for privacy -->
-
     <div class="modal-actions">
       <button type="button" class="btn ghost" id="duplicateCancelBtn">Cancel</button>
       <button type="button" class="btn" id="duplicateUseExistingBtn">Use existing profile</button>
@@ -1266,7 +1264,7 @@ if (emailToCheck && !validateEmail(emailToCheck)) {
         ['Date', selectedDateText],
         ['Time', selectedTimeText]
       ].map((row) => {
-        return '<div class="summary-item"><span>' + escapeHtml(row[0]) + '</span><export strong>' + escapeHtml(row[1]) + '</strong></div>';
+        return '<div class="summary-item"><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1]) + '</strong></div>';
       }).join('');
 
       if (state.customerMode === 'existing' && state.customerCheck && state.customerCheck.requires_verification) {
@@ -1312,7 +1310,6 @@ if (emailToCheck && !validateEmail(emailToCheck)) {
       const appointment = result.appointment || {};
       const customer = result.customer || {};
       const pending = Boolean(result.pending);
-      const verifyUrl = result.verify_url || (result.appointment ? ('verify_appointment.php?token=' + encodeURIComponent(result.appointment.hash_key || '')) : 'verify_appointment.php');
       const appointmentDate = String(appointment.start_time || state.selectedDate || '').slice(0, 10);
       const appointmentTime = appointment.start_time ? formatTimeLabel(String(appointment.start_time)) : (state.selectedSlot ? formatTimeLabel(String(state.selectedSlot)) : '-');
 
@@ -1329,7 +1326,7 @@ if (emailToCheck && !validateEmail(emailToCheck)) {
         '<div class="summary-item"><span>Provider</span><strong>' + escapeHtml((state.providers.find((item) => String(item.id) === String(state.providerId)) || {}).full_name || '-') + '</strong></div>',
         '<div class="summary-item"><span>Status</span><strong>' + escapeHtml(pending ? 'Pending verification' : (appointment.status || 'booked')) + '</strong></div>',
         '</div>',
-        pending ? '<div class="actions"><a class="btn primary" href="' + escapeHtml(verifyUrl) + '">Open verification link</a></div>' : '<div class="actions"><button type="button" class="btn primary" id="startOverBtn">Book another appointment</button></div>'
+        pending ? '<div class="actions"><button class="btn primary" disabled style="cursor: not-allowed; opacity: 0.65;">Check your email</button></div>' : '<div class="actions"><button type="button" class="btn primary" id="startOverBtn">Book another appointment</button></div>'
       ].join('');
       setStep(5);
       if (!pending) {
