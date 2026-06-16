@@ -520,9 +520,15 @@ function is_logged_in(): bool
 
 function require_login(): void
 {
-    init_session();
-    if (!is_logged_in()) {
+    if (empty($_SESSION['user'])) {
         header('Location: login.php');
+        exit;
+    }
+
+    // Validate session binding + rolling expiry
+    if (!validate_and_refresh_session()) {
+        logout_user();
+        header('Location: login.php?reason=session_expired');
         exit;
     }
 }
@@ -530,16 +536,17 @@ function require_login(): void
 // Clear session and cookies to log the user out
 function logout_user(): void
 {
-    init_session();
-    // Clear session array
-    $_SESSION = [];
-    // Remove session cookie if used
-    if (ini_get('session.use_cookies')) {
-        $params = session_get_cookie_params();
-        setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'] ?? false, $params['httponly'] ?? true);
+    $sessionId = session_id();
+    if ($sessionId) {
+        invalidate_session_record($sessionId);
     }
-    // Destroy session
-    @session_destroy();
+    $_SESSION = [];
+    if (ini_get('session.use_cookies')) {
+        $p = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000,
+            $p['path'], $p['domain'], $p['secure'], $p['httponly']);
+    }
+    session_destroy();
 }
 
 // CSRF helpers
@@ -2263,4 +2270,140 @@ function process_automatic_no_shows(): void
             error_log('Auto No-Show Routine Error: ' . $e->getMessage());
         }
     }
+}
+
+// ── Session management ────────────────────────────────────────────────────────
+
+function get_session_lifetime_hours(): int
+{
+    $raw = (int) get_setting('session_lifetime_hours', '18');
+    return max(1, $raw);
+}
+
+function get_client_ip_for_session(): string
+{
+    $ip = $_SERVER['HTTP_X_FORWARDED_FOR']
+        ?? $_SERVER['HTTP_X_REAL_IP']
+        ?? $_SERVER['REMOTE_ADDR']
+        ?? '';
+    if (str_contains($ip, ',')) {
+        $ip = trim(explode(',', $ip)[0]);
+    }
+    return substr($ip, 0, 45);
+}
+
+function get_client_ua_for_session(): string
+{
+    return substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 512);
+}
+
+function create_session_record(int $userId): void
+{
+    $db        = get_db();
+    $sessionId = session_id();
+    $ip        = get_client_ip_for_session();
+    $ua        = get_client_ua_for_session();
+    $now       = date('Y-m-d H:i:s');
+
+    // Upsert — handles the edge case where the same session_id is reused
+    $stmt = $db->prepare("
+        INSERT INTO sessions (session_id, user_id, ip_address, user_agent, created_at, last_activity_at, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, 1)
+        ON DUPLICATE KEY UPDATE
+            user_id          = VALUES(user_id),
+            ip_address       = VALUES(ip_address),
+            user_agent       = VALUES(user_agent),
+            last_activity_at = VALUES(last_activity_at),
+            is_active        = 1
+    ");
+    $stmt->execute([$sessionId, $userId, $ip, $ua, $now, $now]);
+}
+
+function validate_and_refresh_session(): bool
+{
+    if (empty($_SESSION['user']['id'])) return false;
+
+    $db        = get_db();
+    $sessionId = session_id();
+    $now       = date('Y-m-d H:i:s');
+
+    $stmt = $db->prepare("
+        SELECT * FROM sessions
+        WHERE session_id = ? AND is_active = 1
+        LIMIT 1
+    ");
+    $stmt->execute([$sessionId]);
+    $record = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$record) return false;
+
+    // Rolling expiry check
+    $lifetimeHours   = get_session_lifetime_hours();
+    $lastActivity    = new DateTimeImmutable($record['last_activity_at']);
+    $expiresAt       = $lastActivity->modify("+{$lifetimeHours} hours");
+    $nowDt           = new DateTimeImmutable($now);
+
+    if ($nowDt > $expiresAt) {
+        invalidate_session_record($sessionId);
+        return false;
+    }
+
+    // Binding check — only invalidate if BOTH ip AND ua changed
+    $currentIp = get_client_ip_for_session();
+    $currentUa = get_client_ua_for_session();
+    $ipChanged  = $record['ip_address'] !== $currentIp;
+    $uaChanged  = $record['user_agent'] !== $currentUa;
+
+    if ($ipChanged && $uaChanged) {
+        invalidate_session_record($sessionId);
+        return false;
+    }
+
+    // Still valid — refresh last_activity_at
+    $stmt = $db->prepare("
+        UPDATE sessions SET last_activity_at = ? WHERE session_id = ?
+    ");
+    $stmt->execute([$now, $sessionId]);
+
+    return true;
+}
+
+function invalidate_session_record(string $sessionId): void
+{
+    $db = get_db();
+    $stmt = $db->prepare("UPDATE sessions SET is_active = 0 WHERE session_id = ?");
+    $stmt->execute([$sessionId]);
+}
+
+function invalidate_all_user_sessions(int $userId): void
+{
+    $db = get_db();
+    $stmt = $db->prepare("UPDATE sessions SET is_active = 0 WHERE user_id = ?");
+    $stmt->execute([$userId]);
+}
+
+function get_active_sessions_for_user(int $userId): array
+{
+    $db              = get_db();
+    $lifetimeHours   = get_session_lifetime_hours();
+    $currentSessionId = session_id();
+
+    $stmt = $db->prepare("
+        SELECT
+            id,
+            session_id,
+            ip_address,
+            user_agent,
+            created_at,
+            last_activity_at,
+            DATE_ADD(last_activity_at, INTERVAL ? HOUR) AS expires_at,
+            (session_id = ?) AS is_current
+        FROM sessions
+        WHERE user_id = ?
+          AND is_active = 1
+          AND DATE_ADD(last_activity_at, INTERVAL ? HOUR) > NOW()
+        ORDER BY last_activity_at DESC
+    ");
+    $stmt->execute([$lifetimeHours, $currentSessionId, $userId, $lifetimeHours]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }

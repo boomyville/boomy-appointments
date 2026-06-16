@@ -191,6 +191,7 @@ INSERT INTO `settings` (`setting_key`,`setting_value`) VALUES
 ('password_require_uppercase','1'),
 ('password_require_number','1'),
 ('password_require_symbol','1'),
+('booking_max_advance_days','60'),
 ('booking_firstname_display','1'),
 ('booking_firstname_required','1'),
 ('booking_firstname_letters_only','0'),
@@ -238,6 +239,7 @@ INSERT INTO `settings` (`setting_key`,`setting_value`) VALUES
 ('smtp_username',''),
 ('smtp_password',''),
 ('mail_from_address',''),
+('session_lifetime_hours','24'),
 ('mail_from_name','Boomy Appointments');
 
 -- Seed appointment types
@@ -257,4 +259,19 @@ CREATE TABLE `daily_notes` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_daily_note_date_provider` (`note_date`, `provider_id`),
   CONSTRAINT `fk_daily_note_provider` FOREIGN KEY (`provider_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `sessions` (
+  `id`               INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `session_id`       VARCHAR(128) NOT NULL,
+  `user_id`          INT UNSIGNED NOT NULL,
+  `ip_address`       VARCHAR(45)  NOT NULL DEFAULT '',
+  `user_agent`       VARCHAR(512) NOT NULL DEFAULT '',
+  `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `last_activity_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `is_active`        TINYINT(1)   NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_session_id` (`session_id`),
+  KEY `idx_user_id` (`user_id`),
+  KEY `idx_last_activity` (`last_activity_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

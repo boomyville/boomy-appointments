@@ -11,7 +11,11 @@ function booking_api_response(array $payload, int $status = 200): void
     echo json_encode($payload);
     exit;
 }
-
+function booking_max_advance_date(): DateTimeImmutable
+{
+    $maxDays = max(1, (int) get_setting('booking_max_advance_days', '60'));
+    return booking_server_now()->setTime(0, 0, 0)->modify('+' . $maxDays . ' days');
+}
 function booking_timezone(): DateTimeZone
 {
     return new DateTimeZone(get_app_timezone_name());
@@ -100,6 +104,9 @@ function booking_validate_day_slots(
     $todayStart  = $serverNow->setTime(0, 0, 0);
     $dayStartDate = $date->setTime(0, 0, 0);
     if ($dayStartDate < $todayStart) return [];
+
+    $maxAdvanceDate = booking_max_advance_date();
+    if ($dayStartDate > $maxAdvanceDate) return [];
 
     $dayStart  = booking_visible_time($date, (string) $bookingSettings['start_time']);
     $dayEnd    = booking_visible_time($date, (string) $bookingSettings['end_time']);
@@ -210,6 +217,8 @@ function booking_build_month_view(int $providerId, int $appointmentTypeId, DateT
     $serverNow = booking_server_now();
     $todayStart = $serverNow->setTime(0, 0, 0);
 
+    $maxAdvanceDate = booking_max_advance_date();
+
     // ── Prefetch all appointments for this provider this month ──────────────
     $db = get_db();
     $monthStartStr = $monthStart->format('Y-m-d 00:00:00');
@@ -257,9 +266,10 @@ function booking_build_month_view(int $providerId, int $appointmentTypeId, DateT
     $cursor = $monthStart->setTime(0, 0, 0);
     while ($cursor < $monthEnd) {
         $isPastDay = $cursor < $todayStart;
-        $slots = $isPastDay ? [] : booking_validate_day_slots(
+        $isBeyondAdvanceWindow = $cursor > $maxAdvanceDate;
+        $slots = ($isPastDay || $isBeyondAdvanceWindow) ? [] : booking_validate_day_slots(
             $providerId, $cursor, $appointmentTypeId,
-            $monthAppointments, $recurringUnavail, $singleUnavail // ← pass prefetched data
+            $monthAppointments, $recurringUnavail, $singleUnavail
         );
         $days[] = [
             'date'      => $cursor->format('Y-m-d'),
@@ -267,8 +277,8 @@ function booking_build_month_view(int $providerId, int $appointmentTypeId, DateT
             'weekday'   => (int) $cursor->format('w'),
             'in_month'  => true,
             'is_today'  => $cursor->format('Y-m-d') === $todayStart->format('Y-m-d'),
-            'has_slots' => !$isPastDay && !empty($slots),
-            'slot_count'=> $isPastDay ? 0 : count($slots),
+            'has_slots' => !$isPastDay && !$isBeyondAdvanceWindow && !empty($slots),
+            'slot_count'=> ($isPastDay || $isBeyondAdvanceWindow) ? 0 : count($slots),
         ];
         $cursor = $cursor->modify('+1 day');
     }
@@ -473,6 +483,7 @@ try {
             'timezone' => get_app_timezone_name(),
             'settings' => $settings,
             'prevent_same_user_booking' => (int) get_setting('prevent_same_user_booking', 0), // <-- EXPLICIT ROOT PROPERTY
+            'booking_max_advance_days' => (int) get_setting('booking_max_advance_days', 60),
             'customer_field_settings' => get_customer_field_settings(),
             'appointment_types' => $appointmentTypes,
             'providers' => $providers,
@@ -504,7 +515,10 @@ if ($action === 'month' && $method === 'GET') {
     if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1) {
         booking_api_response(['error' => 'appointment type not found'], 404);
     }
-
+    $maxAdvanceDate = booking_max_advance_date();
+    if ($month->setTime(0,0,0) > $maxAdvanceDate) {
+        booking_api_response(['ok' => true, 'month' => null, 'out_of_range' => true]);
+    }
     $monthView = booking_build_month_view($providerId, $appointmentTypeId, $month);
     $__t['after_build_month'] = microtime(true);
 

@@ -37,9 +37,10 @@ if (empty($_SESSION['user'])) {
 }
 
 try {
+    $db = get_db();
     if ($action === 'get') {
         $keys = [
-            'site_name', 'root_url', 'organization_email', 'organization_number', 'date_format', 'booking_deadline_hours',
+            'site_name', 'root_url', 'organization_email', 'organization_number', 'date_format', 'booking_deadline_hours', 'booking_max_advance_days',
             'booking_firstname_display', 'booking_firstname_required', 'booking_firstname_letters_only', 'booking_firstname_min', 'booking_firstname_max',
             'booking_lastname_display', 'booking_lastname_required', 'booking_lastname_letters_only', 'booking_lastname_min', 'booking_lastname_max',
             'booking_middlename_display', 'booking_middlename_required', 'booking_middlename_letters_only', 'booking_middlename_min', 'booking_middlename_max',
@@ -172,7 +173,7 @@ try {
                 'booking_dob_display', 'booking_dob_required', 'booking_gender_display', 'booking_gender_required'
             ],
             'booking' => [
-                'booking_deadline_hours',
+                'booking_deadline_hours', 'booking_max_advance_days',
                 'booking_show_monday', 'booking_show_tuesday', 'booking_show_wednesday', 'booking_show_thursday', 'booking_show_friday', 'booking_show_saturday', 'booking_show_sunday',
                 'booking_start_time', 'booking_end_time', 'booking_week_start_day', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes', 'auto_no_show', 'prevent_same_user_booking', 'disable_online_booking'
             ],
@@ -182,7 +183,8 @@ try {
             ],
             'phpmailer' => [
                 'smtp_host', 'smtp_port', 'smtp_encryption', 'smtp_username', 'smtp_password', 'mail_from_address', 'mail_from_name'
-            ]
+            ],
+            'sessions' => ['session_lifetime_hours']
         ];
 
         $tab = $data['tab'] ?? 'general';
@@ -202,8 +204,19 @@ try {
             }
         }
 
+        if ($tab === 'sessions') {
+    $lifetime = (int)($data['session_lifetime_hours'] ?? 18);
+    if ($lifetime < 1 || $lifetime > 2000) {
+        http_response_code(422);
+        echo json_encode(['error' => 'Session lifetime must be between 1 and 2000 hours']);
+        exit;
+    }
+    $data['session_lifetime_hours'] = (string)$lifetime;
+}
+
         if ($tab === 'booking') {
-            $deadline_hours = (int) ($data['booking_deadline_hours'] ?? 24);
+            $deadline_hours = (int) ($data['booking_deadline_hours'] ?? 24); 
+            $max_advance_days = (int) ($data['booking_max_advance_days'] ?? 60);
             $start_time = trim((string) ($data['booking_start_time'] ?? '09:00'));
             $end_time = trim((string) ($data['booking_end_time'] ?? '21:00'));
             $week_start_day = normalize_booking_week_start_day_setting($data['booking_week_start_day'] ?? '0');
@@ -214,6 +227,11 @@ try {
             if ($deadline_hours < 0) {
                 http_response_code(422);
                 echo json_encode(['error' => 'Booking deadline must be zero or greater']);
+                exit;
+            }
+            if ($max_advance_days < 1) {
+                http_response_code(422);
+                echo json_encode(['error' => 'Max advance booking days must be at least 1']);
                 exit;
             }
 
@@ -279,6 +297,7 @@ try {
             $data['booking_calendar_height'] = $calendarHeight === 'auto' ? 'auto' : (string) $calendarHeight;
             $data['booking_deadline_hours'] = (string) $deadline_hours;
             $data['booking_snap_minutes'] = (string) $snap_minutes;
+            $data['booking_max_advance_days'] = (string) $max_advance_days;
             $data['auto_no_show'] = isset($data['auto_no_show']) && $data['auto_no_show'] === '1' ? '1' : '0';
             $data['prevent_same_user_booking'] = (string) max(0, (int)($data['prevent_same_user_booking'] ?? 0));
             
@@ -472,6 +491,7 @@ try {
     }
 
     if ($action === 'login_attempts') {
+        $db = get_db(); 
         if (empty($_SESSION['user']['role']) || $_SESSION['user']['role'] !== 'admin') {
             http_response_code(403);
             echo json_encode(['error' => 'forbidden']);
@@ -523,6 +543,7 @@ try {
     }
 
     if ($action === 'change_password') {
+        $db = get_db();
         $raw = file_get_contents('php://input');
         $data = $raw ? json_decode($raw, true) : $_POST;
         $token = $data['csrf_token'] ?? null;
@@ -574,6 +595,72 @@ try {
         echo json_encode(['ok' => true, 'message' => 'Password changed successfully']);
         exit;
     }
+
+    if ($action === 'sessions') {
+    if (empty($_SESSION['user']['id'])) {
+        http_response_code(401);
+        echo json_encode(['error' => 'unauthenticated']);
+        exit;
+    }
+
+    $userId = (int)$_SESSION['user']['id'];
+
+    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+        $sessions = get_active_sessions_for_user($userId);
+        echo json_encode(['ok' => true, 'sessions' => $sessions]);
+        exit;
+    }
+
+    // POST — revoke
+    $raw   = file_get_contents('php://input');
+    $data  = $raw ? json_decode($raw, true) : $_POST;
+    $token = $data['csrf_token'] ?? null;
+    if (!verify_csrf_token($token)) {
+        http_response_code(400);
+        echo json_encode(['error' => 'csrf']);
+        exit;
+    }
+
+    $command = $data['command'] ?? '';
+
+    if ($command === 'revoke_all_others') {
+        $db = get_db();
+        $currentSessionId = session_id();
+        $stmt = $db->prepare("
+            UPDATE sessions SET is_active = 0
+            WHERE user_id = ? AND session_id != ?
+        ");
+        $stmt->execute([$userId, $currentSessionId]);
+        echo json_encode(['ok' => true, 'message' => 'All other sessions revoked']);
+        exit;
+    }
+
+    if ($command === 'revoke') {
+        $targetSessionId = trim((string)($data['session_id'] ?? ''));
+        if ($targetSessionId === '') {
+            http_response_code(422);
+            echo json_encode(['error' => 'session_id is required']);
+            exit;
+        }
+        // Verify it belongs to this user
+        $db = get_db();
+        $stmt = $db->prepare("SELECT user_id FROM sessions WHERE session_id = ? LIMIT 1");
+        $stmt->execute([$targetSessionId]);
+        $row = $stmt->fetch();
+        if (!$row || (int)$row['user_id'] !== $userId) {
+            http_response_code(403);
+            echo json_encode(['error' => 'forbidden']);
+            exit;
+        }
+        invalidate_session_record($targetSessionId);
+        echo json_encode(['ok' => true, 'message' => 'Session revoked']);
+        exit;
+    }
+
+    http_response_code(400);
+    echo json_encode(['error' => 'unknown command']);
+    exit;
+}
 
     http_response_code(400);
     echo json_encode(['error' => 'unknown action']);

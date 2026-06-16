@@ -35,6 +35,7 @@ $org_email = get_setting('organization_email', '');
 $org_number = get_setting('organization_number', '');
 $date_format = get_setting('date_format', 'd/m/Y H:i');
 $booking_deadline = get_setting('booking_deadline_hours', '24');
+$booking_max_advance_days = (int) get_setting('booking_max_advance_days', '60');
 
 // Booking fields
 $firstname_display = (int) get_setting('booking_firstname_display', '1');
@@ -149,6 +150,7 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
     <button class="tab" data-tab="customer_registration" role="tab">Customer Registration</button>
     <button class="tab" data-tab="booking" role="tab">Booking</button>
     <button class="tab" data-tab="authentication" role="tab">Authentication</button>
+    <button class="tab" data-tab="sessions" role="tab">Sessions</button>
     <button class="tab" data-tab="phpmailer" role="tab">PHPMailer</button>
     <button class="tab" data-tab="login_attempts" role="tab">Login Attempts</button>
   </nav>
@@ -362,6 +364,7 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
         <legend>Visible Time Range</legend>
         <div class="field-controls">
           <label>Booking deadline (hours) <input type="number" name="booking_deadline_hours" min="0" step="1" value="<?php echo htmlspecialchars($booking_deadline); ?>"></label>
+          <label>Max advance booking (days) <input type="number" name="booking_max_advance_days" min="1" step="1" value="<?php echo (int) $booking_max_advance_days; ?>"></label>
           <label>Default start time <input type="time" name="booking_start_time" value="<?php echo htmlspecialchars($booking_start_time); ?>"></label>
           <label>Default end time <input type="time" name="booking_end_time" value="<?php echo htmlspecialchars($booking_end_time); ?>"></label>
         </div>
@@ -546,7 +549,35 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
       });
     </script>
   </section>
+<!-- SESSIONS TAB -->
+<section id="tab-sessions" class="tab-panel">
+  <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+    <div>
+      <h2 style="margin:0 0 4px;">Active Sessions</h2>
+      <p style="margin:0; color:#666; font-size:0.9em;">Your currently active login sessions. If both IP and user-agent change simultaneously, the session is automatically invalidated.</p>
+    </div>
+    <button type="button" id="revokeAllSessionsBtn" class="danger-btn">Revoke all other sessions</button>
+  </div>
 
+  <form id="sessionLifetimeForm" data-api data-no-reload="true" action="settings_api.php?action=save" method="post" style="margin-bottom:24px;">
+    <fieldset class="field-group">
+      <legend>Session Lifetime</legend>
+      <label for="session_lifetime_hours">Lifetime (hours)</label>
+      <input id="session_lifetime_hours" name="session_lifetime_hours" type="number" min="1" max="2000"
+             value="<?php echo (int) get_setting('session_lifetime_hours', '18'); ?>">
+      <p style="font-size:0.9em; color:#666; margin-top:4px;">
+        Sessions expire if inactive for this many hours. Set to <strong>2000</strong> to effectively never expire.
+        Active sessions extend automatically on each request.
+      </p>
+      <input type="hidden" name="tab" value="sessions">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <button type="submit" style="margin-top:12px;">Save Session Settings</button>
+      <div id="sessionsMsg"></div>
+    </fieldset>
+  </form>
+
+  <div id="sessionsTableContainer">Loading sessions...</div>
+</section>
   <!-- PHPMAILER TAB -->
   <section id="tab-phpmailer" class="tab-panel">
     <form id="phpmailerForm" data-api data-no-reload="true" action="settings_api.php?action=save" method="post">
@@ -972,6 +1003,125 @@ function htmlspecialchars(str) {
   };
   return str.replace(/[&<>"']/g, m => map[m]);
 }
+
+async function loadSessions() {
+  const container = document.getElementById('sessionsTableContainer');
+  if (!container) return;
+  container.innerHTML = 'Loading...';
+  try {
+    const res = await fetch('settings_api.php?action=sessions', { credentials: 'include' });
+    const data = await res.json();
+    if (!data.ok) { container.innerHTML = '<p class="error-msg">' + (data.error || 'Failed to load') + '</p>'; return; }
+
+    const rows = data.sessions || [];
+    if (!rows.length) { container.innerHTML = '<p>No active sessions found.</p>'; return; }
+
+    const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+
+    let html = '<table style="width:100%; border-collapse:collapse;">'
+      + '<thead><tr>'
+      + '<th style="text-align:left; padding:8px; border-bottom:1px solid #ccc;">IP Address</th>'
+      + '<th style="text-align:left; padding:8px; border-bottom:1px solid #ccc;">Browser / Device</th>'
+      + '<th style="text-align:left; padding:8px; border-bottom:1px solid #ccc;">Started</th>'
+      + '<th style="text-align:left; padding:8px; border-bottom:1px solid #ccc;">Last Active</th>'
+      + '<th style="text-align:left; padding:8px; border-bottom:1px solid #ccc;">Expires</th>'
+      + '<th style="text-align:left; padding:8px; border-bottom:1px solid #ccc;">Action</th>'
+      + '</tr></thead><tbody>';
+
+    rows.forEach(s => {
+      const isCurrent = s.is_current == 1;
+      const ua = parseUserAgent(s.user_agent || '');
+      html += '<tr style="' + (isCurrent ? 'background:rgba(36,87,255,0.06);' : '') + '">'
+        + '<td style="padding:8px; border-bottom:1px solid #eee;">' + htmlspecialchars (s.ip_address) + '</td>'
+        + '<td style="padding:8px; border-bottom:1px solid #eee;"><span title="' + htmlspecialchars (s.user_agent) + '">' + htmlspecialchars (ua) + '</span></td>'
+        + '<td style="padding:8px; border-bottom:1px solid #eee;">' + htmlspecialchars (s.created_at) + '</td>'
+        + '<td style="padding:8px; border-bottom:1px solid #eee;">' + htmlspecialchars (s.last_activity_at) + '</td>'
+        + '<td style="padding:8px; border-bottom:1px solid #eee;">' + htmlspecialchars (s.expires_at) + '</td>'
+        + '<td style="padding:8px; border-bottom:1px solid #eee;">'
+        + (isCurrent
+            ? '<span style="color:#667085; font-size:0.85em;">Current session</span>'
+            : '<button type="button" class="revoke-session-btn" data-session-id="' + htmlspecialchars (s.session_id) + '">Revoke</button>')
+        + '</td>'
+        + '</tr>';
+    });
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+
+    container.querySelectorAll('.revoke-session-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Revoke this session?')) return;
+        btn.disabled = true;
+        btn.textContent = 'Revoking...';
+        try {
+          const r = await fetch('settings_api.php?action=sessions', {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ csrf_token: csrfToken, command: 'revoke', session_id: btn.dataset.sessionId })
+          });
+          const j = await r.json();
+          if (j.ok) { loadSessions(); } else { alert(j.error || 'Failed to revoke'); btn.disabled = false; btn.textContent = 'Revoke'; }
+        } catch { btn.disabled = false; btn.textContent = 'Revoke'; }
+      });
+    });
+
+  } catch (err) {
+    container.innerHTML = '<p class="error-msg">Error loading sessions: ' + htmlspecialchars (err.message) + '</p>';
+  }
+}
+
+function parseUserAgent(ua) {
+  if (!ua) return 'Unknown';
+  if (/Chrome\//.test(ua) && !/Edg\//.test(ua) && !/OPR\//.test(ua)) return 'Chrome';
+  if (/Edg\//.test(ua)) return 'Edge';
+  if (/Firefox\//.test(ua)) return 'Firefox';
+  if (/Safari\//.test(ua) && !/Chrome/.test(ua)) return 'Safari';
+  if (/OPR\//.test(ua) || /Opera/.test(ua)) return 'Opera';
+  return ua.slice(0, 48);
+}
+
+// Wire up tab switching and revoke-all button
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.getAttribute('data-tab') === 'sessions') loadSessions();
+    });
+  });
+
+  const revokeAllBtn = document.getElementById('revokeAllSessionsBtn');
+  if (revokeAllBtn) {
+    revokeAllBtn.addEventListener('click', async () => {
+      if (!confirm('Revoke all sessions except the current one?')) return;
+      const csrfToken = document.querySelector('input[name="csrf_token"]').value;
+      revokeAllBtn.disabled = true;
+      try {
+        const r = await fetch('settings_api.php?action=sessions', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ csrf_token: csrfToken, command: 'revoke_all_others' })
+        });
+        const j = await r.json();
+        if (j.ok) { loadSessions(); } else { alert(j.error || 'Failed'); }
+      } finally { revokeAllBtn.disabled = false; }
+    });
+  }
+
+  // Wire up save message for session lifetime form
+  const sessionForm = document.getElementById('sessionLifetimeForm');
+  const sessionMsg  = document.getElementById('sessionsMsg');
+  if (sessionForm && sessionMsg && !sessionForm.__inlineStatusAttached) {
+    sessionForm.__inlineStatusAttached = true;
+    window.addEventListener('api:success', (evt) => {
+      if (evt.detail.form !== sessionForm) return;
+      sessionMsg.innerHTML = '<p class="success-msg">✓ Session settings saved</p>';
+      setTimeout(() => { sessionMsg.innerHTML = ''; }, 5000);
+    });
+    window.addEventListener('api:error', (evt) => {
+      if (evt.detail.form !== sessionForm) return;
+      sessionMsg.innerHTML = '<p class="error-msg">✗ ' + (evt.detail.json?.error || 'Error saving') + '</p>';
+    });
+  }
+});
 
 </script>
 </body>

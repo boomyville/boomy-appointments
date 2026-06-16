@@ -1032,7 +1032,9 @@ function validateEmail(email) {
       });
 
       const months = await Promise.all(monthUrls.map((url) => fetchJson(url, { method: 'GET' })));
-      state.monthViews = months.map((item) => item.month);
+      state.monthViews = months
+        .map((item) => item.month)
+        .filter((month) => month !== null && month !== undefined);
       renderMonths();
       if (state.selectedDate) {
         await loadSlots(state.selectedDate);

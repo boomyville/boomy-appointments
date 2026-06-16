@@ -77,6 +77,7 @@ try {
         $user = get_user_by_email($email);
         session_regenerate_id(true);
         $_SESSION['user'] = $user;
+        create_session_record((int)$user['id']);
         echo json_encode(['ok' => true, 'redirect' => 'admin.php']);
         exit;
     }
@@ -122,6 +123,7 @@ try {
         $id = create_user_with_active($email, $password, $full_name, 'admin', 1, $first_name ?: null, $last_name ?: null, $phone ?: null);
         $user = get_user_by_email($email);
         session_regenerate_id(true);
+        create_session_record((int)$user['id']);
         $_SESSION['user'] = $user;
         echo json_encode(['ok' => true, 'redirect' => 'admin.php']);
         exit;
@@ -164,6 +166,7 @@ try {
             'full_name' => $user['full_name'],
             'role' => $user['role']
         ];
+        create_session_record((int)$user['id']);
         echo json_encode(['ok' => true, 'redirect' => 'admin.php']);
         exit;
     }
