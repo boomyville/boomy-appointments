@@ -109,6 +109,12 @@ $password_require_symbol = (int) get_setting('password_require_symbol', '1');
 $email_whitelist_enabled = (int) get_setting('email_whitelist_enabled', '0');
 $email_domain_whitelist = get_setting('email_domain_whitelist', '');
 $email_domain_blacklist = get_setting('email_domain_blacklist', '');
+
+$reminder_enabled     = (int) get_setting('reminder_enabled', '0');
+$reminder_days_before = (int) get_setting('reminder_days_before', '1');
+$reminder_time        = get_setting('reminder_time', '09:00');
+$smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && !empty($smtp_password))
+
 ?>
 <!doctype html>
 <html lang="en">
@@ -617,6 +623,87 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
       <button type="button" id="testEmailBtn" onclick="testEmailConfiguration(event)">Send Test Email</button>
       <div id="testEmailMsg"></div>
     </form>
+
+          <hr>
+      <h3>Appointment Reminders</h3>
+ 
+      <?php if (!$smtp_ready): ?>
+        <div class="notice is-warning" style="margin-bottom:20px;">
+          ⚠️ Reminder emails require SMTP to be fully configured (host, username, password, and PHPMailer files present). Configure and save those settings first.
+        </div>
+      <?php endif; ?>
+ 
+      <form id="reminderForm" data-api data-no-reload="true"
+            action="settings_api.php?action=save" method="post"
+            <?php echo !$smtp_ready ? 'style="opacity:.55;pointer-events:none;"' : ''; ?>>
+ 
+        <fieldset class="field-group">
+          <legend>Email Reminders</legend>
+          <label>
+            <input type="hidden" name="reminder_enabled" value="0">
+            <input type="checkbox" name="reminder_enabled" value="1"
+                   id="reminderEnabledCheck"
+                   <?php echo $reminder_enabled ? 'checked' : ''; ?>
+                   <?php echo !$smtp_ready ? 'disabled' : ''; ?>>
+            Enable appointment reminder emails
+          </label>
+          <p style="font-size:.9em;color:#666;margin-top:4px;">
+            Sends each customer a reminder — including a one-click cancel link — a set number of days before their appointment.
+            Requires <code>cron_reminders.php</code> to be called by your cron job once per hour. <code>5 * * * * php /config/www/appointments/cron_reminders.php >> /var/log/cron_reminders.log 2>&1</code>
+          </p>
+ 
+          <div class="field-controls" style="margin-top:16px;" id="reminderOptions">
+            <label>Days before appointment
+              <input type="number" name="reminder_days_before" min="0" max="30" step="1"
+                     value="<?php echo (int) $reminder_days_before; ?>">
+            </label>
+            <label>Send time (server time)
+              <input type="time" name="reminder_time"
+                     value="<?php echo htmlspecialchars($reminder_time, ENT_QUOTES, 'UTF-8'); ?>">
+            </label>
+          </div>
+          <p style="font-size:.9em;color:#666;margin-top:8px;">
+            The cron script only sends during the 60-minute window starting at <em>Send time</em>.
+            Each appointment receives at most one reminder (tracked in <code>appointment_reminders</code>).
+          </p>
+        </fieldset>
+ 
+        <input type="hidden" name="tab" value="reminders">
+        <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
+        <button type="submit" <?php echo !$smtp_ready ? 'disabled' : ''; ?>>Save Reminder Settings</button>
+        <div id="reminderMsg"></div>
+      </form>
+ 
+      <script>
+      (function () {
+        var check   = document.getElementById('reminderEnabledCheck');
+        var options = document.getElementById('reminderOptions');
+        if (!check || !options) return;
+        function sync() {
+          var on = check.checked;
+          options.style.opacity = on ? '1' : '0.45';
+          options.querySelectorAll('input').forEach(function(el) { el.disabled = !on; });
+        }
+        check.addEventListener('change', sync);
+        sync();
+ 
+        // Inline success/error message wiring
+        var form   = document.getElementById('reminderForm');
+        var msgDiv = document.getElementById('reminderMsg');
+        if (!form || !msgDiv || form.__inlineStatusAttached) return;
+        form.__inlineStatusAttached = true;
+        window.addEventListener('api:success', function (e) {
+          if (e.detail.form !== form) return;
+          msgDiv.innerHTML = '<p class="success-msg">✓ ' + ((e.detail.json || {}).message || 'Saved') + '</p>';
+          setTimeout(function () { msgDiv.innerHTML = ''; }, 5000);
+        });
+        window.addEventListener('api:error', function (e) {
+          if (e.detail.form !== form) return;
+          msgDiv.innerHTML = '<p class="error-msg">✗ ' + ((e.detail.json || {}).error || 'Error saving') + '</p>';
+        });
+      })();
+      </script>
+
   </section>
 
   <!-- LOGIN ATTEMPTS TAB -->

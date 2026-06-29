@@ -2407,3 +2407,74 @@ function get_active_sessions_for_user(int $userId): array
     $stmt->execute([$lifetimeHours, $currentSessionId, $userId, $lifetimeHours]);
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
+
+/**
+ * Return an existing valid cancel token for this appointment,
+ * or mint a fresh one. Reuses the verification table with
+ * task = 'cancel_appointment', exactly like appointment_booking tokens.
+ *
+ * Token expires 1 hour before appointment start so customers
+ * can't cancel at the last minute via email — they'd need to call.
+ */
+function get_or_create_cancel_token(int $appointmentId): ?string
+{
+    $db = get_db();
+ 
+    // Reuse any existing non-expired token
+    $stmt = $db->prepare("
+        SELECT code FROM verification
+        WHERE appointment_id = ?
+          AND task = 'cancel_appointment'
+          AND (expires_at IS NULL OR expires_at > NOW())
+        ORDER BY id DESC
+        LIMIT 1
+    ");
+    $stmt->execute([$appointmentId]);
+    $existing = $stmt->fetchColumn();
+    if ($existing !== false && $existing !== null) {
+        return (string) $existing;
+    }
+ 
+    // Set expiry 1 hour before appointment start
+    $appt = get_appointment_by_id($appointmentId);
+    if (!$appt) return null;
+ 
+    $expiresAt = null;
+    try {
+        $expiresAt = (new DateTimeImmutable((string) $appt['start_time']))
+            ->modify('-1 hour')
+            ->format('Y-m-d H:i:s');
+    } catch (Throwable $e) {
+        // No expiry if we can't parse — token will live until manually deleted
+    }
+ 
+    $code = bin2hex(random_bytes(32)); // 64-char hex, same as other tokens
+ 
+    // user_id is nullable (ensure_verification_schema handles the ALTER if needed)
+    $db->prepare("
+        INSERT INTO verification (user_id, appointment_id, code, task, expires_at)
+        VALUES (NULL, ?, ?, 'cancel_appointment', ?)
+    ")->execute([$appointmentId, $code, $expiresAt]);
+ 
+    return $code;
+}
+ 
+/**
+ * Look up a verification row by code + task.
+ * Works for any task type: 'cancel_appointment', 'appointment_booking', etc.
+ * Returns the full row array or null. The caller uses $row['appointment_id'].
+ */
+function get_verification_by_code_and_task(string $code, string $task): ?array
+{
+    if ($code === '' || $task === '') return null;
+    $stmt = get_db()->prepare("
+        SELECT * FROM verification
+        WHERE code = ? AND task = ?
+          AND (expires_at IS NULL OR expires_at > NOW())
+        LIMIT 1
+    ");
+    $stmt->execute([$code, $task]);
+    return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+}
+ 

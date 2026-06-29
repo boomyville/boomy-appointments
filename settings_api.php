@@ -184,7 +184,8 @@ try {
             'phpmailer' => [
                 'smtp_host', 'smtp_port', 'smtp_encryption', 'smtp_username', 'smtp_password', 'mail_from_address', 'mail_from_name'
             ],
-            'sessions' => ['session_lifetime_hours']
+            'sessions' => ['session_lifetime_hours'],
+            'reminders' => ['reminder_enabled', 'reminder_days_before', 'reminder_time']
         ];
 
         $tab = $data['tab'] ?? 'general';
@@ -205,14 +206,39 @@ try {
         }
 
         if ($tab === 'sessions') {
-    $lifetime = (int)($data['session_lifetime_hours'] ?? 18);
-    if ($lifetime < 1 || $lifetime > 2000) {
-        http_response_code(422);
-        echo json_encode(['error' => 'Session lifetime must be between 1 and 2000 hours']);
-        exit;
-    }
-    $data['session_lifetime_hours'] = (string)$lifetime;
-}
+            $lifetime = (int)($data['session_lifetime_hours'] ?? 18);
+            if ($lifetime < 1 || $lifetime > 2000) {
+                http_response_code(422);
+                echo json_encode(['error' => 'Session lifetime must be between 1 and 2000 hours']);
+                exit;
+            }
+            $data['session_lifetime_hours'] = (string)$lifetime;
+        }
+
+                if ($tab === 'reminders') {
+            if (!empty($data['reminder_enabled']) && $data['reminder_enabled'] === '1') {
+                if (!email_transport_is_ready()) {
+                    http_response_code(422);
+                    echo json_encode(['error' => 'SMTP must be fully configured before enabling reminders']);
+                    exit;
+                }
+            }
+            $days = (int) ($data['reminder_days_before'] ?? 1);
+            if ($days < 0 || $days > 30) {
+                http_response_code(422);
+                echo json_encode(['error' => 'Reminder days must be between 0 and 30']);
+                exit;
+            }
+            $reminderTime = trim((string) ($data['reminder_time'] ?? '09:00'));
+            if (!preg_match('/^\d{2}:\d{2}$/', $reminderTime)) {
+                http_response_code(422);
+                echo json_encode(['error' => 'Reminder time must be in HH:MM format']);
+                exit;
+            }
+            $data['reminder_days_before'] = (string) $days;
+            $data['reminder_time']        = $reminderTime;
+        }
+
 
         if ($tab === 'booking') {
             $deadline_hours = (int) ($data['booking_deadline_hours'] ?? 24); 
@@ -409,7 +435,9 @@ try {
                 strpos($k, '_letters_only') !== false || 
                 strpos($k, '_numbers_only') !== false || 
                 strpos($k, '_show_') !== false || 
-                $k === 'auto_no_show'
+                $k === 'auto_no_show' ||
+                $k === 'reminder_enabled'
+
             );
 
             if (isset($data[$k])) {
@@ -440,7 +468,10 @@ try {
             $message = 'PHPMailer settings saved successfully';
         } elseif ($tab === 'general') {
             $message = 'General settings saved successfully';
+        } elseif ($tab === 'reminders') {
+            $message = 'Reminder settings saved successfully';
         }
+
 
         echo json_encode(['ok' => true, 'message' => $message]);
         exit;

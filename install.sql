@@ -240,7 +240,11 @@ INSERT INTO `settings` (`setting_key`,`setting_value`) VALUES
 ('smtp_password',''),
 ('mail_from_address',''),
 ('session_lifetime_hours','24'),
-('mail_from_name','Boomy Appointments');
+('mail_from_name','Boomy Appointments'),
+('reminder_enabled','0'),
+('reminder_days_before','1'),
+('reminder_time','09:00');
+
 
 -- Seed appointment types
 INSERT INTO `appointment_types` (`name`,`duration_minutes`,`color_hex`) VALUES
