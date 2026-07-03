@@ -38,6 +38,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       --selected: #2457ff;
       --current: #f59e0b;
       --disabled: #c7ceda;
+      --hero-bg-blend: rgba(255, 255, 255, 0.78);
       color-scheme: light;
     }
 
@@ -57,6 +58,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
         --slot: #f8fafc;
         --slot-soft: rgba(255, 255, 255, 0.06);
         --disabled: #59657a;
+        --hero-bg-blend: rgba(15, 23, 42, 0.65);
         color-scheme: dark;
       }
     }
@@ -82,17 +84,17 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       padding: 28px 0 48px;
     }
 
-    .hero {
-      display: grid;
-      gap: 18px;
-      padding: 28px;
-      border: 1px solid var(--border);
-      border-radius: 28px;
-      background: linear-gradient(135deg, rgba(36, 87, 255, 0.08), rgba(255, 255, 255, 0.78));
-      box-shadow: var(--shadow);
-      position: relative;
-      overflow: hidden;
-    }
+  .hero {
+    display: grid;
+    gap: 18px;
+    padding: 28px;
+    border: 1px solid var(--border);
+    border-radius: 28px;
+    background: linear-gradient(135deg, rgba(36, 87, 255, 0.08), var(--hero-bg-blend));
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
 
     .hero::after {
       content: '';
@@ -172,6 +174,9 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       font-size: 0.84rem;
       line-height: 1.35;
     }
+
+    .stepper button { cursor: not-allowed; }
+    .stepper button.is-reachable { cursor: pointer; }
 
     .panel {
       display: none;
@@ -554,35 +559,89 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       box-shadow: var(--shadow);
       padding: 14px 16px;
       display: none;
-      z-index: 60;
+      z-index: 1660;
     }
     .toast.is-visible { display: block; animation: fadeUp 0.2s ease; }
     .toast strong { display: block; margin-bottom: 4px; }
     .toast p { margin: 0; color: var(--muted); line-height: 1.5; }
 
     .hidden { display: none !important; }
-
+    
     @media (max-width: 980px) {
-      .calendar-layout,
-      .months,
-      .grid-2,
-      .summary-grid,
-      .customer-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .slots-card { position: static; }
-      .stepper { grid-template-columns: 1fr 1fr; }
+    .calendar-layout,
+    .months,
+    .grid-2,
+    .summary-grid,
+    .customer-grid {
+      grid-template-columns: 1fr;
     }
+    .slots-card { position: static; }
+    .stepper { grid-template-columns: 1fr 1fr; } 
+  }
 
-    @media (max-width: 640px) {
-      .booking-shell { width: min(100% - 20px, 100%); padding: 14px 0 28px; }
-      .hero, .panel { border-radius: 22px; padding: 18px; }
-      .stepper { grid-template-columns: 1fr; }
-      .panel-head { align-items: flex-start; flex-direction: column; }
-      .weekday-row, .day-grid { gap: 6px; }
-      .day-cell { min-height: 40px; }
+  @media (max-width: 640px) {
+    .booking-shell { width: min(100% - 20px, 100%); padding: 14px 0 28px; }
+    .hero, .panel { border-radius: 22px; padding: 18px; }
+    .panel-head { align-items: flex-start; flex-direction: column; }
+    .weekday-row, .day-grid { gap: 6px; }
+    .day-cell { min-height: 40px; }
+    .day-badge { width: 36px; height: 36px; }
+  }
+
+  @media (max-width: 480px) {
+    .stepper button span { display: none; }
+    .stepper button { padding: 12px 14px; }
+    .modal-actions { flex-direction: column; }
+    .modal-actions .btn { width: 100%; }
+  }
+
+  @media (max-width: 320px) {
+    .stepper { grid-template-columns: 1fr; }
+  }
+/* Ensure the action container behaves reliably across browser configurations */
+.actions {
+    /* Kept for modern engines, fallback handled via fixed viewport indexing below */
+    anchor-name: --actions; 
+}
+
+.floating-actions {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+
+    /* Changed from display: none to force initialization state management via JS classes */
+    display: flex; 
+    gap: 12px;
+    padding: 12px 18px;
+
+    background: var(--panel-strong);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    box-shadow: var(--shadow);
+
+    z-index: 1000;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+/* Force standard utilities to override responsive layouts cleanly */
+.floating-actions.hidden {
+    display: none !important;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Mobile responsive style overrides */
+@media (max-width: 480px) {
+    .floating-actions {
+        left: 0;
+        right: 0;
+        bottom: 0;
+        justify-content: space-between;
+        border-radius: 0;
+        border-width: 1px 0 0;
+        padding: 16px 24px;
     }
+}
   </style>
 </head>
 <body>
@@ -614,7 +673,6 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
         </div>
         <script>
           document.addEventListener('DOMContentLoaded', () => {
-            // Force disable user interaction steps across the layout wizard
             const stepGrid = document.getElementById('step1SelectionGrid');
             if (stepGrid) stepGrid.classList.add('hidden');
             
@@ -792,6 +850,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
 
     const state = {
       step: 1,
+      maxStep: 1,
       appointmentTypes: [],
       providers: [],
       settings: null,
@@ -809,7 +868,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       loading: false,
       requestToken: '',
       duplicateMatches: [],
-      prevent_same_user_booking: 0 // Track root property explicitly
+      prevent_same_user_booking: 0 
     };
 
     const els = {
@@ -853,8 +912,12 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       duplicateCancelBtn: document.getElementById('duplicateCancelBtn'),
       duplicateUseExistingBtn: document.getElementById('duplicateUseExistingBtn'),
       duplicateContinueBtn: document.getElementById('duplicateContinueBtn'),
-      toast: document.getElementById('toast')
+      toast: document.getElementById('toast'),
+      floatingActions: document.getElementById('floating-actions'),
+      floatingBack: document.getElementById('floating-back'),
+      floatingNext: document.getElementById('floating-next')
     };
+
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"]/g, (char) => ({
     '&': '&amp;',
@@ -889,8 +952,11 @@ function escapeHtml(value) {
 
     function setStep(step) {
       state.step = step;
+      if (step > state.maxStep && step <= 4) state.maxStep = step;
       els.stepButtons.forEach((btn) => {
-        btn.classList.toggle('is-active', Number(btn.dataset.stepper) === step);
+        const target = Number(btn.dataset.stepper);
+        btn.classList.toggle('is-active', target === step);
+        btn.classList.toggle('is-reachable', target <= state.maxStep);
       });
       els.panels.forEach((panel) => {
         panel.classList.toggle('is-active', Number(panel.dataset.panel) === step);
@@ -898,8 +964,16 @@ function escapeHtml(value) {
       if (step === 4) {
         renderSummary();
       }
-    }
+      watchActions(step);
 
+      // LIVE VALIDATION TRIGGER FOR STEP 3
+      if (step === 3 && typeof checkStep3Readiness === 'function') {
+        checkStep3Readiness();
+      } else {
+        if (els.step3Continue) els.step3Continue.disabled = false;
+        if (els.floatingNext) els.floatingNext.disabled = false;
+      }
+    }
     function monthStart(date) {
       return new Date(date.getFullYear(), date.getMonth(), 1);
     }
@@ -923,6 +997,7 @@ function escapeHtml(value) {
       }
       return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date);
     }
+
 function validateEmail(email) {
   if (!email || email.length > 100) return false;
   const parts = email.split('@');
@@ -934,6 +1009,7 @@ function validateEmail(email) {
   if (!/^[a-zA-Z0-9.\-]+$/.test(domain)) return false;
   return true;
 }
+
     function combineCustomerName() {
       return [els.newFirstName.value.trim(), els.newMiddleName.value.trim(), els.newLastName.value.trim()].filter(Boolean).join(' ');
     }
@@ -989,7 +1065,6 @@ function validateEmail(email) {
         BOOMY.csrfToken = data.csrf_token;
       }
       
-      // FIX 1: Read dynamically directly from the root property we injected on the backend
       state.prevent_same_user_booking = parseInt(data.prevent_same_user_booking ?? 0, 10);
 
       state.settings.customer_field_settings = data.customer_field_settings || {};
@@ -1232,16 +1307,16 @@ function validateEmail(email) {
           return false;
         }
       }
-// After the required-field loop, before the final email/mobile check:
-const emailToCheck = state.customerMode === 'existing'
-  ? els.existingEmail.value.trim()
-  : els.newEmail.value.trim();
 
-if (emailToCheck && !validateEmail(emailToCheck)) {
-  setToast('Invalid email', 'Email must be lowercase, max 100 characters, and contain a valid domain.');
-  (state.customerMode === 'existing' ? els.existingEmail : els.newEmail).focus();
-  return false;
-}
+      const emailToCheck = state.customerMode === 'existing'
+        ? els.existingEmail.value.trim()
+        : els.newEmail.value.trim();
+
+      if (emailToCheck && !validateEmail(emailToCheck)) {
+        setToast('Invalid email', 'Email must be lowercase, max 100 characters, and contain a valid domain.');
+        (state.customerMode === 'existing' ? els.existingEmail : els.newEmail).focus();
+        return false;
+      }
       if (!els.newEmail.value.trim() || !els.newMobile.value.trim()) {
         setToast('Missing customer details', 'Email and mobile are always needed to check for duplicates.');
         return false;
@@ -1438,6 +1513,7 @@ if (emailToCheck && !validateEmail(emailToCheck)) {
 
     function resetBooking() {
       state.step = 1;
+      state.maxStep = 1;
       state.selectedDate = '';
       state.selectedSlot = '';
       state.customerCheck = null;
@@ -1463,7 +1539,6 @@ if (emailToCheck && !validateEmail(emailToCheck)) {
       setStep(1);
     }
 
-    // FIX 2: Extracted cleanly outside boot mapping context to optimize rendering engine tracking
     function applyFieldVisibility(inputEl, fieldKey) {
       const fieldSettings = state.settings?.customer_field_settings || {};
       const cfg = fieldSettings[fieldKey] || {};
@@ -1485,10 +1560,8 @@ if (emailToCheck && !validateEmail(emailToCheck)) {
       try {
         await fetchInit();
 
-        // --- START CONCURRENT METADATA RESTRICTION TRACK CHECK ---
         console.log("Configured Booking Limit:", state.prevent_same_user_booking);
         
-        // FIX 3: Point target checks back to the raw property updated from fetchInit
         if (state.prevent_same_user_booking > 0) {
           const clientMeta = collectClientMeta();
           const checkUrl = new URL('booking_api.php?action=check_metadata_limit', window.location.href);
@@ -1500,8 +1573,6 @@ if (emailToCheck && !validateEmail(emailToCheck)) {
               ...clientMeta
             })
           });
-
-          console.log("Telemetry validation block result:", verifyCheck);
 
           if (verifyCheck.is_blocked) {
             const supportEmail = state.settings?.organization_email ?? 'appointments@example.com';
@@ -1528,10 +1599,9 @@ if (emailToCheck && !validateEmail(emailToCheck)) {
             }
             
             setToast('Booking locked', 'Maximum concurrent appointments threshold crossed.');
-            return; // Halt logic setup execution entirely
+            return; 
           }
         }
-        // --- END CONCURRENT METADATA RESTRICTION TRACK CHECK ---
 
         applyFieldVisibility(els.newFirstName, 'first_name');
         applyFieldVisibility(els.newMiddleName, 'middle_name');
@@ -1598,13 +1668,161 @@ if (emailToCheck && !validateEmail(emailToCheck)) {
           }
         });
 
+        els.stepButtons.forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const target = Number(btn.dataset.stepper);
+            if (btn.classList.contains('is-reachable') && target !== state.step) {
+              setStep(target);
+            }
+          });
+        });
+
+        // SAFE ALTERNATIVE: Fallback target query selection directly within runtime logic 
+        // to fully insulate the layout initialization if global handles fail to grab on boot.
+        const btnNext = els.floatingNext || document.getElementById('floating-next');
+        const btnBack = els.floatingBack || document.getElementById('floating-back');
+
+        if (btnNext) {
+          btnNext.onclick = () => {
+            document.querySelector('.panel.is-active .actions .btn.primary')?.click();
+          };
+        }
+
+        if (btnBack) {
+          btnBack.onclick = () => {
+            document.querySelector('.panel.is-active .actions .btn.ghost')?.click();
+          };
+        }
+        // --- STEP 3 LIVE VALIDATION ENGINE ---
+        const step3PrimaryBtn = els.step3Continue;
+        const step3FloatingBtn = els.floatingNext;
+
+        function checkStep3Readiness() {
+          const fieldSettings = state.settings?.customer_field_settings || {};
+          let isValid = true;
+
+          if (state.customerMode === 'existing') {
+            const emailVal = els.existingEmail.value.trim();
+            const mobileVal = els.existingMobile.value.trim();
+            if (!emailVal || !mobileVal || !validateEmail(emailVal)) {
+              isValid = false;
+            }
+          } else {
+            const checks = [
+              { el: els.newFirstName, key: 'first_name' },
+              { el: els.newLastName, key: 'last_name' },
+              { el: els.newEmail, key: 'email' },
+              { el: els.newMobile, key: 'mobile' },
+              { el: els.newDob, key: 'date_of_birth' },
+              { el: els.newGender, key: 'gender' },
+            ];
+
+            for (const { el, key } of checks) {
+              const cfg = fieldSettings[key] || {};
+              const isRequired = cfg.required === true || cfg.required === 1 || cfg.required === '1';
+              if (isRequired && !el.value.trim()) {
+                isValid = false;
+                break;
+              }
+            }
+
+            const newEmailVal = els.newEmail.value.trim();
+            if (newEmailVal && !validateEmail(newEmailVal)) {
+              isValid = false;
+            }
+            if (!els.newEmail.value.trim() || !els.newMobile.value.trim()) {
+              isValid = false;
+            }
+          }
+
+          if (state.step === 3) {
+            if (step3PrimaryBtn) step3PrimaryBtn.disabled = !isValid;
+            if (step3FloatingBtn) step3FloatingBtn.disabled = !isValid;
+          }
+        }
+
+        window.checkStep3Readiness = checkStep3Readiness;
+
+        const customerInputs = [
+          els.newFirstName, els.newMiddleName, els.newLastName,
+          els.newEmail, els.newMobile, els.newDob, els.newGender,
+          els.existingEmail, els.existingMobile
+        ];
+
+        customerInputs.forEach((input) => {
+          if (input) {
+            input.addEventListener('input', checkStep3Readiness);
+            input.addEventListener('change', checkStep3Readiness);
+          }
+        });
+
+        els.newCustomerTab.addEventListener('click', () => {
+          switchCustomerMode('new');
+          checkStep3Readiness();
+        });
+        els.existingCustomerTab.addEventListener('click', () => {
+          switchCustomerMode('existing');
+          checkStep3Readiness();
+        });
+
         setToast('Ready', 'Pick an appointment type and provider to begin.');
+        // --- END STEP 3 LIVE VALIDATION ENGINE ---
+
+        if (step3FloatingBtn) {
+          step3FloatingBtn.onclick = () => {
+            if (state.step === 1) els.step1Continue.click();
+            else if (state.step === 2) els.step2Continue.click();
+            else if (state.step === 3) els.step3Continue.click();
+            else if (state.step === 4) els.confirmBookingBtn.click();
+          };
+        }
+
+        if (els.floatingBack) {
+          els.floatingBack.onclick = () => {
+            if (state.step === 2) els.step2Back.click();
+            else if (state.step === 3) els.step3Back.click();
+            else if (state.step === 4) els.step4Back.click();
+          };
+        }
+
+        setStep(1);
+
+        
       } catch (error) {
         setToast('Initialization failed', error.message || 'Unable to load booking data.');
       }
     }
 
-    boot();
+    let observer;
+
+    function watchActions(step) {
+        observer?.disconnect();
+
+        const actions = document.querySelector(
+            `.panel[data-panel="${step}"] .actions`
+        );
+
+        const floatingContainer = els.floatingActions || document.getElementById('floating-actions');
+        if (!actions || !floatingContainer) return;
+
+        observer = new IntersectionObserver(([entry]) => {
+            floatingContainer.classList.toggle("hidden", entry.isIntersecting);
+        });
+
+        observer.observe(actions);
+    }
+
+    // Wait until the elements have definitely parsed before kicking off the script engine.
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', boot);
+    } else {
+      boot();
+    }
   </script>
+
+  <div id="floating-actions" class="floating-actions hidden">
+    <button class="btn ghost" id="floating-back">Back</button>
+    <button class="btn primary" id="floating-next">Continue</button>
+  </div>
 </body>
 </html>
