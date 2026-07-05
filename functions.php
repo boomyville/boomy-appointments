@@ -46,6 +46,7 @@ function get_db(): PDO
         ensure_verification_schema($pdo);
         ensure_appointment_schema($pdo);
         ensure_customer_meta_schema($pdo);
+        ensure_appointment_types_schema($pdo);
         $_SESSION['schema_checked'] = true;
     }
 
@@ -131,7 +132,28 @@ function ensure_customer_schema(PDO $db): void
         // Keep the app running even if the schema cannot be updated automatically.
     }
 }
+function ensure_appointment_types_schema(PDO $db): void
+{
+    static $checked = false;
+    if ($checked) {
+        return;
+    }
+    $checked = true;
 
+    try {
+        $tableExists = (bool) $db->query("SHOW TABLES LIKE 'appointment_types'")->fetch();
+        if (!$tableExists) {
+            return;
+        }
+
+        $hasBookable = (bool) $db->query("SHOW COLUMNS FROM appointment_types LIKE 'is_bookable'")->fetch();
+        if (!$hasBookable) {
+            $db->exec("ALTER TABLE appointment_types ADD COLUMN is_bookable TINYINT(1) NOT NULL DEFAULT 1 AFTER is_active");
+        }
+    } catch (Throwable $e) {
+        // Safe execution catch
+    }
+}
 function ensure_breaks_schema(PDO $db): void
 {
     static $checked = false;
@@ -1367,13 +1389,20 @@ function normalize_booking_week_start_day_setting($value): int
     return $day;
 }
 
-function get_appointment_types(bool $activeOnly = false): array
+function get_appointment_types(bool $activeOnly = false, bool $bookableOnly = false): array
 {
     try {
         $db = get_db();
-        $sql = 'SELECT id, name, duration_minutes, color_hex, is_active FROM appointment_types';
+        $sql = 'SELECT id, name, duration_minutes, color_hex, is_active, is_bookable FROM appointment_types';
+        $conditions = [];
         if ($activeOnly) {
-            $sql .= ' WHERE is_active = 1';
+            $conditions[] = 'is_active = 1';
+        }
+        if ($bookableOnly) {
+            $conditions[] = 'is_bookable = 1';
+        }
+        if ($conditions) {
+            $sql .= ' WHERE ' . implode(' AND ', $conditions);
         }
         $sql .= ' ORDER BY id ASC';
 
@@ -1602,7 +1631,7 @@ function get_appointment_type_by_id(int $id): ?array
 {
     try {
         $db = get_db();
-        $stmt = $db->prepare('SELECT id, name, duration_minutes, color_hex, is_active FROM appointment_types WHERE id = ? LIMIT 1');
+        $stmt = $db->prepare('SELECT id, name, duration_minutes, color_hex, is_active, is_bookable FROM appointment_types WHERE id = ? LIMIT 1');
         $stmt->execute([$id]);
         return $stmt->fetch() ?: null;
     } catch (Throwable $e) {

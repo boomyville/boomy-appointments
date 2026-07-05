@@ -83,6 +83,7 @@ function booking_get_appointment_duration(int $appointmentTypeId): ?int
 {
     $appointmentType = get_appointment_type_by_id($appointmentTypeId);
     if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1) return null;
+    if ((int) ($appointmentType['is_bookable'] ?? 1) !== 1) return null;
     return max(1, (int) ($appointmentType['duration_minutes'] ?? 30));
 }
 
@@ -471,7 +472,7 @@ try {
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
    if ($action === 'init' && $method === 'GET') {
-        $appointmentTypes = get_appointment_types(true);
+        $appointmentTypes = get_appointment_types(true, true);
         $stmt = get_db()->query("SELECT id, email, full_name, role, is_active, bookable FROM users WHERE role IN ('provider','admin') AND is_active = 1 AND bookable = 1 ORDER BY full_name ASC");
         $providers = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
         $settings = get_booking_calendar_settings();
@@ -512,7 +513,7 @@ if ($action === 'month' && $method === 'GET') {
     if (!$provider || !in_array((string) ($provider['role'] ?? ''), ['provider', 'admin'], true)) {
         booking_api_response(['error' => 'provider not found'], 404);
     }
-    if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1) {
+    if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1 || (int) ($appointmentType['is_bookable'] ?? 1) !== 1) {
         booking_api_response(['error' => 'appointment type not found'], 404);
     }
     $maxAdvanceDate = booking_max_advance_date();
@@ -550,8 +551,7 @@ if ($action === 'month' && $method === 'GET') {
             booking_api_response(['error' => 'provider not found'], 404);
         }
 
-        $appointmentType = get_appointment_type_by_id($appointmentTypeId);
-        if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1) {
+        if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1 || (int) ($appointmentType['is_bookable'] ?? 1) !== 1) {
             booking_api_response(['error' => 'appointment type not found'], 404);
         }
 
@@ -638,8 +638,7 @@ if ($action === 'month' && $method === 'GET') {
             booking_api_response(['error' => 'provider not found'], 404);
         }
 
-        $appointmentType = get_appointment_type_by_id($appointmentTypeId);
-        if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1) {
+        if (!$appointmentType || (int) ($appointmentType['is_active'] ?? 0) !== 1 || (int) ($appointmentType['is_bookable'] ?? 1) !== 1) {
             booking_api_response(['error' => 'appointment type not found'], 404);
         }
 

@@ -429,6 +429,7 @@ $smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && !empty($smtp_pass
                 <th style="width: 180px;">Default duration</th>
                 <th style="width: 180px;">Appointment colour</th>
                 <th style="width: 88px;">Active</th>
+                <th style="width: 88px;">Bookable</th>
               </tr>
             </thead>
             <tbody>
@@ -456,6 +457,12 @@ $smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && !empty($smtp_pass
                       Active
                     </label>
                   </td>
+                  <td>
+                    <label style="display:inline-flex; align-items:center; gap:6px; font-weight:600; margin:0; color: var(--muted);">
+                      <input type="checkbox" name="appt_type_<?php echo $typeId; ?>_is_bookable" value="1" <?php echo !empty($appointmentType['is_bookable']) ? 'checked' : ''; ?>>
+                      Bookable
+                    </label>
+                  </td>
                 </tr>
               <?php endforeach; ?>
               <tr>
@@ -473,6 +480,12 @@ $smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && !empty($smtp_pass
                   <label style="display:inline-flex; align-items:center; gap:6px; font-weight:600; margin:0; color: var(--muted);">
                     <input type="checkbox" name="new_appt_type_is_active" value="1" checked>
                     Active
+                  </label>
+                </td>
+                <td>
+                  <label style="display:inline-flex; align-items:center; gap:6px; font-weight:600; margin:0; color: var(--muted);">
+                    <input type="checkbox" name="new_appt_type_is_bookable" value="1" checked>
+                    Bookable
                   </label>
                 </td>
               </tr>

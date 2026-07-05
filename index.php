@@ -118,6 +118,9 @@ if ($siteName === '') {
       .splash-desc {
         color: #a8b3c7;
       }
+      .splash-title {
+        color: #2457ff;
+      }
     }
 
     /* Grand Action Button with your internal custom classes */

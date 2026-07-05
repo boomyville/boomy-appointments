@@ -17,7 +17,7 @@ try {
   $db = get_db();
 
   try {
-    $stmt = $db->query("SELECT id, full_name, email, role, is_active FROM users WHERE role IS NOT NULL AND role <> '' AND role <> 'customer' ORDER BY full_name ASC, id ASC");
+    $stmt = $db->query("SELECT id, full_name, email, role, is_active, bookable FROM users WHERE role IS NOT NULL AND role <> '' AND role <> 'customer' ORDER BY full_name ASC, id ASC");
     $providers = $stmt->fetchAll(PDO::FETCH_ASSOC);
   } catch (Throwable $e) {
     $providers = [];
@@ -44,6 +44,9 @@ foreach ($providers as $providerRow) {
 if ($defaultProviderId === null && !empty($providers)) {
   $defaultProviderId = (int) $providers[0]['id'];
 }
+
+$calendarDefaultId = $providerId ?? $defaultProviderId;
+
 $defaultAppointmentTypeId = !empty($appointmentTypes) ? (int) $appointmentTypes[0]['id'] : null;
 $bookingCalendarSettings = get_booking_calendar_settings();
 $customerFieldSettings = get_customer_field_settings();
@@ -54,11 +57,9 @@ $appointmentEmailDeliveryReady = email_transport_is_ready();
 function render_customer_field_label(string $label, array $fieldSettings): string
 {
   $safeLabel = htmlspecialchars($label, ENT_QUOTES, 'UTF-8');
-
   if (!empty($fieldSettings['required'])) {
     return $safeLabel . ' <span style="color:red;">*</span>';
   }
-
   return $safeLabel . ' <span style="color: #6b7280; font-weight: 600;">(optional)</span>';
 }
 ?>
@@ -142,12 +143,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
     }
 
-    .layout {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 18px;
-    }
-
     .panel {
       background: var(--panel);
       border: 1px solid var(--panel-border);
@@ -206,6 +201,37 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .calendar-provider-filters__row select:focus {
       outline: 3px solid rgba(36, 87, 255, 0.14);
       border-color: rgba(36, 87, 255, 0.5);
+    }
+
+    .fc-bg-event.unavail-event {
+      background: repeating-linear-gradient(
+        45deg,
+        rgba(245, 158, 11, 0.2),
+        rgba(245, 158, 11, 0.2) 10px,
+        rgba(239, 68, 68, 0.3) 10px,
+        rgba(239, 68, 68, 0.3) 20px
+      ) !important;
+      opacity: 1 !important;
+      isolation: isolate;
+    }
+
+    .fc-bg-event.unavail-event::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--fc-page-bg-color, #fff);
+      z-index: -1;
+    }
+
+    .fc-bg-event.standard-break-event {
+      background: repeating-linear-gradient(
+        45deg,
+        rgba(245, 158, 11, 0.2),
+        rgba(245, 158, 11, 0.2) 10px,
+        rgba(239, 68, 68, 0.3) 10px,
+        rgba(239, 68, 68, 0.3) 20px
+      ) !important;
+      opacity: 1 !important;
     }
 
     .fc .fc-timegrid-event-harness.provider-split-left {
@@ -276,6 +302,34 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       font-size: 0.95rem;
     }
 
+    .fc-daygrid-day-events {
+      cursor: pointer;
+      min-height: 24px;
+    }
+
+    .daily-note-pill {
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: rgba(36, 87, 255, 0.12);
+      color: var(--accent);
+      border: 1px solid rgba(36, 87, 255, 0.25);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: calc(100% - 8px);
+      display: block;
+      margin: 4px auto;
+      cursor: pointer;
+      box-sizing: border-box;
+      text-align: left;
+    }
+
+    html[data-theme="dark"] .daily-note-pill {
+      background: rgba(36, 87, 255, 0.2);
+    }
+
     .fc .fc-daygrid-day.fc-day-today,
     .fc .fc-timegrid-col.fc-day-today {
       background: rgba(36, 87, 255, 0.10) !important;
@@ -312,7 +366,36 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       color: #ef4444 !important;
     }
 
-    /* Week/Day Specific Layout (Flex Grid Setup) */
+    .day-unavail-toggle {
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 4px 6px;
+      border: 1px solid rgba(239, 68, 68, 0.25);
+      background: rgba(239, 68, 68, 0.06);
+      color: #b91c1c;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: background 0.15s;
+      box-sizing: border-box;
+    }
+
+    .day-unavail-toggle.is-unavailable {
+      background: rgba(239, 68, 68, 0.18);
+      border-color: rgba(239, 68, 68, 0.45);
+      color: #7f1d1d;
+    }
+
+    .day-unavail-toggle:hover {
+      background: rgba(239, 68, 68, 0.14);
+    }
+
+    .day-unavail-toggle:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     .booking-event {
       display: flex;
       flex-direction: column;
@@ -324,6 +407,29 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       font-weight: 700;
       height: 100%;
       overflow: hidden; 
+    }
+
+    .fc-status-cycler-dot {
+      position: absolute;
+      bottom: 4px;
+      right: 4px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 1.5px solid #ffffff;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+      z-index: 10;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .fc-status-cycler-dot:hover {
+      transform: scale(1.25);
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+    }
+    
+    html[data-theme="dark"] .fc-status-cycler-dot {
+      border-color: #1e293b;
     }
 
     .booking-event__status {
@@ -341,7 +447,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       height: 100%; 
     }
 
-    /* Month view structural modifications to fix cell heights */
     .fc-daygrid-event-dot {
       border-color: currentColor !important; 
     }
@@ -352,7 +457,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       border: none !important;
     }
 
-    /* Target ONLY the month grid elements to turn off forced row stretching */
     .fc-daygrid-body .fc-daygrid-event {
       height: auto !important; 
       margin-top: 2px !important;
@@ -380,7 +484,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       height: auto !important;
     }
 
-    /* Status border implementations */
     .fc .fc-timegrid-event.appointment-status-booked,
     .fc .fc-daygrid-event.appointment-status-booked,
     .fc .fc-timegrid-event.appointment-status-unconfirmed,
@@ -1129,6 +1232,12 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
   <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
   <?php
     $current_page = 'calendar.php';
+    if ((int) get_setting('disable_online_booking', '0') === 1) {
+        echo '<div style="background-color: #f59e0b; color: #fff; text-align: center; padding: 8px 12px; font-weight: bold; font-size: 0.9rem; border-bottom: 1px solid rgba(0,0,0,0.1);">
+                ⚠️ Public Online Bookings are Deactivated. Admin calendar bookings remain available.
+              </div>';
+    }
+    
     $navAssets = __DIR__ . '/assets/nav.html';
     $navIncludes = __DIR__ . '/includes/nav.html';
 
@@ -1139,49 +1248,74 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     }
   ?>
   
-  <div class="admin-container">
-    <div class="admin-header">
+  <div class="page-shell">
+    <div class="hero">
       <div>
         <h1>Appointments Calendar</h1>
         <p>Click a time slot to start a booking draft. Provider and appointment type options are loaded from the database.</p>
       </div>
     </div>
 
-    <div class="admin-panel">
-      <div class="panel-header-row">
-        <div class="calendar-provider-filters" aria-label="Calendar provider filters">
-          <div class="calendar-provider-filters__row">
-            <label for="calendarProviderPrimary">Provider</label>
-            <select id="calendarProviderPrimary" name="calendar_provider_primary">
-              <?php foreach ($providers as $provider): ?>
-                <?php $providerListLabel = trim((string) ($provider['full_name'] ?? '')) !== '' ? (string) $provider['full_name'] : (string) ($provider['email'] ?? ''); ?>
-                <option value="<?php echo (int) $provider['id']; ?>" <?php echo ($defaultProviderId === (int) $provider['id']) ? 'selected' : ''; ?>>
-                  <?php echo htmlspecialchars($providerListLabel, ENT_QUOTES, 'UTF-8'); ?>
-                  <?php if (!empty($provider['role'])): ?>
-                    (<?php echo htmlspecialchars((string) $provider['role'], ENT_QUOTES, 'UTF-8'); ?>)
-                  <?php endif; ?>
-                  <?php if ((int) ($provider['is_active'] ?? 0) !== 1): ?>
-                    (inactive)
-                  <?php endif; ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-header-row">
+          <div class="calendar-provider-filters" aria-label="Calendar provider filters">
+            <div class="calendar-provider-filters__row">
+              <label for="calendarProviderPrimary">Provider</label>
+              <select id="calendarProviderPrimary" name="calendar_provider_primary">
+                <?php foreach ($providers as $provider): ?>
+                  <?php $providerListLabel = trim((string) ($provider['full_name'] ?? '')) !== '' ? (string) $provider['full_name'] : (string) ($provider['email'] ?? ''); ?>
+                  <option value="<?php echo (int) $provider['id']; ?>" <?php echo ($calendarDefaultId === (int) $provider['id']) ? 'selected' : ''; ?>>
+                    <?php echo htmlspecialchars($providerListLabel, ENT_QUOTES, 'UTF-8'); ?>
+                    <?php if (!empty($provider['role'])): ?>
+                      (<?php echo htmlspecialchars((string) $provider['role'], ENT_QUOTES, 'UTF-8'); ?>)
+                    <?php endif; ?>
+                    <?php if ((int) ($provider['is_active'] ?? 0) !== 1): ?>
+                      (inactive)
+                    <?php endif; ?>
+                  </option>
+                <?php endforeach; ?>
+              </select>
+            </div>
+            <div class="calendar-provider-filters__row" id="calendarProviderSecondaryWrap" style="display:none;">
+              <label for="calendarProviderSecondary">Other</label>
+              <select id="calendarProviderSecondary" name="calendar_provider_secondary">
+                <option value="">None</option>
+              </select>
+            </div>
           </div>
-          <div class="calendar-provider-filters__row" id="calendarProviderSecondaryWrap" style="display:none;">
-            <label for="calendarProviderSecondary">Compare</label>
-            <select id="calendarProviderSecondary" name="calendar_provider_secondary">
-              <option value="">None</option>
-            </select>
+          <div class="server-clock" aria-live="polite">
+            <span>Server time</span>
+            <strong id="serverClockValue"></strong>
           </div>
-        </div>
-        <div class="server-clock" aria-live="polite">
-          <span>Server time</span>
-          <strong id="serverClockValue"></strong>
         </div>
       </div>
       <div id="calendar"></div>
     </div>
   </div>
+
+  <dialog id="dailyNoteModal" class="booking-warning-modal">
+    <div class="booking-warning-card">
+      <div class="booking-warning-card__head">
+        <h2 id="dailyNoteModalTitle">Daily Note</h2>
+      </div>
+      <div class="booking-warning-card__body" style="display:grid;gap:10px;">
+        <div class="field">
+          <label for="dailyNoteTitle">Title <span style="color:var(--muted);font-size:0.8em;" id="dailyNoteTitleCount">(0/40)</span></label>
+          <input id="dailyNoteTitle" type="text" maxlength="40" placeholder="Short title...">
+        </div>
+        <div class="field">
+          <label for="dailyNoteMessage">Message <span style="color:var(--muted);font-size:0.8em;">(optional)</span></label>
+          <textarea id="dailyNoteMessage" rows="4" placeholder="Optional details..."></textarea>
+        </div>
+      </div>
+      <div class="booking-warning-card__footer">
+        <button type="button" id="dailyNoteDeleteBtn" style="background:rgba(239,68,68,0.1);color:#dc2626;border-color:rgba(239,68,68,0.2);display:none;">Delete</button>
+        <button type="button" id="dailyNoteCancelBtn">Cancel</button>
+        <button type="button" id="dailyNoteSaveBtn" class="primary">Save</button>
+      </div>
+    </div>
+  </dialog>
 
   <dialog id="bookingModal" class="booking-modal">
     <div class="booking-card">
@@ -1206,6 +1340,36 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
             <div class="meta-inline-inputs">
               <input id="bookingEndTimeInput" type="time" step="60" aria-label="End time">
             </div>
+          </div>
+        </div>
+
+        <div class="booking-grid">
+          <div class="field">
+            <label for="providerSelect">Which provider?</label>
+            <select id="providerSelect" name="provider_id">
+              <?php foreach ($providers as $index => $provider): ?>
+                <option value="<?php echo (int) $provider['id']; ?>" <?php echo ((int) ($provider['is_active'] ?? 0) === 1 && $calendarDefaultId === (int) $provider['id']) ? 'selected' : ''; ?> <?php echo ((int) ($provider['is_active'] ?? 0) !== 1) ? 'disabled' : ''; ?>>
+                  <?php echo htmlspecialchars($provider['full_name'] ?: $provider['email']); ?>
+                  <?php if (!empty($provider['role'])): ?>
+                    (<?php echo htmlspecialchars($provider['role']); ?>)
+                  <?php endif; ?>
+                  <?php if ((int) ($provider['is_active'] ?? 0) !== 1): ?>
+                    (inactive)
+                  <?php endif; ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="appointmentTypeSelect">Type of appointment</label>
+            <select id="appointmentTypeSelect" name="appointment_type_id">
+              <?php foreach ($appointmentTypes as $index => $appointmentType): ?>
+                <option value="<?php echo (int) $appointmentType['id']; ?>" data-duration="<?php echo (int) $appointmentType['duration_minutes']; ?>" <?php echo $index === 0 ? 'selected' : ''; ?>>
+                  <?php echo htmlspecialchars($appointmentType['name']); ?>
+                </option>
+              <?php endforeach; ?>
+            </select>
           </div>
         </div>
 
@@ -1241,20 +1405,20 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
                 $showLastNameField = !empty($lastNameFieldSettings['display']);
               ?>
               <?php if ($showFirstNameField || $showLastNameField): ?>
-              <div class="customer-name-grid <?php echo ($showFirstNameField && $showLastNameField) ? '' : 'is-single-field'; ?>">
-                <?php if ($showFirstNameField): ?>
-                <div class="field">
-                  <label for="newCustomerFirstName"><?php echo render_customer_field_label('First name', $firstNameFieldSettings); ?></label>
-                  <input id="newCustomerFirstName" name="new_customer_first_name" type="text" placeholder="First name">
+                <div class="customer-name-grid <?php echo ($showFirstNameField && $showLastNameField) ? '' : 'is-single-field'; ?>">
+                  <?php if ($showFirstNameField): ?>
+                    <div class="field">
+                      <label for="newCustomerFirstName"><?php echo render_customer_field_label('First name', $firstNameFieldSettings); ?></label>
+                      <input id="newCustomerFirstName" name="new_customer_first_name" type="text" placeholder="First name">
+                    </div>
+                  <?php endif; ?>
+                  <?php if ($showLastNameField): ?>
+                    <div class="field">
+                      <label for="newCustomerLastName"><?php echo render_customer_field_label('Last name', $lastNameFieldSettings); ?></label>
+                      <input id="newCustomerLastName" name="new_customer_last_name" type="text" placeholder="Last name">
+                    </div>
+                  <?php endif; ?>
                 </div>
-                <?php endif; ?>
-                <?php if ($showLastNameField): ?>
-                <div class="field">
-                  <label for="newCustomerLastName"><?php echo render_customer_field_label('Last name', $lastNameFieldSettings); ?></label>
-                  <input id="newCustomerLastName" name="new_customer_last_name" type="text" placeholder="Last name">
-                </div>
-                <?php endif; ?>
-              </div>
               <?php endif; ?>
               <?php $dobFieldSettings = $customerFieldSettings['date_of_birth'] ?? ['display' => true, 'required' => false]; ?>
               <div class="field"<?php echo !empty($dobFieldSettings['display']) ? '' : ' style="display:none;"'; ?>>
@@ -1263,16 +1427,16 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
               </div>
               <?php $genderFieldSettings = $customerFieldSettings['gender'] ?? ['display' => false, 'required' => false]; ?>
               <?php if (!empty($genderFieldSettings['display'])): ?>
-              <div class="field">
-                <label for="newCustomerGender"><?php echo render_customer_field_label('Gender', $genderFieldSettings); ?></label>
-                <select id="newCustomerGender" name="customer_gender">
-                  <option value="">Select gender</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
-                  <option value="unknown">Unknown</option>
-                </select>
-              </div>
+                <div class="field">
+                  <label for="newCustomerGender"><?php echo render_customer_field_label('Gender', $genderFieldSettings); ?></label>
+                  <select id="newCustomerGender" name="customer_gender">
+                    <option value="">Select gender</option>
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                    <option value="other">Other</option>
+                    <option value="unknown">Unknown</option>
+                  </select>
+                </div>
               <?php endif; ?>
               <?php $emailFieldSettings = $customerFieldSettings['email'] ?? ['display' => true, 'required' => false]; ?>
               <div class="field"<?php echo !empty($emailFieldSettings['display']) ? '' : ' style="display:none;"'; ?>>
@@ -1307,34 +1471,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
             <input type="hidden" id="selectedCustomerId" value="">
           </div>
 
-          <div class="field">
-            <label for="providerSelect">Which provider?</label>
-            <select id="providerSelect" name="provider_id">
-              <?php foreach ($providers as $index => $provider): ?>
-                <option value="<?php echo (int) $provider['id']; ?>" <?php echo ((int) ($provider['is_active'] ?? 0) === 1 && $defaultProviderId === (int) $provider['id']) ? 'selected' : ''; ?> <?php echo ((int) ($provider['is_active'] ?? 0) !== 1) ? 'disabled' : ''; ?>>
-                  <?php echo htmlspecialchars($provider['full_name'] ?: $provider['email']); ?>
-                  <?php if (!empty($provider['role'])): ?>
-                    (<?php echo htmlspecialchars($provider['role']); ?>)
-                  <?php endif; ?>
-                  <?php if ((int) ($provider['is_active'] ?? 0) !== 1): ?>
-                    (disabled)
-                  <?php endif; ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-
-          <div class="field">
-            <label for="appointmentTypeSelect">Type of appointment</label>
-            <select id="appointmentTypeSelect" name="appointment_type_id">
-              <?php foreach ($appointmentTypes as $index => $appointmentType): ?>
-                <option value="<?php echo (int) $appointmentType['id']; ?>" data-duration="<?php echo (int) $appointmentType['duration_minutes']; ?>" <?php echo $index === 0 ? 'selected' : ''; ?>>
-                  <?php echo htmlspecialchars($appointmentType['name']); ?>
-                </option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-
           <div class="field span-2">
             <label id="bookingNotesLabel" for="bookingNotes" class="booking-notes-label">Notes</label>
             <div id="bookingNotesPanel" class="booking-notes-panel is-collapsed">
@@ -1350,6 +1486,21 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
         <button type="button" id="makeBookingBtn" class="primary booking-booking-action">Make booking</button>
         <button type="button" id="deleteBookingBtn" class="booking-delete-action booking-edit-only">Delete</button>
         <button type="button" id="closeBookingModal">Close</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="closeConfirmationModal" class="booking-warning-modal">
+    <div class="booking-warning-card">
+      <div class="booking-warning-card__head">
+        <h2>Discard changes?</h2>
+      </div>
+      <div class="booking-warning-card__body">
+        <p>Are you sure you want to close this window? Any unsaved draft information or modifications will be completely discarded.</p>
+      </div>
+      <div class="booking-warning-card__footer">
+        <button type="button" id="abortCloseBtn">No, stay here</button>
+        <button type="button" id="confirmCloseBtn" class="primary" style="background: #dc2626; border-color: #dc2626;">Yes, close anyway</button>
       </div>
     </div>
   </dialog>
@@ -1401,9 +1552,6 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     const serverTimezoneName = <?php echo json_encode($serverTimezoneName); ?>;
     let serverNowIso = <?php echo json_encode($serverNowIso); ?>;
 
-    /**
-     * Resolves layout formats cleanly across views by tracking token index rules
-     */
     const calendarDisplayFormat = (function(phpFormatString) {
       const format = String(phpFormatString || 'd/m/Y H:i').trim();
       
@@ -1449,6 +1597,11 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     const bookingStart = document.getElementById('bookingStart');
     const bookingEnd = document.getElementById('bookingEnd');
     const closeBookingModalTop = document.getElementById('closeBookingModalTop');
+
+    const closeConfirmationModal = document.getElementById('closeConfirmationModal');
+    const confirmCloseBtn = document.getElementById('confirmCloseBtn');
+    const abortCloseBtn = document.getElementById('abortCloseBtn');
+
     const makeBookingBtn = document.getElementById('makeBookingBtn');
     const providerSelect = document.getElementById('providerSelect');
     const appointmentTypeSelect = document.getElementById('appointmentTypeSelect');
@@ -1474,11 +1627,11 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     const fallbackDurationMinutes = appointmentTypes.length > 0 ? Number(appointmentTypes[0].duration_minutes || 30) : 30;
 
     function getDefaultPrimaryProviderId() {
-      if (defaultProviderId && Number(defaultProviderId) > 0) {
-        return Number(defaultProviderId);
-      }
       if (providerId && Number(providerId) > 0) {
         return Number(providerId);
+      }
+      if (defaultProviderId && Number(defaultProviderId) > 0) {
+        return Number(defaultProviderId);
       }
       if (providers.length > 0) {
         return Number(providers[0].id);
@@ -1769,6 +1922,26 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     setInterval(updateServerClock, 1000);
     setInterval(syncServerClock, 60000);
 
+    // Logic for auto refresh page when modal is not open, to ensure calendar data is up to date for users who keep the page open for a long time
+    function isAnyBookingDialogOpen() {
+      return Boolean(
+        (bookingModal && bookingModal.open) ||
+        (dailyNoteModal && dailyNoteModal.open) ||
+        (bookingWarningModal && bookingWarningModal.open) ||
+        (appointmentEmailModal && appointmentEmailModal.open) ||
+        (closeConfirmationModal && closeConfirmationModal.open)
+      );
+    }
+
+    setInterval(function() {
+      if (isAnyBookingDialogOpen()) {
+        return;
+      }
+      if (window.calendarInstance) {
+        window.calendarInstance.refetchEvents();
+      }
+    }, 60000);
+
     function getSelectedDurationMinutes() {
       const option = appointmentTypeSelect.options[appointmentTypeSelect.selectedIndex];
       const parsed = Number(option?.dataset?.duration || fallbackDurationMinutes);
@@ -1898,19 +2071,30 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       const dualEnabled = isThreeDayOrDayView() && secondaryId > 0;
 
       return eventsArray.filter(function(event) {
-        if (!event || event.display === 'background') {
-          return true;
+        if (!event) return false;
+
+        if (event.display === 'background') {
+          const eventProviderId = Number(
+            (event.extendedProps && event.extendedProps.provider_id) || 0
+          );
+          
+          if (!eventProviderId) return true; 
+
+          if (dualEnabled) {
+            return eventProviderId === primaryId || eventProviderId === secondaryId;
+          }
+          
+          return primaryId > 0 ? eventProviderId === primaryId : true;
         }
 
-        const providerValue = Number((event.extendedProps && event.extendedProps.provider_id) || event.provider_id || 0);
-        if (!providerValue) {
-          return false;
-        }
+        const providerValue = Number(
+          (event.extendedProps && event.extendedProps.provider_id) || event.provider_id || 0
+        );
+        if (!providerValue) return false;
 
         if (dualEnabled) {
           return providerValue === primaryId || providerValue === secondaryId;
         }
-
         return primaryId > 0 ? providerValue === primaryId : true;
       });
     }
@@ -1980,6 +2164,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     function openBookingModal(startDate, endDate, options = {}) {
       const calendar = window.calendarInstance;
       const mode = options.mode || 'draft';
+
       const derivedEndDate = mode === 'draft'
         ? addMinutes(startDate, getSelectedDurationMinutes())
         : (endDate || addMinutes(startDate, getSelectedDurationMinutes()));
@@ -1988,6 +2173,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       currentBookingEndDate = derivedEndDate;
 
       bookingModal.setAttribute('data-mode', mode);
+
       bookingModalTitle.textContent = options.title || (mode === 'appointment' ? 'Appointment details' : 'New booking draft');
       if (makeBookingBtn) {
         makeBookingBtn.textContent = mode === 'edit' ? 'Save changes' : 'Make booking';
@@ -2073,7 +2259,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       }
     }
     
-const calendar = new FullCalendar.Calendar(calendarEl, {
+    const calendar = new FullCalendar.Calendar(calendarEl, {
       now: getServerClockDate(getServerNowDate()),
       initialView: isStaff ? 'timeGridWeek' : 'timeGridDay',
       height: calendarHeight,
@@ -2084,11 +2270,7 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       selectable: false, 
       slotDuration: '00:30:00',
       snapDuration: minutesToDuration(bookingSnapMinutes),
-      
-      // 1. FORCE DAY-FIRST LOCALE SO BROWSER ENGINES EXPECT D/M BY DEFAULT
       locale: 'en-au', 
-
-      // 2. APPLY YOUR DYNAMIC DB FORMAT TO THE MAIN TOOLBAR TITLE
       titleFormat: calendarDisplayFormat.title,
 
       viewDidMount: function(arg) {
@@ -2103,27 +2285,23 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
         }
       },
 
-      // 3. EXPLICITLY OVERRIDE COLUMN HEADERS PER VIEW TYPE TO FORCE YOUR DB FORMAT
       views: {
         dayGridMonth: {
           height: 'auto',        
           contentHeight: 'auto', 
           expandRows: false,
-          dayHeaderFormat: { weekday: 'short' } // Just "Mon", "Tue"
+          dayHeaderFormat: { weekday: 'short' }
         },
         timeGridWeek: {
-          // Combines "Mon" + your format ("1/6" or "6/1") explicitly
           dayHeaderFormat: Object.assign({ weekday: 'short' }, calendarDisplayFormat.column)
         },
         timeGridDay: {
-          // Combines "Monday" + your format explicitly
           dayHeaderFormat: Object.assign({ weekday: 'long' }, calendarDisplayFormat.column)
         },
         timeGridThreeDay: {
           type: 'timeGrid',
           duration: { days: 3 },
           buttonText: '3 day',
-          // Combines "Mon" + your format explicitly
           dayHeaderFormat: Object.assign({ weekday: 'short' }, calendarDisplayFormat.column)
         }
       },
@@ -2179,8 +2357,119 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
         status.className = 'booking-event__status';
         status.textContent = String(arg.event.extendedProps.status || 'booked').replace(/_/g, ' ');
 
+        const statusDot = document.createElement('div');
+        statusDot.className = 'fc-status-cycler-dot';
+        statusDot.setAttribute('title', 'Click to toggle next status state');
+
+        const initialStatus = String(arg.event.extendedProps.status || 'booked').trim().toLowerCase().replace(/_/g, ' ');
+        let dotColor = '#3b82f6';
+
+        if (initialStatus === 'confirmed') dotColor = '#d4af37';   
+        if (initialStatus === 'present')   dotColor = '#10b981';   
+        if (initialStatus === 'completed') dotColor = '#9ca3af';   
+        if (initialStatus === 'no show')   dotColor = '#dc143c';   
+
+        statusDot.style.backgroundColor = dotColor;
+
+        statusDot.addEventListener('click', async function(jsEvent) {
+          jsEvent.stopPropagation(); 
+          jsEvent.preventDefault();
+
+          const rawId = String(arg.event.id || '');
+          if (!rawId || rawId.includes('break') || rawId.includes('unavail') || rawId === 'booking-draft-placeholder') {
+            return;
+          }
+          const appointmentId = parseInt(rawId, 10);
+          if (isNaN(appointmentId) || appointmentId < 1) return;
+
+          const liveStatus = String(arg.event.extendedProps.status || 'booked').trim().toLowerCase().replace(/_/g, ' ');
+
+          const cycleMap = {
+            'booked': 'confirmed',
+            'confirmed': 'present',
+            'present': 'completed',
+            'completed': 'no show',
+            'no show': 'booked'
+          };
+
+          const nextStatus = cycleMap[liveStatus] || 'booked';
+
+          statusDot.style.opacity = '0.5';
+          statusDot.style.pointerEvents = 'none';
+
+          try {
+            const startIso = arg.event.start.toISOString();
+            const endIso = arg.event.end ? arg.event.end.toISOString() : null;
+
+            const formattedStart = startIso.replace('T', ' ').substring(0, 19);
+            const formattedEnd = endIso ? endIso.replace('T', ' ').substring(0, 19) : null;
+
+            const customerId = parseInt(arg.event.extendedProps.customer_id, 10) || 0;
+            const providerId = parseInt(arg.event.extendedProps.provider_id, 10) || parseInt(selectedPrimaryProviderId, 10) || 0;
+            const appointmentTypeId = parseInt(arg.event.extendedProps.appointment_type_id, 10) || parseInt(defaultAppointmentTypeId, 10) || 0;
+
+            const response = await fetch('appointments_api.php?action=update', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                csrf_token: document.querySelector('input[name="csrf_token"]').value,
+                appointment_id: appointmentId,
+                selected_customer_id: customerId,
+                provider_id: providerId,
+                appointment_type_id: appointmentTypeId,
+                start_time: formattedStart, 
+                end_time: formattedEnd,     
+                status: nextStatus, 
+                notes: arg.event.extendedProps.notes || ''
+              })
+            });
+
+            const json = await response.json();
+            
+            if (!response.ok || json.ok === false) {
+              throw new Error(json.error || 'Server rejected inline state shift cycle.');
+            }
+
+            try {
+              await window.calendarInstance.refetchEvents();
+            } catch (refetchErr) {
+              // fallback ignore
+            }
+
+            if (nextStatus === 'present') {
+              const appt = json.appointment || arg.event;
+              const cust = json.customer || { id: customerId };
+              if (!bookingModal.open) {
+                openBookingModal(new Date(arg.event.start), arg.event.end, {
+                  mode: 'edit',
+                  title: (appointmentId ? ('Appt #' + appointmentId) : 'Appointment') + ' • present',
+                  appointment: {
+                    id: appointmentId,
+                    status: 'present',
+                    notes: arg.event.extendedProps.notes,
+                    provider_id: providerId,
+                    appointment_type_id: appointmentTypeId,
+                    start_time: appt.start_time || formattedStart,
+                    end_time: appt.end_time || formattedEnd
+                  },
+                  customer: cust
+                });
+              }
+            }
+
+          } catch (err) {
+            console.error('Status dot error:', err);
+            alert('Error updating status: ' + err.message);
+          } finally {
+            statusDot.style.opacity = '1';
+            statusDot.style.pointerEvents = 'auto';
+          }
+        });
+
         wrapper.appendChild(title);
         wrapper.appendChild(status);
+        wrapper.appendChild(statusDot);
+        
         return { domNodes: [wrapper] };
       },
       eventClassNames: function(arg) {
@@ -2217,16 +2506,21 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
         if (isSameServerCalendarDay(arg.date, serverNow)) {
           arg.el.classList.add('server-today');
         }
+        injectUnavailButtons(arg);
       },
       dayHeaderDidMount: function(arg) {
         const serverNow = getServerNowDate();
         if (isSameServerCalendarDay(arg.date, serverNow)) {
           arg.el.classList.add('server-today');
         }
+        injectUnavailButtons(arg);
       },
       datesSet: function() {
         syncProviderFilterVisibility();
         calendar.refetchEvents();
+
+        setTimeout(reinjectAllUnavailButtons, 50); 
+        setTimeout(refreshDailyNotePills, 50); 
       },
       selectConstraint: 'businessHours',
       headerToolbar: {
@@ -2241,12 +2535,23 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
 
         if (currentUserRole === 'provider' && providerId) {
           params.set('provider_id', String(providerId));
+        } else {
+          const selectedPrimary = document.getElementById('calendarProviderPrimary')?.value;
+          const selectedSecondary = document.getElementById('calendarProviderSecondary')?.value;
+          
+          let ids = [];
+          if (selectedPrimary) ids.push(selectedPrimary);
+          if (selectedSecondary && isThreeDayOrDayView()) ids.push(selectedSecondary);
+          
+          if (ids.length > 0) {
+            params.set('provider_id', ids.join(','));
+          }
         }
 
         fetch('calendar_api.php?' + params.toString(), { credentials: 'same-origin' })
           .then(function(response) {
             if (!response.ok) {
-              throw new Error('Could not load appointments');
+              throw new Error('Could not load appointments. Server did not respond with a valid response.');
             }
             return response.json();
           })
@@ -2260,21 +2565,31 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       },
       eventDidMount: function(arg) {
         if (arg.event.display === 'background') {
+          if (isDualProviderSplitEnabled()) {
+            const bgProviderId = Number(arg.event.extendedProps?.provider_id || 0);
+            const el = arg.el;
+            if (bgProviderId === Number(selectedPrimaryProviderId || 0)) {
+              el.style.cssText += ';left:0%!important;right:50%!important;width:50%!important';
+            } else if (bgProviderId === Number(selectedSecondaryProviderId || 0)) {
+              el.style.cssText += ';left:50%!important;right:0%!important;width:50%!important';
+            }
+          }
           return;
         }
 
         const harness = arg.el.closest('.fc-timegrid-event-harness');
-        if (!harness) {
-          return;
-        }
+        if (!harness) return;
 
         harness.classList.remove('provider-split-left', 'provider-split-right');
 
-        if (!isDualProviderSplitEnabled()) {
-          return;
-        }
+        if (!isDualProviderSplitEnabled()) return;
 
-        const eventProviderId = Number(arg.event.extendedProps.provider_id || 0);
+        const eventProviderId = Number(
+          arg.event.extendedProps?.provider_id ||
+          (arg.event.extendedProps?.isDraftPlaceholder ? (pendingDraftProviderId || selectedPrimaryProviderId) : 0) ||
+          0
+        );
+
         if (eventProviderId === Number(selectedPrimaryProviderId || 0)) {
           harness.classList.add('provider-split-left');
         } else if (eventProviderId === Number(selectedSecondaryProviderId || 0)) {
@@ -2300,9 +2615,12 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
           title: '🆕 Creating Draft...',
           start: roundedStart,
           end: fixedEnd,
-          color: '#2457ff', 
+          color: '#2457ff',
           editable: true,
-          extendedProps: { isDraftPlaceholder: true }
+          extendedProps: {
+            isDraftPlaceholder: true,
+            provider_id: pendingDraftProviderId 
+          }
         });
 
         currentBookingStartDate = roundedStart;
@@ -2318,6 +2636,7 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       editable: isStaff,
       eventClick: function(info) {
         const event = info.event;
+        if (event.display === 'background') return;
 
         if (event.extendedProps?.isDraftPlaceholder || event.id === 'booking-draft-placeholder') {
           currentBookingStartDate = event.start;
@@ -2481,6 +2800,8 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       calendarProviderSecondary.addEventListener('change', function() {
         selectedSecondaryProviderId = calendarProviderSecondary.value ? Number(calendarProviderSecondary.value) : null;
         calendar.refetchEvents();
+        reinjectAllUnavailButtons();
+        refreshDailyNotePills();
       });
     }
 
@@ -2497,10 +2818,178 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
           }
         });
       } catch (e) {
-        // fallback
+        // fallback ignore
       }
     })();
 
+    // ============================================================
+    // DAY CELL UNAVAILABILITY TOGGLE BUTTONS
+    // ============================================================
+    async function toggleDayUnavailability(dateStr, providerId) {
+      const existingEvent = window.calendarInstance.getEvents().find(function(event) {
+        if (!event.classNames.includes('unavail-event')) return false;
+        const epId = Number(event.extendedProps?.provider_id || 0);
+        if (epId !== Number(providerId)) return false;
+        if (event.extendedProps?.unavailability_type === 'recurring') return false;
+        if (!String(event.id).startsWith('unavail-single-')) return false;
+        const eventDateStr = event.start.toISOString().slice(0, 10);
+        return eventDateStr === dateStr;
+      });
+
+      if (existingEvent) {
+        const match = String(existingEvent.id).match(/^unavail-single-(\d+)$/);
+        const unavailId = match ? Number(match[1]) : 0;
+        if (!unavailId) {
+          alert('Cannot identify single unavailability record to remove.');
+          return;
+        }
+        const resp = await fetch('unavailabilities_api.php?action=delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            csrf_token: document.querySelector('input[name="csrf_token"]').value,
+            id: unavailId
+          })
+        });
+        const json = await resp.json();
+        if (!json.ok) throw new Error(json.error || 'Failed to remove unavailability.');
+      } else {
+        const startDatetime = dateStr + ' ' + visibleStartTime.slice(0, 5) + ':00';
+        const endDatetime   = dateStr + ' ' + visibleEndTime.slice(0, 5) + ':00';
+        const resp = await fetch('unavailabilities_api.php?action=create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            csrf_token: document.querySelector('input[name="csrf_token"]').value,
+            provider_id: providerId,
+            type: 'single',
+            start_datetime: startDatetime,
+            end_datetime: endDatetime,
+            reason: 'Day unavailability'
+          })
+        });
+        const json = await resp.json();
+        if (!json.ok) throw new Error(json.error || 'Failed to create unavailability.');
+      }
+
+      await window.calendarInstance.refetchEvents();
+      reinjectAllUnavailButtons();  
+      refreshDailyNotePills();     
+    }
+
+    function reinjectAllUnavailButtons() {
+      if (!window.calendarInstance) return;
+      const viewType = window.calendarInstance.view?.type || '';
+      if (viewType === 'dayGridMonth') return;
+
+      calendarEl.querySelectorAll('.day-unavail-toggle-wrap').forEach(el => el.remove());
+
+      calendarEl.querySelectorAll('.fc-col-header-cell').forEach(function(el) {
+        const dateAttr = el.getAttribute('data-date');
+        if (!dateAttr) return;
+
+        const wrap = document.createElement('div');
+        wrap.className = 'day-unavail-toggle-wrap';
+        wrap.style.cssText = 'display:flex;padding:4px 6px 2px;gap:0;';
+
+        const dual = isDualProviderSplitEnabled();
+
+        if (dual) {
+          const primaryProvider = providers.find(p => Number(p.id) === Number(selectedPrimaryProviderId));
+          const secondaryProvider = providers.find(p => Number(p.id) === Number(selectedSecondaryProviderId));
+          const primaryLabel = primaryProvider ? (primaryProvider.full_name || primaryProvider.email).split(' ')[0] : 'P1';
+          const secondaryLabel = secondaryProvider ? (secondaryProvider.full_name || secondaryProvider.email).split(' ')[0] : 'P2';
+          wrap.appendChild(buildUnavailButton(dateAttr, selectedPrimaryProviderId, primaryLabel, 'left'));
+          wrap.appendChild(buildUnavailButton(dateAttr, selectedSecondaryProviderId, secondaryLabel, 'right'));
+        } else {
+          const primaryProvider = providers.find(p => Number(p.id) === Number(selectedPrimaryProviderId));
+          const primaryLabel = primaryProvider ? (primaryProvider.full_name || primaryProvider.email).split(' ')[0] : 'Provider';
+          wrap.appendChild(buildUnavailButton(dateAttr, selectedPrimaryProviderId, primaryLabel, null));
+        }
+
+        el.insertBefore(wrap, el.firstChild);
+      });
+    }
+
+    function isDayUnavailableForProvider(dateStr, providerId) {
+      return window.calendarInstance.getEvents().some(function(event) {
+        if (!event.classNames.includes('unavail-event')) return false;
+        if (!String(event.id).startsWith('unavail-single-')) return false;
+        const epId = Number(event.extendedProps?.provider_id || 0);
+        if (epId !== Number(providerId)) return false;
+        const eventDateStr = event.start.toISOString().slice(0, 10);
+        return eventDateStr === dateStr;
+      });
+    }
+
+    function buildUnavailButton(dateStr, providerId, providerLabel, half) {
+      const isUnavail = isDayUnavailableForProvider(dateStr, providerId);
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'day-unavail-toggle' + (isUnavail ? ' is-unavailable' : '');
+      btn.setAttribute('data-date', dateStr);
+      btn.setAttribute('data-provider-id', String(providerId));
+      btn.textContent = isUnavail ? '✓ ' + providerLabel : '🚫 ' + providerLabel;
+      btn.title = (isUnavail ? 'Remove unavailability for ' : 'Mark unavailable: ') + providerLabel;
+
+      if (half === 'left') {
+        btn.style.cssText = 'width:50%;border-radius:8px 0 0 8px;border-right:0;';
+      } else if (half === 'right') {
+        btn.style.cssText = 'width:50%;border-radius:0 8px 8px 0;';
+      } else {
+        btn.style.cssText = 'width:100%;border-radius:8px;';
+      }
+
+      btn.addEventListener('click', async function(e) {
+        e.stopPropagation();
+        btn.disabled = true;
+        btn.textContent = '...';
+        try {
+          await toggleDayUnavailability(dateStr, providerId);
+        } catch (err) {
+          alert(err.message || 'Failed to toggle unavailability.');
+          btn.disabled = false;
+        }
+      });
+
+      return btn;
+    }
+
+    function injectUnavailButtons(arg) {
+      if (!isStaff) return;
+      const viewType = window.calendarInstance?.view?.type || '';
+      if (viewType === 'dayGridMonth') return;
+
+      if (!arg.el.classList.contains('fc-col-header-cell') && 
+          !arg.el.closest('.fc-col-header-cell')) return;
+
+      const dateStr = arg.date.toISOString().slice(0, 10);
+
+      arg.el.querySelectorAll('.day-unavail-toggle-wrap').forEach(el => el.remove());
+
+      const wrap = document.createElement('div');
+      wrap.className = 'day-unavail-toggle-wrap';
+      wrap.style.cssText = 'display:flex;padding:4px 6px 2px;gap:0;';
+
+      const dual = isDualProviderSplitEnabled();
+
+      if (dual) {
+        const primaryProvider = providers.find(p => Number(p.id) === Number(selectedPrimaryProviderId));
+        const secondaryProvider = providers.find(p => Number(p.id) === Number(selectedSecondaryProviderId));
+        const primaryLabel = primaryProvider ? (primaryProvider.full_name || primaryProvider.email).split(' ')[0] : 'P1';
+        const secondaryLabel = secondaryProvider ? (secondaryProvider.full_name || secondaryProvider.email).split(' ')[0] : 'P2';
+
+        wrap.appendChild(buildUnavailButton(dateStr, selectedPrimaryProviderId, primaryLabel, 'left'));
+        wrap.appendChild(buildUnavailButton(dateStr, selectedSecondaryProviderId, secondaryLabel, 'right'));
+      } else {
+        const primaryProvider = providers.find(p => Number(p.id) === Number(selectedPrimaryProviderId));
+        const primaryLabel = primaryProvider ? (primaryProvider.full_name || primaryProvider.email).split(' ')[0] : 'Provider';
+        wrap.appendChild(buildUnavailButton(dateStr, selectedPrimaryProviderId, primaryLabel, null));
+      }
+
+      const frame = arg.el.querySelector('.fc-daygrid-day-frame') || arg.el;
+      frame.insertBefore(wrap, frame.firstChild);
+    }
     const newCustomerFirstName = document.getElementById('newCustomerFirstName');
     const newCustomerLastName = document.getElementById('newCustomerLastName');
     const newCustomerDob = document.getElementById('newCustomerDob');
@@ -2618,26 +3107,28 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
 
         const handleConfirm = () => {
           cleanup();
+          if (typeof bookingWarningModal.close === 'function') {
+            bookingWarningModal.close();
+          }
           resolve(true);
         };
 
         const handleCancel = () => {
           cleanup();
+          if (typeof bookingWarningModal.close === 'function') {
+            bookingWarningModal.close();
+          }
           resolve(false);
         };
 
         const cleanup = () => {
           bookingWarningConfirm.removeEventListener('click', handleConfirm);
           bookingWarningCancel.removeEventListener('click', handleCancel);
-          if (typeof bookingWarningModal.close === 'function') {
-            bookingWarningModal.close();
-          } else {
-            bookingWarningModal.removeAttribute('open');
-          }
         };
 
         bookingWarningConfirm.addEventListener('click', handleConfirm, { once: true });
         bookingWarningCancel.addEventListener('click', handleCancel, { once: true });
+        
         bookingWarningModal.addEventListener('cancel', function(event) {
           event.preventDefault();
           handleCancel();
@@ -2866,14 +3357,18 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       notesExpanded = !notesExpanded;
       syncNotesVisibility();
     }
-
+    
     function isAppointmentInPast(startTimeValue) {
-      const startDate = parseDateValue(startTimeValue);
-      if (Number.isNaN(startDate.getTime())) {
-        return false;
-      }
+      const raw = String(startTimeValue || '').trim();
+      if (!raw) return false;
 
-      return startDate.getTime() < getServerNowDate().getTime();
+      const normalized = raw.replace(' ', 'T');
+      const serverClockDate = new Date(normalized + 'Z');
+      const instant = serverClockDateToInstant(serverClockDate);
+
+      if (Number.isNaN(instant.getTime())) return false;
+
+      return instant.getTime() < getServerNowDate().getTime();
     }
 
     function isBookingWithinDeadline(startTimeValue) {
@@ -2940,32 +3435,6 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       updateCustomerSearchSelection();
     }
 
-    function renderCustomerSearchResults(customers) {
-      if (!customerSearchResults || !customerSearchState) {
-        return;
-      }
-
-      if (!customers.length) {
-        renderCustomerSearchState('No matching customers found.');
-        return;
-      }
-
-      customerSearchState.textContent = `Found ${customers.length} matching customer${customers.length === 1 ? '' : 's'}.`;
-      customerSearchResults.innerHTML = '';
-
-      customers.forEach(customer => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'customer-search-result';
-        button.setAttribute('data-customer-id', String(customer.id));
-        button.innerHTML = `<strong>${escapeHtml(customer.full_name || 'Unnamed customer')}</strong><span>${escapeHtml(formatCustomerContact(customer))}</span>`;
-        button.addEventListener('click', () => showSelectedCustomer(customer));
-        customerSearchResults.appendChild(button);
-      });
-
-      updateCustomerSearchSelection();
-    }
-
     async function searchExistingCustomers(query) {
       const term = String(query || '').trim();
       const requestId = ++customerSearchRequestId;
@@ -3001,6 +3470,32 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       }
     }
 
+    function renderCustomerSearchResults(customers) {
+      if (!customerSearchResults || !customerSearchState) {
+        return;
+      }
+
+      if (!customers.length) {
+        renderCustomerSearchState('No matching customers found.');
+        return;
+      }
+
+      customerSearchState.textContent = `Found ${customers.length} matching customer${customers.length === 1 ? '' : 's'}.`;
+      customerSearchResults.innerHTML = '';
+
+      customers.forEach(customer => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'customer-search-result';
+        button.setAttribute('data-customer-id', String(customer.id));
+        button.innerHTML = `<strong>${escapeHtml(customer.full_name || 'Unnamed customer')}</strong><span>${escapeHtml(formatCustomerContact(customer))}</span>`;
+        button.addEventListener('click', () => showSelectedCustomer(customer));
+        customerSearchResults.appendChild(button);
+      });
+
+      updateCustomerSearchSelection();
+    }
+
     function setCustomerMode(mode) {
       currentCustomerMode = mode;
       createCustomerTab.classList.toggle('is-active', mode === 'create');
@@ -3023,169 +3518,6 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
           customerSearchInput.focus();
           searchExistingCustomers(customerSearchInput.value);
         }
-      }
-    }
-
-    async function submitBooking() {
-      const mode = bookingModal.getAttribute('data-mode');
-      const isEdit = mode === 'edit' && currentEditingAppointmentId;
-      const selectedCustomerValue = selectedCustomerId.value.trim();
-      const firstNameValue = newCustomerFirstName ? newCustomerFirstName.value.trim() : '';
-      const lastNameValue = newCustomerLastName ? newCustomerLastName.value.trim() : '';
-      const customerDob = newCustomerDob.value.trim();
-      const customerGender = newCustomerGender ? newCustomerGender.value.trim() : '';
-      const customerEmail = newCustomerEmail.value.trim();
-      const customerMobile = newCustomerMobile.value.trim();
-      const providerId = providerSelect.value.trim();
-      const appointmentTypeId = appointmentTypeSelect.value.trim();
-      const startTime = bookingStart.value.trim();
-
-      if (!providerId) {
-        setBookingAlert('Choose a provider before making the booking.');
-        return;
-      }
-      if (!appointmentTypeId) {
-        setBookingAlert('Choose an appointment type before making the booking.');
-        return;
-      }
-
-      if (checkTimeSlotConflicts()) {
-        return; 
-      }
-
-      const draftStart = new Date(bookingStart.value + 'Z');
-      const draftEnd = new Date(bookingEnd.value + 'Z');
-
-      const hasTimeConflict = window.calendarInstance.getEvents().some(function(event) {
-        if (event.display !== 'background') return false;
-        
-        const breakStart = event.start;
-        const breakEnd = event.end || event.start;
-        
-        return breakStart < draftEnd && breakEnd > draftStart;
-      });
-
-      if (hasTimeConflict) {
-        bookingModal.classList.add('is-invalid-time');
-        setBookingAlert('🚨 This appointment cannot be booked because it overlaps with an unavailable or break time slot.', true);
-        if (navigator.vibrate) navigator.vibrate(100);
-        return; 
-      } else {
-        bookingModal.classList.remove('is-invalid-time');
-      }
-
-      if (currentCustomerMode === 'existing') {
-        if (!selectedCustomerValue) {
-          setBookingAlert('Select a customer from the search results.');
-          return;
-        }
-      } else if (!firstNameValue && !lastNameValue) {
-        setBookingAlert('Enter a customer name or switch to existing customer search.');
-        return;
-      }
-
-      const confirmationQueue = [];
-      if (isAppointmentInPast(startTime)) {
-        confirmationQueue.push('This appointment is in the past.');
-      } else if (isBookingWithinDeadline(startTime)) {
-        confirmationQueue.push('This booking is within the ' + bookingDeadlineHours + '-hour booking deadline.');
-      }
-      if (isBookingOutsideDisplayTime()) {
-        confirmationQueue.push('This booking is outside the configured display time (' + visibleStartTime.slice(0, 5) + ' to ' + visibleEndTime.slice(0, 5) + ').');
-      }
-
-      const missingFields = getCustomerMissingRequiredFields();
-      if (missingFields.length) {
-        confirmationQueue.push('The new customer is missing ' + missingFields.length + ' required field' + (missingFields.length === 1 ? '' : 's') + ': ' + missingFields.join(', ') + '.');
-      }
-
-      for (const warningMessage of confirmationQueue) {
-        setBookingAlert(warningMessage, false);
-        const proceed = await showBookingWarning(warningMessage + ' Do you want to continue?');
-        if (!proceed) {
-          return;
-        }
-      }
-
-      makeBookingBtn.disabled = true;
-      makeBookingBtn.textContent = 'Saving...';
-      setBookingAlert('');
-
-      try {
-        const customerName = [firstNameValue, lastNameValue].filter(Boolean).join(' ').trim();
-        const url = 'appointments_api.php?action=' + (isEdit ? 'update' : 'create');
-        const statusValue = isEdit && appointmentStatusSelect ? normalizeAppointmentStatus(appointmentStatusSelect.value) : 'booked';
-        const notesValue = bookingNotes ? bookingNotes.value.trim() : '';
-        const resp = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(Object.assign({
-            csrf_token: document.querySelector('input[name="csrf_token"]').value,
-            selected_customer_id: selectedCustomerValue,
-            customer_name: customerName,
-            customer_first_name: firstNameValue,
-            customer_last_name: lastNameValue,
-            customer_email: customerEmail,
-            customer_mobile: customerMobile,
-            date_of_birth: customerDob,
-            customer_gender: customerGender,
-            provider_id: providerId,
-            appointment_type_id: appointmentTypeId,
-            start_time: startTime,
-            status: statusValue,
-            notes: notesValue
-          }, (isEdit ? { appointment_id: currentEditingAppointmentId } : {}), (bookingEndOverrideActive ? { end_time: bookingEnd.value } : {})))
-        });
-
-        const json = await resp.json();
-        if (!resp.ok) {
-          throw new Error(json.error || 'Failed to create booking');
-        }
-
-        const savedAppointmentId = Number(json.appointment && json.appointment.id ? json.appointment.id : 0);
-        const savedCustomerEmail = String(json.customer && json.customer.email ? json.customer.email : '').trim();
-        const savedCustomerName = String(json.customer && json.customer.full_name ? json.customer.full_name : customerName || 'this customer').trim();
-
-        if (savedAppointmentId > 0) {
-          while (true) {
-            const sendEmail = await showAppointmentEmailPrompt({
-              appointmentId: savedAppointmentId,
-              customerEmail: savedCustomerEmail,
-              customerName: savedCustomerName
-            });
-
-            if (!sendEmail) {
-              break;
-            }
-
-            makeBookingBtn.disabled = true;
-            makeBookingBtn.textContent = 'Sending email...';
-            try {
-              await sendAppointmentConfirmationEmail(savedAppointmentId);
-              break;
-            } catch (emailErr) {
-              setBookingAlert(emailErr.message || 'Failed to send confirmation email.');
-            } finally {
-              makeBookingBtn.disabled = false;
-              makeBookingBtn.textContent = mode === 'edit' ? 'Save changes' : 'Make booking';
-            }
-          }
-        }
-
-        await calendar.refetchEvents();
-        if (typeof bookingModal.close === 'function') {
-          bookingModal.close();
-        } else {
-          bookingModal.removeAttribute('open');
-        }
-        setDraftMode();
-      } catch (err) {
-        setBookingAlert(err.message || (mode === 'edit' ? 'Failed to update booking.' : 'Failed to create booking.'));
-      } finally {
-        makeBookingBtn.disabled = false;
-        makeBookingBtn.textContent = mode === 'edit' ? 'Save changes' : 'Make booking';
       }
     }
 
@@ -3213,7 +3545,6 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
     }
 
     clearSelectedCustomerBtn.addEventListener('click', clearSelectedCustomer);
-
     setCustomerMode('create');
 
     function setDraftMode() {
@@ -3246,25 +3577,161 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
       setCustomerMode('create');
     }
 
-    if (closeBookingModalTop) {
-      closeBookingModalTop.addEventListener('click', () => {
+    submitBooking._running = false;
+
+    async function submitBooking() {
+      if (submitBooking._running) return;
+      submitBooking._running = true;
+
+      const mode = bookingModal.getAttribute('data-mode');
+      const isEdit = mode === 'edit' && currentEditingAppointmentId;
+      const selectedCustomerValue = selectedCustomerId.value.trim();
+      const firstNameValue = newCustomerFirstName ? newCustomerFirstName.value.trim() : '';
+      const lastNameValue = newCustomerLastName ? newCustomerLastName.value.trim() : '';
+      const customerDob = newCustomerDob.value.trim();
+      const customerGender = newCustomerGender ? newCustomerGender.value.trim() : '';
+      const customerEmail = newCustomerEmail.value.trim();
+      const customerMobile = newCustomerMobile.value.trim();
+      const providerId = providerSelect.value.trim();
+      const appointmentTypeId = appointmentTypeSelect.value.trim();
+      const startTime = bookingStart.value.trim();
+
+      if (!providerId) {
+        submitBooking._running = false;
+        setBookingAlert('Choose a provider before making the booking.');
+        return;
+      }
+      if (!appointmentTypeId) {
+        submitBooking._running = false;
+        setBookingAlert('Choose an appointment type before making the booking.');
+        return;
+      }
+      if (currentCustomerMode === 'existing') {
+        if (!selectedCustomerValue) {
+          submitBooking._running = false;
+          setBookingAlert('Select a customer from the search results.');
+          return;
+        }
+      } else if (!firstNameValue && !lastNameValue) {
+        submitBooking._running = false;
+        setBookingAlert('Enter a customer name or switch to existing customer search.');
+        return;
+      }
+
+      const confirmationQueue = [];
+
+      if (checkTimeSlotConflicts()) {
+        confirmationQueue.push('This booking overlaps with an existing appointment, shift break, or provider unavailability track.');
+      }
+      if (isAppointmentInPast(startTime)) {
+        confirmationQueue.push('This appointment is in the past.');
+      } else if (isBookingWithinDeadline(startTime)) {
+        confirmationQueue.push('This booking is within the ' + bookingDeadlineHours + '-hour booking deadline window.');
+      }
+      if (isBookingOutsideDisplayTime()) {
+        confirmationQueue.push('This booking is outside the configured calendar display layout times (' + visibleStartTime.slice(0, 5) + ' to ' + visibleEndTime.slice(0, 5) + ').');
+      }
+      const missingFields = getCustomerMissingRequiredFields();
+      if (missingFields.length) {
+        confirmationQueue.push('The new customer profile is missing required info fields: ' + missingFields.join(', ') + '.');
+      }
+
+      async function processWarningsSequentially(queue) {
+        for (let i = 0; i < queue.length; i++) {
+          setBookingAlert(queue[i], false);
+          const proceed = await showBookingWarning(queue[i] + ' Do you want to override this constraint and save anyway?');
+          if (!proceed) {
+            return false;
+          }
+          await new Promise(r => setTimeout(r, 120));
+        }
+        return true;
+      }
+
+      const allWarningsCleared = await processWarningsSequentially(confirmationQueue);
+      if (!allWarningsCleared) {
+        submitBooking._running = false;
+        setBookingAlert('Booking execution halted by user override.');
+        return;
+      }
+
+      setBookingAlert('');
+      makeBookingBtn.disabled = true;
+      makeBookingBtn.textContent = mode === 'edit' ? 'Save changes...' : 'Saving...';
+
+      try {
+        const customerName = [firstNameValue, lastNameValue].filter(Boolean).join(' ').trim();
+        const url = 'appointments_api.php?action=' + (isEdit ? 'update' : 'create');
+        const statusValue = isEdit && appointmentStatusSelect ? normalizeAppointmentStatus(appointmentStatusSelect.value) : 'booked';
+        const notesValue = bookingNotes ? bookingNotes.value.trim() : '';
+        
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(Object.assign({
+            csrf_token: document.querySelector('input[name="csrf_token"]').value,
+            selected_customer_id: selectedCustomerValue,
+            customer_name: customerName,
+            customer_first_name: firstNameValue,
+            customer_last_name: lastNameValue,
+            customer_email: customerEmail,
+            customer_mobile: customerMobile,
+            date_of_birth: customerDob,
+            customer_gender: customerGender,
+            provider_id: providerId,
+            appointment_type_id: appointmentTypeId,
+            start_time: startTime,
+            status: statusValue,
+            notes: notesValue
+          }, (isEdit ? { appointment_id: currentEditingAppointmentId } : {}), (bookingEndOverrideActive ? { end_time: bookingEnd.value } : {})))
+        });
+
+        const json = await resp.json();
+        if (!resp.ok) {
+          throw new Error(json.error || 'The backend application endpoint rejected the submission data structure.');
+        }
+
+        const savedAppointmentId = Number(json.appointment && json.appointment.id ? json.appointment.id : 0);
+        const savedCustomerEmail = String(json.customer && json.customer.email ? json.customer.email : '').trim();
+        const savedCustomerName = String(json.customer && json.customer.full_name ? json.customer.full_name : customerName || 'this customer').trim();
+
+        if (savedAppointmentId > 0) {
+          while (true) {
+            const sendEmail = await showAppointmentEmailPrompt({
+              appointmentId: savedAppointmentId,
+              customerEmail: savedCustomerEmail,
+              customerName: savedCustomerName
+            });
+
+            if (!sendEmail) break;
+
+            makeBookingBtn.disabled = true;
+            makeBookingBtn.textContent = 'Sending email...';
+            try {
+              await sendAppointmentConfirmationEmail(savedAppointmentId);
+              break;
+            } catch (emailErr) {
+              setBookingAlert(emailErr.message || 'The booking transaction was successful, but your confirmation email could not be delivered.', true);
+              break;
+            }
+          }
+        }
+
+        await calendar.refetchEvents();
         if (typeof bookingModal.close === 'function') {
           bookingModal.close();
         } else {
           bookingModal.removeAttribute('open');
         }
         setDraftMode();
-      });
-    }
-
-    closeBookingModal.addEventListener('click', () => {
-      if (typeof bookingModal.close === 'function') {
-        bookingModal.close();
-      } else {
-        bookingModal.removeAttribute('open');
+      } catch (err) {
+        setBookingAlert(err.message || (mode === 'edit' ? 'Failed to update booking structure.' : 'Failed to save appointment.'));
+      } finally {
+        submitBooking._running = false;
+        makeBookingBtn.disabled = false;
+        makeBookingBtn.textContent = mode === 'edit' ? 'Save changes' : 'Make booking';
       }
-      setDraftMode();
-    });
+    }
 
     if (makeBookingBtn) {
       makeBookingBtn.addEventListener('click', submitBooking);
@@ -3286,9 +3753,7 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
         try {
           const resp = await fetch('appointments_api.php?action=delete', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               csrf_token: document.querySelector('input[name="csrf_token"]').value,
               appointment_id: currentEditingAppointmentId
@@ -3320,13 +3785,24 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
         syncBookingDraftTimes();
         return;
       }
-
       if (bookingEndOverrideActive) {
         bookingEndOverrideActive = false;
       }
       applyVisibleTimeInputsToHidden();
       checkTimeSlotConflicts();
     });
+
+    if (providerSelect) {
+      providerSelect.addEventListener('change', function() {
+        if (bookingModal.getAttribute('data-mode') === 'draft') {
+          const placeholder = window.calendarInstance?.getEventById('booking-draft-placeholder');
+          if (placeholder) {
+            placeholder.setExtendedProp('provider_id', Number(providerSelect.value || 0));
+          }
+        }
+        checkTimeSlotConflicts();
+      });
+    }
 
     if (bookingStartTimeInput) {
       bookingStartTimeInput.addEventListener('change', function() {
@@ -3413,32 +3889,35 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
         selectedEndLabel.textContent = formatCalendarDate(calendar, ed);
 
         setTimeout(checkTimeSlotConflicts, 100);
-        
       } catch (e) {
-        // ignore
+        // fallback ignore
       }
     }
 
     function checkTimeSlotConflicts() {
       const startIso = bookingStart.value.trim();
       const endIso = bookingEnd.value.trim();
-      const selectedBookingProviderId = Number(providerSelect && providerSelect.value ? providerSelect.value : 0);
-      
+      const selectedBookingProviderId = Number(providerSelect?.value || 0);
+
       if (!startIso || !endIso) return false;
 
       const draftStart = new Date(startIso.replace(' ', 'T') + 'Z');
       const draftEnd = new Date(endIso.replace(' ', 'T') + 'Z');
 
-      if (Number.isNaN(draftStart.getTime()) || Number.isNaN(draftEnd.getTime())) {
-        return false; 
-      }
+      if (Number.isNaN(draftStart.getTime())) return false;
 
       const hasTimeConflict = window.calendarInstance.getEvents().some(function(event) {
-        if (event.id === 'booking-draft-placeholder') return false;
-        if (event.extendedProps?.isDraftPlaceholder) return false;
-        if (event.display === 'background') return false;
-        
-        if (currentEditingAppointmentId && String(event.id) === String(currentEditingAppointmentId)) {
+        if (event.id === 'booking-draft-placeholder' || event.extendedProps?.isDraftPlaceholder) return false;
+        if (currentEditingAppointmentId && String(event.id) === String(currentEditingAppointmentId)) return false;
+
+        if (event.display === 'background') {
+          if (event.classNames.includes('unavail-event') || event.classNames.includes('standard-break-event')) {
+            const bgProviderId = Number(event.extendedProps?.provider_id || 0);
+            if (bgProviderId > 0 && selectedBookingProviderId > 0 && bgProviderId !== selectedBookingProviderId) {
+              return false;
+            }
+            return event.start < draftEnd && (event.end || event.start) > draftStart;
+          }
           return false;
         }
 
@@ -3447,23 +3926,299 @@ const calendar = new FullCalendar.Calendar(calendarEl, {
           return false;
         }
 
-        const checkStart = event.start;
-        const checkEnd = event.end || event.start;
-        
-        return checkStart < draftEnd && checkEnd > draftStart;
+        return event.start < draftEnd && (event.end || event.start) > draftStart;
       });
 
       const cardElement = bookingModal.querySelector('.booking-card');
-
       if (hasTimeConflict) {
-        if (cardElement) cardElement.classList.add('is-invalid-time'); 
-        if (makeBookingBtn) makeBookingBtn.disabled = true;
-        return true;
+        if (cardElement) cardElement.classList.add('is-invalid-time');
+        if (!submitBooking._running) {
+          setBookingAlert('🚨 Selected time overlaps with an appointment, break, or unavailability.', false);
+        }
       } else {
-        if (cardElement) cardElement.classList.remove('is-invalid-time'); 
-        if (makeBookingBtn) makeBookingBtn.disabled = false;
-        return false;
+        if (cardElement) cardElement.classList.remove('is-invalid-time');
+        if (!submitBooking._running) {
+          setBookingAlert('');
+        }
       }
+
+      return hasTimeConflict;
+    }
+
+    function requestCloseModalBarrier() {
+      const modalMode = bookingModal.getAttribute('data-mode');
+      
+      if (modalMode === 'edit') {
+        if (typeof closeConfirmationModal.showModal === 'function') {
+          closeConfirmationModal.showModal();
+        } else {
+          closeConfirmationModal.setAttribute('open', 'open');
+        }
+        return;
+      }
+
+      const firstNameEl = document.getElementById('newCustomerFirstName');
+      const lastNameEl  = document.getElementById('newCustomerLastName');
+      const notesEl     = document.getElementById('bookingNotes');
+
+      const draftFirstNameClean = firstNameEl ? firstNameEl.value.trim() : '';
+      const draftLastNameClean  = lastNameEl  ? lastNameEl.value.trim()  : '';
+      const draftNotesClean     = notesEl     ? notesEl.value.trim()     : '';
+      
+      if (!draftFirstNameClean && !draftLastNameClean && !draftNotesClean) {
+        executeForcedModalShutdown();
+        return;
+      }
+
+      if (typeof closeConfirmationModal.showModal === 'function') {
+        closeConfirmationModal.showModal();
+      } else {
+        closeConfirmationModal.setAttribute('open', 'open');
+      }
+    }
+
+    function executeForcedModalShutdown() {
+      if (bookingModal) {
+        if (typeof bookingModal.close === 'function') {
+          bookingModal.close();
+        } else {
+          bookingModal.removeAttribute('open');
+        }
+      }
+      if (closeConfirmationModal) {
+        if (typeof closeConfirmationModal.close === 'function') {
+          closeConfirmationModal.close();
+        } else {
+          closeConfirmationModal.removeAttribute('open');
+        }
+      }
+      setDraftMode();
+    }
+
+    document.addEventListener('click', function(e) {
+      const targetId = e.target ? e.target.id : '';
+      
+      if (targetId === 'closeBookingModalTop' || targetId === 'closeBookingModal') {
+        e.preventDefault();
+        e.stopPropagation();
+        requestCloseModalBarrier();
+      }
+      
+      if (targetId === 'confirmCloseBtn') {
+        e.preventDefault();
+        executeForcedModalShutdown();
+      }
+      
+      if (targetId === 'abortCloseBtn') {
+        e.preventDefault();
+        if (typeof closeConfirmationModal.close === 'function') {
+          closeConfirmationModal.close();
+        } else {
+          closeConfirmationModal.removeAttribute('open');
+        }
+      }
+    });
+
+    if (closeConfirmationModal) {
+      closeConfirmationModal.addEventListener('cancel', (e) => {
+        e.preventDefault();
+        if (typeof closeConfirmationModal.close === 'function') {
+          closeConfirmationModal.close();
+        } else {
+          closeConfirmationModal.removeAttribute('open');
+        }
+      });
+    }
+
+    // ============================================================
+    // DAILY NOTES LOGIC
+    // ============================================================
+    const dailyNoteModal   = document.getElementById('dailyNoteModal');
+    const dailyNoteTitle   = document.getElementById('dailyNoteTitle');
+    const dailyNoteTitleCount = document.getElementById('dailyNoteTitleCount');
+    const dailyNoteMessage = document.getElementById('dailyNoteMessage');
+    const dailyNoteSaveBtn = document.getElementById('dailyNoteSaveBtn');
+    const dailyNoteDeleteBtn = document.getElementById('dailyNoteDeleteBtn');
+    const dailyNoteCancelBtn = document.getElementById('dailyNoteCancelBtn');
+    const dailyNoteModalTitle = document.getElementById('dailyNoteModalTitle');
+
+    let dailyNoteContext = null; 
+
+    dailyNoteTitle.addEventListener('input', function() {
+      dailyNoteTitleCount.textContent = '(' + dailyNoteTitle.value.length + '/40)';
+    });
+
+    async function openDailyNoteModal(dateStr, providerId) {
+      dailyNoteContext = { dateStr, providerId };
+      dailyNoteModalTitle.textContent = 'Daily Note — ' + dateStr;
+      dailyNoteTitle.value = '';
+      dailyNoteMessage.value = '';
+      dailyNoteTitleCount.textContent = '(0/40)';
+      dailyNoteDeleteBtn.style.display = 'none';
+      dailyNoteSaveBtn.disabled = false;
+      dailyNoteSaveBtn.textContent = 'Save';
+
+      try {
+        const params = new URLSearchParams({ action: 'get', date: dateStr });
+        if (providerId) params.set('provider_id', String(providerId));
+        const resp = await fetch('daily_notes_api.php?' + params, { credentials: 'same-origin' });
+        const json = await resp.json();
+        if (json.ok && json.note) {
+          dailyNoteTitle.value = json.note.title || '';
+          dailyNoteMessage.value = json.note.message || '';
+          dailyNoteTitleCount.textContent = '(' + dailyNoteTitle.value.length + '/40)';
+          dailyNoteDeleteBtn.style.display = '';
+        }
+      } catch (e) {
+        // fail silently fallback layout
+      }
+
+      if (typeof dailyNoteModal.showModal === 'function') {
+        dailyNoteModal.showModal();
+      } else {
+        dailyNoteModal.setAttribute('open', 'open');
+      }
+    }
+
+    function closeDailyNoteModal() {
+      if (typeof dailyNoteModal.close === 'function') {
+        dailyNoteModal.close();
+      } else {
+        dailyNoteModal.removeAttribute('open');
+      }
+      dailyNoteContext = null;
+    }
+
+    dailyNoteCancelBtn.addEventListener('click', closeDailyNoteModal);
+
+    dailyNoteModal.addEventListener('cancel', function(e) {
+      e.preventDefault();
+      closeDailyNoteModal();
+    });
+
+    dailyNoteSaveBtn.addEventListener('click', async function() {
+      if (!dailyNoteContext) return;
+      const title = dailyNoteTitle.value.trim();
+      if (!title) {
+        dailyNoteTitle.focus();
+        return;
+      }
+      dailyNoteSaveBtn.disabled = true;
+      dailyNoteSaveBtn.textContent = 'Saving...';
+      try {
+        const resp = await fetch('daily_notes_api.php?action=save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            csrf_token: document.querySelector('input[name="csrf_token"]').value,
+            date: dailyNoteContext.dateStr,
+            provider_id: dailyNoteContext.providerId || '',
+            title: title,
+            message: dailyNoteMessage.value.trim()
+          })
+        });
+        const json = await resp.json();
+        if (!json.ok) throw new Error(json.error || 'Failed to save');
+        closeDailyNoteModal();
+        refreshDailyNotePills();
+      } catch (err) {
+        alert(err.message || 'Failed to save note.');
+        dailyNoteSaveBtn.disabled = false;
+        dailyNoteSaveBtn.textContent = 'Save';
+      }
+    });
+
+    dailyNoteDeleteBtn.addEventListener('click', async function() {
+      if (!dailyNoteContext) return;
+      if (!confirm('Delete this daily note?')) return;
+      dailyNoteDeleteBtn.disabled = true;
+      dailyNoteDeleteBtn.textContent = 'Deleting...';
+      try {
+        const resp = await fetch('daily_notes_api.php?action=delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            csrf_token: document.querySelector('input[name="csrf_token"]').value,
+            date: dailyNoteContext.dateStr,
+            provider_id: dailyNoteContext.providerId || ''
+          })
+        });
+        const json = await resp.json();
+        if (!json.ok) throw new Error(json.error || 'Failed to delete');
+        closeDailyNoteModal();
+        refreshDailyNotePills();
+      } catch (err) {
+        alert(err.message || 'Failed to delete note.');
+        dailyNoteDeleteBtn.disabled = false;
+        dailyNoteDeleteBtn.textContent = 'Delete';
+      }
+    });
+
+    async function refreshDailyNotePills() {
+      if (!window.calendarInstance) return;
+      const view = window.calendarInstance.view;
+      const startStr = view.activeStart.toISOString().slice(0, 10);
+      const endStr   = view.activeEnd.toISOString().slice(0, 10);
+      const params = new URLSearchParams({ action: 'range', start: startStr, end: endStr });
+      if (selectedPrimaryProviderId) params.set('provider_id', String(selectedPrimaryProviderId));
+
+      let notesByDate = {};
+      try {
+        const resp = await fetch('daily_notes_api.php?' + params, { credentials: 'same-origin' });
+        const json = await resp.json();
+        if (json.ok && json.notes) {
+          for (const note of json.notes) {
+            notesByDate[note.note_date] = note;
+          }
+        }
+      } catch (e) {
+        // fail silently fallback layout
+      }
+
+      // FIX: Target ONLY the daygrid containers (.fc-daygrid-day) to prevent duplicating into the timed column body
+      calendarEl.querySelectorAll('.fc-daygrid-day').forEach(function(cell) {
+        const dateAttr = cell.getAttribute('data-date');
+        if (!dateAttr) return;
+
+        // Clear any old pills inside this cell first
+        cell.querySelectorAll('.daily-note-pill').forEach(el => el.remove());
+        const note = notesByDate[dateAttr];
+
+        if (note) {
+          const pill = document.createElement('div');
+          pill.className = 'daily-note-pill';
+          pill.textContent = '📝 ' + note.title;
+          pill.title = note.message || note.title;
+          
+          pill.addEventListener('click', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            openDailyNoteModal(dateAttr, selectedPrimaryProviderId);
+          });
+
+          // Find the events container inside the all-day / month frame
+          const eventsEl = cell.querySelector('.fc-daygrid-day-events');
+          if (eventsEl) {
+            eventsEl.insertBefore(pill, eventsEl.firstChild);
+          } else {
+            cell.insertBefore(pill, cell.firstChild);
+          }
+        }
+      });
+
+      // Handle raw clicks inside empty all-day lanes safely to create a note
+      calendarEl.querySelectorAll('.fc-daygrid-day').forEach(function(cell) {
+        const dateAttr = cell.getAttribute('data-date');
+        if (!dateAttr || cell.querySelector('.daily-note-pill')) return;
+        const eventsEl = cell.querySelector('.fc-daygrid-day-events');
+        if (!eventsEl || eventsEl.__noteClickAttached) return;
+        eventsEl.__noteClickAttached = true;
+        
+        eventsEl.addEventListener('click', function(e) {
+          if (e.target.closest('.fc-event')) return;
+          openDailyNoteModal(dateAttr, selectedPrimaryProviderId);
+        });
+      });
     }
   </script>
 

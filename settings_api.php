@@ -377,8 +377,9 @@ try {
                     }
 
                     $isActive = !empty($data[$typePrefix . 'is_active']) ? 1 : 0;
-                    $stmt = $db->prepare('UPDATE appointment_types SET name = ?, duration_minutes = ?, color_hex = ?, is_active = ? WHERE id = ?');
-                    $stmt->execute([$name, $durationMinutes, $colorHex, $isActive, $typeId]);
+                    $isBookable = !empty($data[$typePrefix . 'is_bookable']) ? 1 : 0;
+                    $stmt = $db->prepare('UPDATE appointment_types SET name = ?, duration_minutes = ?, color_hex = ?, is_active = ?, is_bookable = ? WHERE id = ?');
+                    $stmt->execute([$name, $durationMinutes, $colorHex, $isActive, $isBookable, $typeId]);
                 }
 
                 $newName = trim((string) ($data['new_appt_type_name'] ?? ''));
@@ -394,8 +395,9 @@ try {
                     }
 
                     $newActive = !empty($data['new_appt_type_is_active']) ? 1 : 0;
-                    $stmt = $db->prepare('INSERT INTO appointment_types (name, duration_minutes, color_hex, is_active) VALUES (?, ?, ?, ?)');
-                    $stmt->execute([$newName, $newDuration, $newColor, $newActive]);
+                    $newBookable = !empty($data['new_appt_type_is_bookable']) ? 1 : 0;
+                    $stmt = $db->prepare('INSERT INTO appointment_types (name, duration_minutes, color_hex, is_active, is_bookable) VALUES (?, ?, ?, ?, ?)');
+                    $stmt->execute([$newName, $newDuration, $newColor, $newActive, $newBookable]);
                 }
 
                 $db->commit();

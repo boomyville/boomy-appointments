@@ -75,6 +75,7 @@ CREATE TABLE `appointment_types` (
   `duration_minutes` INT UNSIGNED NOT NULL,
   `color_hex` CHAR(7) NOT NULL DEFAULT '#3b4351',
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+  `is_bookable` TINYINT(1) NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
