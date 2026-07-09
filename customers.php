@@ -78,7 +78,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 28px; box-shadow: var(--shadow); backdrop-filter: blur(10px); overflow: hidden; margin-bottom: 20px; }
     .panel-header { padding: 18px 20px; border-bottom: 1px solid var(--panel-border); }
     .panel-header small { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
-    .panel-body { padding: 18px; }
+    .panel-body { padding: 18px; overflow-x: auto;  -webkit-overflow-scrolling: touch; }
 
     /* Shared modal configs */
     .modal-dialog {
@@ -200,6 +200,102 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
 
     .override-note { background: var(--panel); border: 1px solid var(--panel-border); border-left: 3px solid rgba(245, 158, 11, 0.6); padding: 12px 14px; border-radius: 16px; margin: 10px 0; font-size: 0.9rem; color: var(--text); }
     .danger-panel { background: rgba(239, 68, 68, 0.04); border: 1px solid rgba(239, 68, 68, 0.18); border-left: 4px solid #dc2626; padding: 16px; border-radius: 16px; margin: 4px 0; }
+
+
+/* ── Responsive Table Adjustments ── */
+    
+    /* 1. FORCE the combined cell to be hidden on desktop by default */
+    .responsive-meta-cell {
+      display: none !important;
+    }
+    
+    /* 2. Desktop rules are explicit */
+    .mobile-hidden-field {
+      display: table-cell !important;
+    }
+
+    @media (max-width: 640px) {
+      /* Deconstruct table layers into distinct card views on smaller viewports */
+      .customers-table, 
+      .customers-table thead, 
+      .customers-table tbody, 
+      .customers-table th, 
+      .customers-table td, 
+      .customers-table tr {
+        display: block;
+        width: 100%;
+      }
+
+      /* Safe out-of-view translation for structural desktop table headers */
+      .customers-table thead tr {
+        position: absolute;
+        top: -9999px;
+        left: -9999px;
+      }
+
+      /* Format table rows into discrete floating visual profiles */
+      .customers-table tbody tr {
+        border: 1px solid var(--panel-border);
+        border-radius: 20px;
+        margin-bottom: 16px;
+        padding: 14px 16px;
+        background: rgba(255, 255, 255, 0.6);
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.02);
+        transition: transform 0.2s ease;
+      }
+      
+      html[data-theme="dark"] .customers-table tbody tr {
+        background: rgba(15, 23, 42, 0.3);
+      }
+
+      .customers-table td {
+        border: none !important;
+        padding: 6px 0 !important;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      /* Dynamically inject labels before values using structural attributes */
+      .customers-table td::before {
+        content: attr(data-label);
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        font-weight: 700;
+        margin-bottom: 2px;
+      }
+
+      /* Hide standard separate desktop cells on mobile viewports */
+      .customers-table td.mobile-hidden-field {
+        display: none !important;
+      }
+
+      /* Target and customize layout spacing for the combined info cell block */
+      .customers-table td.responsive-meta-cell {
+        display: flex !important;
+        line-height: 1.5;
+        font-size: 0.92rem;
+      }
+
+      /* Force operational buttons to grow out to full width and stack vertically */
+      .action-group {
+        display: flex !important;
+        flex-direction: column;
+        width: 100%;
+        gap: 8px !important;
+        margin-top: 6px;
+      }
+
+      .action-group button {
+        width: 100% !important;
+        text-align: center;
+        justify-content: center;
+        padding: 10px 0 !important;
+        font-size: 0.88rem !important;
+      }
+    }
 
     html[data-theme="dark"] .modal-dialog { box-shadow: 0 28px 80px rgba(0, 0, 0, 0.32); }
     html[data-theme="dark"] .modal-card__footer button { background: rgba(30, 50, 80, 0.6); color: var(--text); }
@@ -527,17 +623,32 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
         const row = document.createElement('tr');
         row.dataset.customerId = c.id;
 
-        let html = `<td>${escapeHtml(c.full_name)}</td>`;
-        if (isDobColumnVisible) html += `<td>${escapeHtml(c.date_of_birth || '-')}</td>`;
+        // 1. Full Name Column
+        let html = `<td data-label="Full Name">${escapeHtml(c.full_name)}</td>`;
+        
+        // 2. Date of Birth Column (Conditional)
+        if (isDobColumnVisible) {
+          html += `<td data-label="Date of Birth">${escapeHtml(c.date_of_birth || '-')}</td>`;
+        }
+        
         html += `
-          <td>${escapeHtml(formatGender(c.gender))}</td>
-          <td>${escapeHtml(c.email || '-')}</td>
-          <td>${escapeHtml(c.mobile || '-')}</td>
-          <td>${escapeHtml(formatDateTime(c.date_added || c.created_at || '-'))}</td>
-          <td class="signals-cell" data-id="${escapeHtml(String(c.id))}" style="${isSignalsVisible ? '' : 'display:none;'}">
+          <td data-label="Contact Info" class="responsive-meta-cell">
+            <strong>Gender:</strong> ${escapeHtml(formatGender(c.gender))}<br>
+            <strong>Email:</strong> ${escapeHtml(c.email || '-')}<br>
+            <strong>Mobile:</strong> ${escapeHtml(c.mobile || '-')}
+          </td>
+
+          <td data-label="Gender" class="mobile-hidden-field">${escapeHtml(formatGender(c.gender))}</td>
+          <td data-label="Email" class="mobile-hidden-field">${escapeHtml(c.email || '-')}</td>
+          <td data-label="Mobile" class="mobile-hidden-field">${escapeHtml(c.mobile || '-')}</td>
+          
+          <td data-label="Date Added">${escapeHtml(formatDateTime(c.date_added || c.created_at || '-'))}</td>
+          
+          <td data-label="Signals" class="signals-cell" data-id="${escapeHtml(String(c.id))}" style="${isSignalsVisible ? '' : 'display:none;'}">
             <span style="color:var(--muted); font-size:0.8rem;">…</span>
           </td>
-          <td>
+          
+          <td data-label="Actions">
             <div class="action-group">
               <button type="button" class="customer-edit-btn">Edit</button>
               <button type="button" class="info-btn customer-info-btn">Info</button>

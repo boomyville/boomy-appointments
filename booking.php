@@ -666,6 +666,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
           <p>Select the appointment type and provider first.</p>
         </div>
       </div>
+      <div id="step1CustomMessage" class="notice hidden" style="margin-bottom: 20px;"></div>
 
       <?php if ($disableOnlineBooking === 1): ?>
         <div class="notice is-error" style="margin-bottom: 0px;">
@@ -807,6 +808,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       </div>
       <div class="summary-card">
         <div id="summaryNotice" class="notice hidden"></div>
+        <div id="step4CustomMessage" class="notice hidden" style="margin-bottom: 12px;"></div>
         <div class="summary-grid" id="summaryGrid"></div>
         <div id="summaryCustomerSection"></div>
         <div class="actions">
@@ -859,6 +861,8 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       monthViews: [],
       appointmentTypeId: '',
       providerId: '',
+      booking_step1_message: '',
+      booking_step4_message: '',
       selectedDate: '',
       selectedSlot: '',
       customerMode: 'new',
@@ -1060,6 +1064,9 @@ function validateEmail(email) {
       state.appointmentTypes = data.appointment_types || [];
       state.providers = data.providers || [];
       state.settings = data.settings || {};
+
+      state.booking_step1_message = data.booking_step1_message || ''; 
+      state.booking_step4_message = data.booking_step4_message || ''; 
       
       if (data.csrf_token) {
         BOOMY.csrfToken = data.csrf_token;
@@ -1326,6 +1333,8 @@ function validateEmail(email) {
     }
 
     function renderSummary() {
+
+      const step4MsgEl = document.getElementById('step4CustomMessage');
       const appointmentType = state.appointmentTypes.find((item) => String(item.id) === String(state.appointmentTypeId));
       const provider = state.providers.find((item) => String(item.id) === String(state.providerId));
       const selectedDateText = state.selectedDate ? formatDateLong(state.selectedDate) : '-';
@@ -1333,6 +1342,15 @@ function validateEmail(email) {
       const fieldSettings = state.settings?.customer_field_settings || {};
       const customerInfo = currentCustomerPayload();
 
+        if (step4MsgEl) {
+          if (state.booking_step4_message.trim() !== '') {
+            step4MsgEl.textContent = state.booking_step4_message;
+            step4MsgEl.classList.remove('hidden');
+          } else {
+            step4MsgEl.classList.add('hidden');
+          }
+        }
+        
       els.summaryGrid.innerHTML = [
         ['Appointment type', appointmentType ? appointmentType.name : '-'],
         ['Provider', provider ? (provider.full_name || provider.email || '-') : '-'],
@@ -1610,6 +1628,14 @@ function validateEmail(email) {
         applyFieldVisibility(els.newMobile,    'mobile');
         applyFieldVisibility(els.newDob,       'date_of_birth');
         applyFieldVisibility(els.newGender,    'gender');
+
+        if (state.booking_step1_message.trim() !== '') {
+          const el = document.getElementById('step1CustomMessage');
+          if (el) {
+            el.textContent = state.booking_step1_message;
+            el.classList.remove('hidden');
+          }
+        }
 
         els.appointmentTypeSelect.addEventListener('change', () => {
           state.appointmentTypeId = els.appointmentTypeSelect.value;

@@ -244,7 +244,11 @@ INSERT INTO `settings` (`setting_key`,`setting_value`) VALUES
 ('mail_from_name','Boomy Appointments'),
 ('reminder_enabled','0'),
 ('reminder_days_before','1'),
-('reminder_time','09:00');
+('reminder_time','09:00'),
+('booking_step1_message',''),
+('booking_step4_message',''),
+('confirmation_email_message',''),
+('reminder_email_message','');
 
 
 -- Seed appointment types

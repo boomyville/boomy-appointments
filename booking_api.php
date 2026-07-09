@@ -127,7 +127,8 @@ function booking_validate_day_slots(
     // Filter recurring unavailabilities to this day-of-week
     $dayOfWeek = (int) $date->format('N');
     $dayRecurring = array_filter($prefetchedRecurring, function($r) use ($dayOfWeek, $dayKey) {
-        return (int)$r['day_of_week'] === $dayOfWeek
+        $ruleDay = (int) $r['day_of_week'];
+        return ($ruleDay === $dayOfWeek || $ruleDay === 0)
             && $r['rolling_start_date'] <= $dayKey
             && ($r['rolling_end_date'] === null || $r['rolling_end_date'] >= $dayKey);
     });
@@ -483,6 +484,8 @@ try {
             'site_name' => get_setting('site_name', APP_NAME ?? 'Boomy Appointments'),
             'timezone' => get_app_timezone_name(),
             'settings' => $settings,
+            'booking_step1_message' => get_setting('booking_step1_message', ''), 
+             'booking_step4_message' => get_setting('booking_step4_message', ''),  
             'prevent_same_user_booking' => (int) get_setting('prevent_same_user_booking', 0), // <-- EXPLICIT ROOT PROPERTY
             'booking_max_advance_days' => (int) get_setting('booking_max_advance_days', 60),
             'customer_field_settings' => get_customer_field_settings(),
@@ -547,6 +550,7 @@ if ($action === 'month' && $method === 'GET') {
         }
 
         $provider = get_user_by_id($providerId);
+        $appointmentType = get_appointment_type_by_id($appointmentTypeId);
         if (!$provider || !in_array((string) ($provider['role'] ?? ''), ['provider', 'admin'], true)) {
             booking_api_response(['error' => 'provider not found'], 404);
         }
@@ -555,7 +559,43 @@ if ($action === 'month' && $method === 'GET') {
             booking_api_response(['error' => 'appointment type not found'], 404);
         }
 
-        $slots = booking_validate_day_slots($providerId, $date->setTime(0, 0, 0), $appointmentTypeId);
+        $dayStart = $date->setTime(0, 0, 0);
+        $dayEnd = $dayStart->modify('+1 day');
+        $dayStartStr = $dayStart->format('Y-m-d 00:00:00');
+        $dayEndStr = $dayEnd->format('Y-m-d 00:00:00');
+
+        $db = get_db();
+
+        $stmt = $db->prepare("
+            SELECT start_time, end_time
+            FROM appointments
+            WHERE provider_id = ?
+            AND start_time < ? AND end_time > ?
+            AND status NOT IN ('cancelled', 'no_show')
+        ");
+        $stmt->execute([$providerId, $dayEndStr, $dayStartStr]);
+        $dayAppointments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $stmt2 = $db->prepare("
+            SELECT start_time, end_time, day_of_week, reason, rolling_start_date, rolling_end_date
+            FROM unavailabilities
+            WHERE provider_id = ? AND type = 'recurring'
+            AND rolling_start_date <= ?
+            AND (rolling_end_date IS NULL OR rolling_end_date >= ?)
+        ");
+        $stmt2->execute([$providerId, $dayStart->format('Y-m-d'), $dayStart->format('Y-m-d')]);
+        $recurringUnavail = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+
+        $stmt3 = $db->prepare("
+            SELECT start_datetime, end_datetime, reason
+            FROM unavailabilities
+            WHERE provider_id = ? AND type = 'single'
+            AND start_datetime < ? AND end_datetime > ?
+        ");
+        $stmt3->execute([$providerId, $dayEndStr, $dayStartStr]);
+        $singleUnavail = $stmt3->fetchAll(PDO::FETCH_ASSOC);
+
+        $slots = booking_validate_day_slots($providerId, $dayStart, $appointmentTypeId, $dayAppointments, $recurringUnavail, $singleUnavail);
         booking_api_response([
             'ok' => true,
             'date' => $date->format('Y-m-d'),
@@ -634,6 +674,7 @@ if ($action === 'month' && $method === 'GET') {
         }
 
         $provider = get_user_by_id($providerId);
+        $appointmentType = get_appointment_type_by_id($appointmentTypeId);  
         if (!$provider || !in_array((string) ($provider['role'] ?? ''), ['provider', 'admin'], true)) {
             booking_api_response(['error' => 'provider not found'], 404);
         }
@@ -687,7 +728,11 @@ update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
 
             $verificationCode = create_appointment_verification_token((int) $appointment['id']);
             $emailSent = booking_send_verification_email($appointment, $provider, $appointmentType, $matches);
-            
+            $adminNotifyResult = send_admin_booking_notification_email($appointment, true);
+            if (!$adminNotifyResult['ok']) {
+                error_log('Admin booking notification failed: ' . ($adminNotifyResult['error'] ?? 'unknown'));
+            }
+
             booking_api_response([
                 'ok' => true, 'pending' => true, 'requires_verification' => true, 'appointment' => $appointment,
                 'verification_email_sent' => $emailSent, 'verify_url' => build_app_url('verify_appointment.php', ['token' => $verificationCode]),
@@ -721,6 +766,10 @@ update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
         }
 
         $emailSent = booking_send_confirmation_email($appointment);
+        $adminNotifyResult = send_admin_booking_notification_email($appointment, false);
+        if (!$adminNotifyResult['ok']) {
+            error_log('Admin booking notification failed: ' . ($adminNotifyResult['error'] ?? 'unknown'));
+        }
         booking_api_response(['ok' => true, 'pending' => false, 'customer' => $customer, 'appointment' => $appointment, 'email_sent' => $emailSent, 'message' => 'Booking created successfully']);
     }
 

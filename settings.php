@@ -98,6 +98,7 @@ $smtp_username = get_setting('smtp_username', '');
 $smtp_password = get_setting('smtp_password', '');
 $mail_from_address = get_setting('mail_from_address', '');
 $mail_from_name = get_setting('mail_from_name', APP_NAME ?? 'Boomy Appointments');
+$notify_admin_on_booking = (int) get_setting('notify_admin_on_booking', '0');
 
 // Authentication settings
 $password_min_length = (int) get_setting('password_min_length', '8');
@@ -113,7 +114,12 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
 $reminder_enabled     = (int) get_setting('reminder_enabled', '0');
 $reminder_days_before = (int) get_setting('reminder_days_before', '1');
 $reminder_time        = get_setting('reminder_time', '09:00');
-$smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && !empty($smtp_password))
+$smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && !empty($smtp_password));
+
+$booking_step1_message = get_setting('booking_step1_message', '');
+$booking_step4_message = get_setting('booking_step4_message', '');
+$confirmation_email_message = get_setting('confirmation_email_message', '');
+$reminder_email_message = get_setting('reminder_email_message', '');
 
 ?>
 <!doctype html>
@@ -184,8 +190,23 @@ $smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && !empty($smtp_pass
         <option value="m/d/Y H:i" <?php echo $date_format === 'm/d/Y H:i' ? 'selected' : ''; ?>>MM/DD/YYYY HH:MM</option>
       </select>
 
-      <p><strong>Current date and time:</strong> <span data-server-time-format="<?php echo htmlspecialchars($date_format); ?>"><?php echo date($date_format); ?></span></p>
-
+      <?php
+      $appTz = new DateTimeZone(get_app_timezone_name());
+      $appOffsetSeconds = $appTz->getOffset(new DateTimeImmutable('now', $appTz));
+      ?>
+      <p style="margin-bottom:4px;">
+        <strong>Server time (<?php echo htmlspecialchars(get_app_timezone_name()); ?>):</strong>
+        <span id="serverTimeDisplay"
+              data-server-date-format="<?php echo htmlspecialchars($date_format); ?>"
+              data-server-epoch-ms="<?php echo (int) (microtime(true) * 1000); ?>"
+              data-server-offset-seconds="<?php echo (int) $appOffsetSeconds; ?>">
+          <?php echo date($date_format); ?>
+        </span>
+      </p>
+      <p style="margin-top:0;">
+        <strong>Your browser time:</strong>
+        <span id="browserTimeDisplay"></span>
+      </p>
       <input type="hidden" name="tab" value="general">
       <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
       <button type="submit">Save General</button>
@@ -312,6 +333,17 @@ $smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && !empty($smtp_pass
         </p>
       </fieldset>
       <fieldset class="field-group">
+        <legend>Admin Notifications</legend>
+        <label>
+          <input type="hidden" name="notify_admin_on_booking" value="0">
+          <input type="checkbox" name="notify_admin_on_booking" value="1" <?php echo $notify_admin_on_booking === 1 ? 'checked' : ''; ?>>
+          <strong>Email the admin when a customer makes a booking</strong>
+        </label>
+        <p style="font-size: 0.9em; color: #666; margin-top: 4px;">
+          Sends a notification to the <strong>Organisation Email</strong> (set on the General tab) whenever a customer creates a new appointment online — including pending bookings awaiting verification.
+        </p>
+      </fieldset>
+      <fieldset class="field-group">
         <legend>Automated Catch-up Maintenance</legend>
         <label>
           <input type="hidden" name="auto_no_show" value="0">
@@ -416,6 +448,18 @@ $smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && !empty($smtp_pass
         <legend>Live Time Marker</legend>
         <label><input type="checkbox" name="booking_show_now_indicator" value="1" <?php echo $booking_show_now_indicator ? 'checked' : ''; ?>> Show red line for the current time</label>
       </fieldset>
+
+      <fieldset class="field-group">
+      <legend>Custom Booking Messages</legend>
+      <label for="booking_step1_message">Step 1 message (shown when choosing appointment type/provider)</label>
+      <textarea id="booking_step1_message" name="booking_step1_message" rows="2" placeholder="e.g. All appointments are free of charge"><?php echo htmlspecialchars($booking_step1_message); ?></textarea>
+
+      <label for="booking_step4_message" style="margin-top:12px; display:block;">Step 4 message (shown on the summary/review step)</label>
+      <textarea id="booking_step4_message" name="booking_step4_message" rows="2" placeholder="e.g. Please bring your items with you"><?php echo htmlspecialchars($booking_step4_message); ?></textarea>
+      <p style="font-size: 0.9em; color: #666; margin-top: 4px;">
+        Leave blank to hide. Both messages are shown to customers on the public booking page.
+      </p>
+    </fieldset>
 
       <fieldset class="field-group">
         <legend>Appointment Types</legend>
@@ -636,8 +680,12 @@ $smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && !empty($smtp_pass
       <button type="button" id="testEmailBtn" onclick="testEmailConfiguration(event)">Send Test Email</button>
       <div id="testEmailMsg"></div>
     </form>
-
-          <hr>
+      <hr>
+      <h3>Confirmation Email Message</h3>
+      <label for="confirmation_email_message">Custom message added to booking confirmation emails</label>
+      <textarea id="confirmation_email_message" name="confirmation_email_message" rows="3" form="phpmailerForm" placeholder="e.g. We have a cancellation fee"><?php echo htmlspecialchars($confirmation_email_message); ?></textarea>
+      <p style="font-size: 0.9em; color: #666; margin-top: 4px;">Leave blank to omit.</p>
+      <hr>
       <h3>Appointment Reminders</h3>
  
       <?php if (!$smtp_ready): ?>
@@ -674,6 +722,8 @@ $smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && !empty($smtp_pass
               <input type="time" name="reminder_time"
                      value="<?php echo htmlspecialchars($reminder_time, ENT_QUOTES, 'UTF-8'); ?>">
             </label>
+            <label for="reminder_email_message" style="margin-top:12px; display:block;">Custom message added to reminder emails</label>
+              <textarea id="reminder_email_message" name="reminder_email_message" rows="3" placeholder="e.g. Please be on time"><?php echo htmlspecialchars($reminder_email_message); ?></textarea>
           </div>
           <p style="font-size:.9em;color:#666;margin-top:8px;">
             The cron script only sends during the 60-minute window starting at <em>Send time</em>.
@@ -747,15 +797,57 @@ document.querySelectorAll('.tab').forEach(btn => btn.addEventListener('click', (
 
 // When date format changes, update server time display
 const dateFormatSelect = document.getElementById('date_format');
+const serverTimeEl = document.getElementById('serverTimeDisplay');
+const browserTimeEl = document.getElementById('browserTimeDisplay');
+
+let currentDateFormat = serverTimeEl ? serverTimeEl.getAttribute('data-server-date-format') : 'd/m/Y H:i';
+const serverEpochMs = serverTimeEl ? (parseInt(serverTimeEl.getAttribute('data-server-epoch-ms'), 10) || Date.now()) : Date.now();
+const serverOffsetSeconds = serverTimeEl ? (parseInt(serverTimeEl.getAttribute('data-server-offset-seconds'), 10) || 0) : 0;
+const clientLoadMs = Date.now();
+
+function pad(n) { return String(n).padStart(2, '0'); }
+
+// Reads UTC getters on a Date that already has the app's offset baked in,
+// so the browser's own timezone never gets applied on top.
+function formatServerWallClock(fmt, wallClockMs) {
+  const d = new Date(wallClockMs);
+  const day = pad(d.getUTCDate());
+  const month = pad(d.getUTCMonth() + 1);
+  const year = d.getUTCFullYear();
+  const hours = pad(d.getUTCHours());
+  const minutes = pad(d.getUTCMinutes());
+  return fmt.replace('d', day).replace('m', month).replace('Y', year).replace('H', hours).replace('i', minutes);
+}
+
+function formatBrowserLocal(fmt, date) {
+  const day = pad(date.getDate());
+  const month = pad(date.getMonth() + 1);
+  const year = date.getFullYear();
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  return fmt.replace('d', day).replace('m', month).replace('Y', year).replace('H', hours).replace('i', minutes);
+}
+
+function tickTimeDisplays() {
+  if (serverTimeEl) {
+    const elapsedMs = Date.now() - clientLoadMs;
+    const serverWallClockMs = serverEpochMs + (serverOffsetSeconds * 1000) + elapsedMs;
+    serverTimeEl.textContent = formatServerWallClock(currentDateFormat, serverWallClockMs);
+  }
+  if (browserTimeEl) {
+    browserTimeEl.textContent = formatBrowserLocal(currentDateFormat, new Date());
+  }
+}
+
 if (dateFormatSelect) {
   dateFormatSelect.addEventListener('change', (e) => {
-    const f = e.target.value;
-    const el = document.querySelector('[data-server-time-format]');
-    if (el) el.setAttribute('data-server-time-format', f);
-    if (window.App && window.App.attachServerTime) window.App.attachServerTime();
+    currentDateFormat = e.target.value;
+    tickTimeDisplays();
   });
 }
 
+tickTimeDisplays();
+setInterval(tickTimeDisplays, 1000);
 // Handle Display/Required checkbox dependencies
 function setupFieldDependencies(fieldPrefix) {
   const displayCheckbox = document.querySelector(`input[name="${fieldPrefix}_display"]`);

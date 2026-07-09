@@ -40,7 +40,7 @@ try {
     $db = get_db();
     if ($action === 'get') {
         $keys = [
-            'site_name', 'root_url', 'organization_email', 'organization_number', 'date_format', 'booking_deadline_hours', 'booking_max_advance_days',
+            'site_name', 'root_url', 'organization_email', 'organization_number', 'date_format', 'booking_deadline_hours', 'booking_max_advance_days', 'booking_step1_message', 'booking_step2_message',
             'booking_firstname_display', 'booking_firstname_required', 'booking_firstname_letters_only', 'booking_firstname_min', 'booking_firstname_max',
             'booking_lastname_display', 'booking_lastname_required', 'booking_lastname_letters_only', 'booking_lastname_min', 'booking_lastname_max',
             'booking_middlename_display', 'booking_middlename_required', 'booking_middlename_letters_only', 'booking_middlename_min', 'booking_middlename_max',
@@ -48,8 +48,8 @@ try {
             'booking_phone_display', 'booking_phone_required', 'booking_phone_numbers_only', 'booking_phone_min', 'booking_phone_max',
             'booking_dob_display', 'booking_dob_required', 'booking_gender_display', 'booking_gender_required',
             'booking_show_monday', 'booking_show_tuesday', 'booking_show_wednesday', 'booking_show_thursday', 'booking_show_friday', 'booking_show_saturday', 'booking_show_sunday',
-            'booking_start_time', 'booking_end_time', 'booking_week_start_day', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes', 'auto_no_show', 'prevent_same_user_booking', 'disable_online_booking',
-            'password_min_length', 'password_max_length', 'password_require_lowercase', 'password_require_uppercase', 'password_require_number', 'password_require_symbol',
+            'booking_start_time', 'booking_end_time', 'notify_admin_on_booking', 'booking_week_start_day', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes', 'auto_no_show', 'prevent_same_user_booking', 'disable_online_booking',
+            'password_min_length', 'password_max_length', 'password_require_lowercase', 'password_require_uppercase', 'password_require_number', 'password_require_symbol', 'confirmation_email_message', 'reminder_email_message',
             'email_whitelist_enabled', 'email_domain_whitelist', 'email_domain_blacklist',
             'smtp_host', 'smtp_port', 'smtp_encryption', 'smtp_username', 'smtp_password', 'mail_from_address', 'mail_from_name'
         ];
@@ -175,17 +175,19 @@ try {
             'booking' => [
                 'booking_deadline_hours', 'booking_max_advance_days',
                 'booking_show_monday', 'booking_show_tuesday', 'booking_show_wednesday', 'booking_show_thursday', 'booking_show_friday', 'booking_show_saturday', 'booking_show_sunday',
-                'booking_start_time', 'booking_end_time', 'booking_week_start_day', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes', 'auto_no_show', 'prevent_same_user_booking', 'disable_online_booking'
+                'booking_start_time', 'notify_admin_on_booking', 'booking_end_time', 'booking_week_start_day', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes', 'auto_no_show', 'prevent_same_user_booking', 'disable_online_booking',
+                'booking_step1_message', 'booking_step4_message' 
             ],
             'authentication' => [
                 'password_min_length', 'password_max_length', 'password_require_lowercase', 'password_require_uppercase', 'password_require_number', 'password_require_symbol',
                 'email_whitelist_enabled', 'email_domain_whitelist', 'email_domain_blacklist'
             ],
             'phpmailer' => [
-                'smtp_host', 'smtp_port', 'smtp_encryption', 'smtp_username', 'smtp_password', 'mail_from_address', 'mail_from_name'
+                'smtp_host', 'smtp_port', 'smtp_encryption', 'smtp_username', 'smtp_password', 'mail_from_address', 'mail_from_name',
+                'confirmation_email_message'
             ],
             'sessions' => ['session_lifetime_hours'],
-            'reminders' => ['reminder_enabled', 'reminder_days_before', 'reminder_time']
+            'reminders' => ['reminder_enabled', 'reminder_days_before', 'reminder_time', 'reminder_email_message']
         ];
 
         $tab = $data['tab'] ?? 'general';
@@ -438,7 +440,8 @@ try {
                 strpos($k, '_numbers_only') !== false || 
                 strpos($k, '_show_') !== false || 
                 $k === 'auto_no_show' ||
-                $k === 'reminder_enabled'
+                $k === 'reminder_enabled' ||
+                $k === 'notify_admin_on_booking'
 
             );
 

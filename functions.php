@@ -1249,6 +1249,7 @@ function send_appointment_confirmation_email(int $appointmentId): array
     $customerMobile = trim((string) ($customer['mobile'] ?? ''));
     $providerDisplay = $providerName !== '' ? $providerName : 'Not recorded';
     $customerMobileDisplay = $customerMobile !== '' ? $customerMobile : 'Not recorded';
+    $customMessage = trim((string) get_setting('confirmation_email_message', ''));
 
     $subject = 'Your appointment has been successfully booked for ' . $siteName;
     $body_html = '<h2>Your appointment has been successfully booked for ' . htmlspecialchars($siteName, ENT_QUOTES, 'UTF-8') . '</h2>'
@@ -1265,6 +1266,7 @@ function send_appointment_confirmation_email(int $appointmentId): array
         . '<li><strong>Customer full name:</strong> ' . htmlspecialchars($customerName !== '' ? $customerName : 'Not recorded', ENT_QUOTES, 'UTF-8') . '</li>'
         . '<li><strong>Mobile number:</strong> ' . htmlspecialchars($customerMobileDisplay, ENT_QUOTES, 'UTF-8') . '</li>'
         . '</ul>'
+        . ($customMessage !== '' ? '<p>' . nl2br(htmlspecialchars($customMessage, ENT_QUOTES, 'UTF-8')) . '</p>' : '')
         . '<p><a href="' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '" style="background-color:#2457ff;color:#ffffff;padding:12px 20px;text-decoration:none;border-radius:999px;display:inline-block;font-weight:700;">Confirm or modify your appointment</a></p>'
         . '<p>Or copy this link: ' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '</p>';
 
@@ -1278,6 +1280,7 @@ function send_appointment_confirmation_email(int $appointmentId): array
         . "Customer details:\n"
         . "Customer full name: " . ($customerName !== '' ? $customerName : 'Not recorded') . "\n"
         . "Mobile number: {$customerMobileDisplay}\n\n"
+        . ($customMessage !== '' ? "{$customMessage}\n\n" : '')
         . "Confirm or modify your appointment: {$appointmentUrl}\n";
 
     $sendResult = send_email($customerEmail, $subject, $body_html, $body_plain);
@@ -1286,6 +1289,81 @@ function send_appointment_confirmation_email(int $appointmentId): array
     }
 
     return ['ok' => false, 'error' => 'Failed to send confirmation email'];
+}
+
+
+function send_admin_booking_notification_email(array $appointment, bool $pending = false): array
+{
+    if (!(bool) (int) get_setting('notify_admin_on_booking', '0')) {
+        return ['ok' => false, 'error' => 'Admin notifications disabled'];
+    }
+
+    if (!email_transport_is_ready()) {
+        return ['ok' => false, 'error' => 'Mail settings not configured'];
+    }
+
+    $adminEmail = trim((string) get_setting('organization_email', ''));
+    if ($adminEmail === '') {
+        return ['ok' => false, 'error' => 'Organisation email not configured'];
+    }
+
+    $customer = get_customer_by_id((int) ($appointment['customer_id'] ?? 0));
+    $provider = get_user_by_id((int) ($appointment['provider_id'] ?? 0));
+    $appointmentType = get_appointment_type_by_id((int) ($appointment['appointment_type_id'] ?? 0));
+
+    $siteName = trim((string) get_setting('site_name', APP_NAME ?? 'Boomy Appointments'));
+    if ($siteName === '') {
+        $siteName = APP_NAME ?? 'Boomy Appointments';
+    }
+
+    $appointmentTypeName = trim((string) ($appointmentType['name'] ?? 'Appointment'));
+    $providerName = format_appointment_person_name($provider) ?: 'Not recorded';
+    $startTime = format_app_datetime((string) ($appointment['start_time'] ?? ''));
+    $endTime = format_app_datetime((string) ($appointment['end_time'] ?? ''));
+    $customerName = trim((string) ($customer['full_name'] ?? ''));
+    $customerEmail = trim((string) ($customer['email'] ?? ''));
+    $customerMobile = trim((string) ($customer['mobile'] ?? ''));
+
+    $statusLine = $pending
+        ? 'This booking is pending customer verification before it is confirmed.'
+        : 'This booking has been confirmed.';
+
+    $subject = ($pending ? 'New pending booking request' : 'New appointment booked') . ' - ' . $siteName;
+
+    $body_html = '<h2>' . ($pending ? 'New pending booking request' : 'New appointment booked') . '</h2>'
+        . '<p>' . htmlspecialchars($statusLine, ENT_QUOTES, 'UTF-8') . '</p>'
+        . '<h3>Appointment Details</h3>'
+        . '<ul>'
+        . '<li><strong>Appointment type:</strong> ' . htmlspecialchars($appointmentTypeName, ENT_QUOTES, 'UTF-8') . '</li>'
+        . '<li><strong>Provider:</strong> ' . htmlspecialchars($providerName, ENT_QUOTES, 'UTF-8') . '</li>'
+        . '<li><strong>Start time:</strong> ' . htmlspecialchars($startTime, ENT_QUOTES, 'UTF-8') . '</li>'
+        . '<li><strong>End time:</strong> ' . htmlspecialchars($endTime, ENT_QUOTES, 'UTF-8') . '</li>'
+        . '</ul>'
+        . '<h3>Customer Details</h3>'
+        . '<ul>'
+        . '<li><strong>Name:</strong> ' . htmlspecialchars($customerName !== '' ? $customerName : 'Not recorded', ENT_QUOTES, 'UTF-8') . '</li>'
+        . '<li><strong>Email:</strong> ' . htmlspecialchars($customerEmail !== '' ? $customerEmail : 'Not recorded', ENT_QUOTES, 'UTF-8') . '</li>'
+        . '<li><strong>Mobile:</strong> ' . htmlspecialchars($customerMobile !== '' ? $customerMobile : 'Not recorded', ENT_QUOTES, 'UTF-8') . '</li>'
+        . '</ul>';
+
+    $body_plain = ($pending ? "New pending booking request" : "New appointment booked") . " - {$siteName}\n\n"
+        . "{$statusLine}\n\n"
+        . "Appointment Details\n"
+        . "Appointment type: {$appointmentTypeName}\n"
+        . "Provider: {$providerName}\n"
+        . "Start time: {$startTime}\n"
+        . "End time: {$endTime}\n\n"
+        . "Customer Details\n"
+        . "Name: " . ($customerName !== '' ? $customerName : 'Not recorded') . "\n"
+        . "Email: " . ($customerEmail !== '' ? $customerEmail : 'Not recorded') . "\n"
+        . "Mobile: " . ($customerMobile !== '' ? $customerMobile : 'Not recorded') . "\n";
+
+    $sendResult = send_email($adminEmail, $subject, $body_html, $body_plain);
+    if ($sendResult === true) {
+        return ['ok' => true, 'sent' => true];
+    }
+
+    return ['ok' => false, 'error' => 'Failed to send admin notification email'];
 }
 
 // Customer settings and validation helpers
