@@ -399,16 +399,22 @@ try {
             exit;
         }
 
-        if (isset($appointment['error']) && ($appointment['error'] === 'overlap' || $appointment['error'] === 'break_overlap')) {
-            if (!$isStaffUser) {
-                $conflictName = trim((string) ($appointment['conflict']['customer_name'] ?? 'another booking'));
-                http_response_code(409);
-                echo json_encode([
-                    'error' => 'Booking overlaps an existing block configuration' . ($conflictName !== '' ? ' for ' . $conflictName : ''),
-                    'conflict' => $appointment['conflict'],
-                ]);
-                exit;
-            }
+        if (isset($appointment['error'])) {
+            $errorCode = (string) $appointment['error'];
+            $errorMessage = match ($errorCode) {
+                'overlap' => 'Booking overlaps an existing appointment',
+                'break_overlap' => 'Booking overlaps a standard break',
+                'provider_unavailable' => $appointment['message'] ?? 'Provider is unavailable during this time slot',
+                'outside_booking_hours' => $appointment['message'] ?? 'Selected time is outside the configured booking hours',
+                default => 'Failed to create appointment',
+            };
+            http_response_code($errorCode === 'overlap' || $errorCode === 'break_overlap' ? 409 : 422);
+            echo json_encode([
+                'error' => $errorMessage,
+                'code' => $errorCode,
+                'conflict' => $appointment['conflict'] ?? null,
+            ]);
+            exit;
         }
 
         echo json_encode([

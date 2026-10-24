@@ -1830,6 +1830,10 @@ function is_booking_day_enabled(DateTimeImmutable $date, array $bookingSettings)
 
 function validate_appointment_window(int $providerId, DateTimeImmutable $startDate, DateTimeImmutable $endDate, ?int $excludeAppointmentId = null, bool $allowStaffOverride = false): ?array
 {
+    if ($allowStaffOverride) {
+        return null;
+    }
+
     $bookingSettings = get_booking_calendar_settings();
     if (!is_booking_day_enabled($startDate, $bookingSettings)) {
         return ['error' => 'outside_booking_hours', 'message' => 'Selected day is not enabled for bookings'];
@@ -1847,22 +1851,19 @@ function validate_appointment_window(int $providerId, DateTimeImmutable $startDa
         return ['error' => 'outside_booking_hours', 'message' => 'Selected time is outside the configured booking hours'];
     }
 
-    // Only run blocking checks if staff override is NOT active
-    if (!$allowStaffOverride) {
-        if ($conflict = find_overlapping_appointment($providerId, $startDate, $endDate, $excludeAppointmentId)) {
-            return ['error' => 'overlap', 'conflict' => $conflict];
-        }
-        
-        if ($breakConflict = find_overlapping_break($startDate, $endDate)) {
-            return ['error' => 'break_overlap', 'conflict' => $breakConflict];
-        }
+    if ($conflict = find_overlapping_appointment($providerId, $startDate, $endDate, $excludeAppointmentId)) {
+        return ['error' => 'overlap', 'conflict' => $conflict];
+    }
 
-        if ($unavailConflict = check_provider_unavailability($providerId, $startDate, $endDate)) {
-            return [
-                'error' => 'provider_unavailable',
-                'message' => '🚨 ' . htmlspecialchars($unavailConflict['reason'])
-            ];
-        }
+    if ($breakConflict = find_overlapping_break($startDate, $endDate)) {
+        return ['error' => 'break_overlap', 'conflict' => $breakConflict];
+    }
+
+    if ($unavailConflict = check_provider_unavailability($providerId, $startDate, $endDate)) {
+        return [
+            'error' => 'provider_unavailable',
+            'message' => '🚨 ' . htmlspecialchars($unavailConflict['reason'])
+        ];
     }
 
     return null;

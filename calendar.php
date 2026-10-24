@@ -2548,7 +2548,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
           }
         }
 
-        fetch('calendar_api.php?' + params.toString(), { credentials: 'same-origin' })
+        fetch('calendar_api.php?' + params.toString(), { credentials: 'same-origin', cache: 'no-store' })
           .then(function(response) {
             if (!response.ok) {
               throw new Error('Could not load appointments. Server did not respond with a valid response.');

@@ -724,7 +724,16 @@ if ($action === 'month' && $method === 'GET') {
 update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
 
             $appointment = create_appointment((int)$customer['id'], $providerId, $appointmentTypeId, $startDate->format('Y-m-d H:i:s'), 'unconfirmed', null, $notesValue);
-            if (!$appointment) booking_api_response(['error' => 'Failed to create appointment'], 500);
+            if (!$appointment || isset($appointment['error'])) {
+                $errorCode = $appointment['error'] ?? 'create_failed';
+                $errorMessage = match ($errorCode) {
+                    'overlap' => 'Booking overlaps an existing appointment',
+                    'break_overlap' => 'Booking overlaps a standard break',
+                    'provider_unavailable' => $appointment['message'] ?? 'Provider is unavailable during this time slot',
+                    default => 'Failed to create appointment',
+                };
+                booking_api_response(['error' => $errorMessage, 'code' => $errorCode, 'conflict' => $appointment['conflict'] ?? null], $errorCode === 'create_failed' ? 500 : 422);
+            }
 
             $verificationCode = create_appointment_verification_token((int) $appointment['id']);
             $emailSent = booking_send_verification_email($appointment, $provider, $appointmentType, $matches);
@@ -823,7 +832,16 @@ update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
         if (!$provider || !$appointmentType) booking_api_response(['error' => 'booking appointment data is invalid'], 422);
 
         $appointment = update_appointment((int) $appointmentRow['id'], $customerIdToAssign, (int) $appointmentRow['provider_id'], (int) $appointmentRow['appointment_type_id'], (string) $appointmentRow['start_time'], (string) $appointmentRow['end_time'], 'booked', !empty($appointmentRow['notes']) ? (string) $appointmentRow['notes'] : null);
-        if (!$appointment) booking_api_response(['error' => 'Failed to finalize appointment'], 500);
+        if (!$appointment || isset($appointment['error'])) {
+            $errorCode = $appointment['error'] ?? 'finalize_failed';
+            $errorMessage = match ($errorCode) {
+                'overlap' => 'Booking overlaps an existing appointment',
+                'break_overlap' => 'Booking overlaps a standard break',
+                'provider_unavailable' => $appointment['message'] ?? 'Provider is unavailable during this time slot',
+                default => 'Failed to finalize appointment',
+            };
+            booking_api_response(['error' => $errorMessage, 'code' => $errorCode, 'conflict' => $appointment['conflict'] ?? null], $errorCode === 'finalize_failed' ? 500 : 422);
+        }
 
         delete_verification_token((string) ($verification['code'] ?? ''));
         $emailSent = booking_send_confirmation_email($appointment);
