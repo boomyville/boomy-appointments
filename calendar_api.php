@@ -32,8 +32,10 @@ try {
 
     $db = get_db();
     $timezone = new DateTimeZone(get_app_timezone_name());
-    $rangeStartDate = (new DateTimeImmutable((string) $start))->setTimezone($timezone);
-    $rangeEndDate = (new DateTimeImmutable((string) $end))->setTimezone($timezone);
+    // FullCalendar runs with timeZone: 'UTC', so start/end are wall-clock times tagged with 'Z'.
+    // DB times are local wall-clock, so keep the wall-clock part as-is instead of converting.
+    $rangeStartDate = new DateTimeImmutable(substr((string) $start, 0, 19), $timezone);
+    $rangeEndDate = new DateTimeImmutable(substr((string) $end, 0, 19), $timezone);
     $rangeStart = $rangeStartDate->format('Y-m-d H:i:s');
     $rangeEnd = $rangeEndDate->format('Y-m-d H:i:s');
 
