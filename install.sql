@@ -89,10 +89,12 @@ CREATE TABLE `provider_appointment_types` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 5. CUSTOMERS
--- 5. CUSTOMERS
 CREATE TABLE `customers` (
   `id`              INT UNSIGNED AUTO_INCREMENT,
   `email`           VARCHAR(191)  NOT NULL,
+  `email_invalid`        TINYINT(1)   NOT NULL DEFAULT 0,
+  `email_invalid_reason` VARCHAR(255) NULL DEFAULT NULL,
+  `email_invalid_at`     TIMESTAMP    NULL DEFAULT NULL,
   `mobile`          VARCHAR(32)   NOT NULL,
   `full_name`       VARCHAR(128)  NOT NULL,
   `date_of_birth`   DATE          NULL,
@@ -111,6 +113,7 @@ CREATE TABLE `customers` (
   KEY `idx_customer_lookup` (`email`, `mobile`),
   KEY `idx_customer_ip`     (`last_ip`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 6. BREAKS
 CREATE TABLE `breaks` (
   `id` INT UNSIGNED AUTO_INCREMENT,

@@ -162,7 +162,7 @@
             }
 
             $searchPattern = '%' . $query . '%';
-            $stmt = $db->prepare('SELECT id, full_name, email, mobile, date_of_birth, gender, date_added FROM customers WHERE full_name LIKE ? OR email LIKE ? OR mobile LIKE ? ORDER BY full_name ASC LIMIT ?');
+            $stmt = $db->prepare('SELECT id, full_name, email, email_invalid, email_invalid_reason, mobile, date_of_birth, gender, date_added FROM customers WHERE full_name LIKE ? OR email LIKE ? OR mobile LIKE ? ORDER BY full_name ASC LIMIT ?');
             
             // Explicitly binding parameters ensures pagination/limits map securely as integers
             $stmt->bindValue(1, $searchPattern, PDO::PARAM_STR);
@@ -356,8 +356,8 @@
             $orderBy = $sortMap[$sort] ?? $sortMap['full_name'];
 
             if ($query === '') {
-                $stmt = $db->prepare("SELECT id, full_name, email, mobile, date_of_birth, gender, date_added FROM customers ORDER BY {$orderBy} LIMIT ? OFFSET ?");
-                
+                $stmt = $db->prepare("SELECT id, full_name, email, email_invalid, email_invalid_reason, mobile, date_of_birth, gender, date_added FROM customers ORDER BY {$orderBy} LIMIT ? OFFSET ?");
+
                 // Explicit typed bindings bypass syntax faults when engine-side emulation is off
                 $stmt->bindValue(1, $limit, PDO::PARAM_INT);
                 $stmt->bindValue(2, $offset, PDO::PARAM_INT);
@@ -368,8 +368,8 @@
                 $totalCount = (int) ($countStmt->fetch()['cnt'] ?? 0);
             } else {
                 $searchPattern = '%' . $query . '%';
-                $stmt = $db->prepare("SELECT id, full_name, email, mobile, date_of_birth, gender, date_added FROM customers WHERE full_name LIKE ? OR email LIKE ? OR mobile LIKE ? ORDER BY {$orderBy} LIMIT ? OFFSET ?");
-                
+                $stmt = $db->prepare("SELECT id, full_name, email, email_invalid, email_invalid_reason, mobile, date_of_birth, gender, date_added FROM customers WHERE full_name LIKE ? OR email LIKE ? OR mobile LIKE ? ORDER BY {$orderBy} LIMIT ? OFFSET ?");
+
                 $stmt->bindValue(1, $searchPattern, PDO::PARAM_STR);
                 $stmt->bindValue(2, $searchPattern, PDO::PARAM_STR);
                 $stmt->bindValue(3, $searchPattern, PDO::PARAM_STR);
@@ -405,7 +405,7 @@
             $db = get_db();
             try {
                 $stmt = $db->prepare('
-                    SELECT id, full_name, email, mobile,
+                    SELECT id, full_name, email, email_invalid, email_invalid_reason, email_invalid_at, mobile,
                         last_ip, last_user_agent, last_timezone,
                         last_screen, last_locale, last_seen_at,
                         date_added, date_of_birth, gender

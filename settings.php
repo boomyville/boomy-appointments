@@ -675,18 +675,22 @@ $reminder_email_message = get_setting('reminder_email_message', '');
       <div id="phpmailerMsg"></div>
 
       <hr>
+      <h3>Confirmation Email Message</h3>
+      <label for="confirmation_email_message">Custom message added to booking confirmation emails</label>
+      <textarea id="confirmation_email_message" name="confirmation_email_message" rows="3" placeholder="e.g. We have a cancellation fee"><?php echo htmlspecialchars($confirmation_email_message); ?></textarea>
+      <p style="font-size: 0.9em; color: #666; margin-top: 4px;">Leave blank to omit.</p>
+
+      <input type="hidden" name="tab" value="phpmailer">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <button type="submit">Save PHPMailer</button>
+      <div id="phpmailperMsg"></div>
+
+      <hr>
       <h3>Test Email Configuration</h3>
       <p>Send a test email to verify your SMTP settings are correct.</p>
       <button type="button" id="testEmailBtn" onclick="testEmailConfiguration(event)">Send Test Email</button>
       <div id="testEmailMsg"></div>
     </form>
-      <hr>
-      <h3>Confirmation Email Message</h3>
-      <label for="confirmation_email_message">Custom message added to booking confirmation emails</label>
-      <textarea id="confirmation_email_message" name="confirmation_email_message" rows="3" form="phpmailerForm" placeholder="e.g. We have a cancellation fee"><?php echo htmlspecialchars($confirmation_email_message); ?></textarea>
-      <p style="font-size: 0.9em; color: #666; margin-top: 4px;">Leave blank to omit.</p>
-      <hr>
-      <h3>Appointment Reminders</h3>
  
       <?php if (!$smtp_ready): ?>
         <div class="notice is-warning" style="margin-bottom:20px;">

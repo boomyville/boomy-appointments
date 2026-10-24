@@ -1,0 +1,20 @@
+# Boomy Appointments cron schedule
+#
+# Runs the reminder job every 30 minutes. The PHP script self-gates on the
+# reminder_time setting, so extra invocations safely become no-ops.
+#
+# Deployment:
+# 1. Copy this file into the container's configured cron directory.
+# 2. Ensure the application directory is mounted at the path expected by
+#    the cron command below.
+# 3. Restart the application container and verify the cron entry is loaded.
+# 4. Run the command manually once to confirm it returns valid JSON.
+#
+# Required settings in the settings table:
+#   reminder_enabled      - must be '1' for reminders to run
+#   reminder_days_before  - number of days ahead to check
+#   reminder_time         - HH:MM time window for sending reminders
+#
+# Change the schedule below if the deployment environment requires it.
+#
+*/30 * * * * /usr/local/bin/php /var/www/html/appointments/cron_reminders.php >> /var/log/cron_reminders.log 2>&1

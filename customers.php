@@ -563,6 +563,12 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       return parsed.toLocaleString();
     }
 
+    function buildEmailInvalidTag(customer) {
+      if (!customer || !Number(customer.email_invalid)) return '';
+      const reason = customer.email_invalid_reason ? escapeHtml(customer.email_invalid_reason) : 'Flagged invalid';
+      return ` <span class="pill red" title="${reason}"><span class="pill-dot"></span>Invalid email</span>`;
+    }
+
     function showAlert(container, message, type = 'info') {
       container.innerHTML = `<div class="alert ${type}">${escapeHtml(message)}</div>`;
     }
@@ -634,14 +640,13 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
         html += `
           <td data-label="Contact Info" class="responsive-meta-cell">
             <strong>Gender:</strong> ${escapeHtml(formatGender(c.gender))}<br>
-            <strong>Email:</strong> ${escapeHtml(c.email || '-')}<br>
+            <strong>Email:</strong> ${escapeHtml(c.email || '-')}${buildEmailInvalidTag(c)}<br>
             <strong>Mobile:</strong> ${escapeHtml(c.mobile || '-')}
           </td>
 
           <td data-label="Gender" class="mobile-hidden-field">${escapeHtml(formatGender(c.gender))}</td>
-          <td data-label="Email" class="mobile-hidden-field">${escapeHtml(c.email || '-')}</td>
+          <td data-label="Email" class="mobile-hidden-field">${escapeHtml(c.email || '-')}${buildEmailInvalidTag(c)}</td>
           <td data-label="Mobile" class="mobile-hidden-field">${escapeHtml(c.mobile || '-')}</td>
-          
           <td data-label="Date Added">${escapeHtml(formatDateTime(c.date_added || c.created_at || '-'))}</td>
           
           <td data-label="Signals" class="signals-cell" data-id="${escapeHtml(String(c.id))}" style="${isSignalsVisible ? '' : 'display:none;'}">
@@ -862,7 +867,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     function renderMetaModalContent(customer, signals) {
       const rows = [
         { label: 'Full name',    value: customer.full_name,       span: false },
-        { label: 'Email',        value: customer.email,           span: false },
+        { label: 'Email',        value: customer.email ? customer.email + (Number(customer.email_invalid) ? '  ⚠️ Invalid' : '') : customer.email, span: false },
         { label: 'Mobile',       value: customer.mobile,          span: false },
         { label: 'Gender',       value: formatGender(customer.gender), span: false },
         { label: 'Date of birth',value: customer.date_of_birth,   span: false },

@@ -54,6 +54,7 @@ if (!email_transport_is_ready()) {
 // ── Timing gate — only send during the configured hour window ─────────────────
 $reminderTime = trim((string) get_setting('reminder_time', '09:00'));
 $daysBefore   = max(0, (int) get_setting('reminder_days_before', '1'));
+$reminderMessage = trim((string) get_setting('reminder_email_message', ''));  
 
 $tz  = new DateTimeZone(get_app_timezone_name());
 $now = new DateTimeImmutable('now', $tz);
@@ -96,6 +97,7 @@ $stmt = $db->prepare("
     WHERE a.start_time BETWEEN ? AND ?
       AND a.status IN ('booked', 'confirmed', 'unconfirmed')
       AND c.email IS NOT NULL AND c.email != ''
+      AND (c.email_invalid IS NULL OR c.email_invalid = 0)
       AND NOT EXISTS (
           SELECT 1 FROM verification v
           WHERE v.appointment_id = a.id
@@ -119,6 +121,12 @@ foreach ($appointments as $appt) {
     $apptId  = (int) $appt['id'];
     $toEmail = (string) $appt['customer_email'];
     $toName  = (string) $appt['customer_name'];
+
+    if (!email_domain_has_mx($toEmail)) {
+        mark_customer_email_invalid((int) $appt['customer_id'], 'Domain has no mail server (MX/A record)');
+        $log[] = ['id' => $apptId, 'status' => 'skipped', 'reason' => 'invalid email domain'];
+        continue;
+    }
 
     $provider       = get_user_by_id((int) $appt['provider_id']);
     $apptType       = get_appointment_type_by_id((int) $appt['appointment_type_id']);
@@ -147,7 +155,7 @@ foreach ($appointments as $appt) {
     if ($orgPhone !== '') $contactParts[] = htmlspecialchars($orgPhone, ENT_QUOTES);
     $contactLine = $contactParts ? ': ' . implode(' or ', $contactParts) : '.';
 
-    $bodyHtml = '
+$bodyHtml = '
 <div style="font-family:Inter,ui-sans-serif,system-ui,sans-serif;max-width:540px;margin:0 auto;color:#1d2433">
   <h2 style="font-size:1.5rem;margin:0 0 12px;letter-spacing:-0.02em">Appointment reminder</h2>
   <p style="color:#667085;margin:0 0 20px;line-height:1.6">Hi ' . htmlspecialchars($toName, ENT_QUOTES) . ', this is a reminder of your upcoming appointment.</p>
@@ -157,7 +165,8 @@ foreach ($appointments as $appt) {
       <tr><td style="padding:5px 0;color:#667085;font-size:.85rem">Provider</td><td style="font-weight:700;padding:5px 0">' . htmlspecialchars($providerName, ENT_QUOTES) . '</td></tr>
       <tr><td style="padding:5px 0;color:#667085;font-size:.85rem">Date &amp; Time</td><td style="font-weight:700;padding:5px 0">' . htmlspecialchars($startFormatted, ENT_QUOTES) . '</td></tr>
     </table>
-  </div>
+  </div>'
+  . ($reminderMessage !== '' ? '<p style="color:#1d2433;margin:0 0 20px;line-height:1.6">' . nl2br(htmlspecialchars($reminderMessage, ENT_QUOTES)) . '</p>' : '') . '
   <p style="color:#667085;margin:0 0 20px;line-height:1.6">Need to cancel? Use the button below. Cancel links expire 1 hour before your appointment time.</p>
   <a href="' . htmlspecialchars($cancelUrl, ENT_QUOTES) . '"
      style="display:inline-block;background:linear-gradient(135deg,#ef4444,#d92d20);color:#fff;text-decoration:none;border-radius:999px;padding:13px 22px;font-weight:700;font-size:.95rem">
@@ -173,9 +182,10 @@ foreach ($appointments as $appt) {
         . "Appointment: {$typeName}\n"
         . "Provider: {$providerName}\n"
         . "Date & Time: {$startFormatted}\n\n"
+        . ($reminderMessage !== '' ? "{$reminderMessage}\n\n" : '')
         . "To cancel your appointment visit:\n{$cancelUrl}\n\n"
         . ($orgEmail !== '' ? "Questions? Contact us: {$orgEmail}" . ($orgPhone !== '' ? " / {$orgPhone}" : '') . "\n" : '');
-
+        
     $sendResult = send_email($toEmail, $subject, $bodyHtml, $bodyPlain);
 
     if ($sendResult === true) {

@@ -1227,6 +1227,15 @@ function send_appointment_confirmation_email(int $appointmentId): array
         return ['ok' => false, 'error' => 'Email not recorded for this customer'];
     }
 
+    // CHECK EMAIL VALIDITY
+    if ((bool) ($customer['email_invalid'] ?? 0)) {
+        return ['ok' => false, 'error' => 'Customer email previously flagged as invalid'];
+    }
+    if (!email_domain_has_mx($customerEmail)) {
+        mark_customer_email_invalid((int) $customer['id'], 'Domain has no mail server (MX/A record)');
+        return ['ok' => false, 'error' => 'Email domain has no mail server'];
+    }
+
     $provider = get_user_by_id((int) ($appointment['provider_id'] ?? 0));
     $appointmentType = get_appointment_type_by_id((int) ($appointment['appointment_type_id'] ?? 0));
     $hashKey = trim((string) ($appointment['hash_key'] ?? ''));
@@ -1702,6 +1711,45 @@ function get_customer_by_id(int $id): ?array
         }
     } catch (Throwable $e) {
         return null;
+    }
+}
+
+function email_domain_has_mx(string $email): bool
+{
+    $parts = explode('@', $email);
+    if (count($parts) !== 2 || trim($parts[1]) === '') {
+        return false;
+    }
+    $domain = trim($parts[1]);
+
+    // MX is the normal case; fall back to A/AAAA since some domains
+    // accept mail via a bare A record with no MX (rare but valid per RFC 5321)
+    return checkdnsrr($domain, 'MX') || checkdnsrr($domain, 'A') || checkdnsrr($domain, 'AAAA');
+}
+
+function mark_customer_email_invalid(int $customerId, string $reason): void
+{
+    try {
+        $db = get_db();
+        $stmt = $db->prepare(
+            'UPDATE customers SET email_invalid = 1, email_invalid_reason = ?, email_invalid_at = NOW() WHERE id = ?'
+        );
+        $stmt->execute([substr($reason, 0, 255), $customerId]);
+    } catch (Throwable $e) {
+        // non-fatal
+    }
+}
+
+function clear_customer_email_invalid(int $customerId): void
+{
+    try {
+        $db = get_db();
+        $stmt = $db->prepare(
+            'UPDATE customers SET email_invalid = 0, email_invalid_reason = NULL, email_invalid_at = NULL WHERE id = ?'
+        );
+        $stmt->execute([$customerId]);
+    } catch (Throwable $e) {
+        // non-fatal
     }
 }
 
