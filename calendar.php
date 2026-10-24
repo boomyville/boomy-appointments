@@ -1871,6 +1871,9 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       return hours + ':00:00';
     }
 
+    let eventSlotMinSeconds = null;
+    let eventSlotMaxSeconds = null;
+
     function getEffectiveSlotRange() {
       const nowParts = getServerClockParts(getServerNowDate());
       const nowSeconds = (nowParts.hour * 3600) + (nowParts.minute * 60) + nowParts.second;
@@ -1885,6 +1888,13 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
 
       if (nowSeconds > endSeconds) {
         slotMaxTime = secondsToHourTime(nowSeconds + 3600);
+      }
+
+      if (eventSlotMinSeconds !== null) {
+        slotMinTime = secondsToHourTime(Math.min(timeToSeconds(slotMinTime), eventSlotMinSeconds));
+      }
+      if (eventSlotMaxSeconds !== null) {
+        slotMaxTime = secondsToHourTime(Math.min(86400, Math.max(timeToSeconds(slotMaxTime), eventSlotMaxSeconds + 3599)));
       }
 
       return { slotMinTime, slotMaxTime };
@@ -2556,6 +2566,22 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
             return response.json();
           })
           .then(function(rawEvents) {
+            const before = getEffectiveSlotRange();
+            eventSlotMinSeconds = null;
+            eventSlotMaxSeconds = null;
+            rawEvents.forEach(function(ev) {
+              if (ev.display === 'background' || !ev.start || !ev.end) return;
+              const s = timeToSeconds(ev.start.slice(11, 19));
+              const crossesMidnight = ev.start.slice(0, 10) !== ev.end.slice(0, 10);
+              const e = crossesMidnight ? 86400 : timeToSeconds(ev.end.slice(11, 19));
+              eventSlotMinSeconds = eventSlotMinSeconds === null ? s : Math.min(eventSlotMinSeconds, s);
+              eventSlotMaxSeconds = eventSlotMaxSeconds === null ? e : Math.max(eventSlotMaxSeconds, e);
+            });
+            const after = getEffectiveSlotRange();
+            if (window.calendarInstance && (after.slotMinTime !== before.slotMinTime || after.slotMaxTime !== before.slotMaxTime)) {
+              window.calendarInstance.setOption('slotMinTime', after.slotMinTime);
+              window.calendarInstance.setOption('slotMaxTime', after.slotMaxTime);
+            }
             successCallback(getFilteredCalendarEvents(rawEvents));
           })
           .catch(function(err) {
