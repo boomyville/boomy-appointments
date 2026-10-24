@@ -84,6 +84,27 @@ mysql -u root -p < install.sql
 
 Or import from a client tool and ensure the DB user in `config.php` can access `boomy_appointments`.
 
+**Scheduled reminder emails**
+- The `application` file is a generic cron schedule that runs `cron_reminders.php` every 30 minutes. Installing `install.sql` creates the database setting but does not install an operating-system or container cron job.
+- Copy the schedule file into the cron directory configured by the hosting environment, or create an equivalent scheduled task. Container images differ: some expect five cron fields in a user crontab, while standard `/etc/cron.d` files also require a user field. For standard `/etc/cron.d`, the entry is typically:
+
+```cron
+*/30 * * * * root /usr/local/bin/php /var/www/html/appointments/cron_reminders.php >> /var/log/cron_reminders.log 2>&1
+```
+
+- Adjust the PHP and application paths for the deployment environment. Do not commit server-specific paths, container names, or secrets to this repository.
+- Configure SMTP first, then enable reminders in **Settings**. Set `reminder_days_before` and `reminder_time`; the script only sends during the 60-minute window beginning at the configured server time.
+- The optional `cron_key` is stored in the `settings` table and can be set or rotated from **Settings → Cron Security**. For web execution, pass it as `?key=...` or the `X-CRON-KEY` header. Do not put the key in Git or directly in a tracked cron file.
+- If a cron key is configured, use a secret-managed HTTP request or another protected deployment mechanism for the scheduled call. Direct CLI execution is intended for deployments without a configured web cron key.
+- Test the job manually and inspect its JSON response:
+
+```bash
+php cron_reminders.php
+curl -fsS -H "X-CRON-KEY: $CRON_KEY" "https://example.com/appointments/cron_reminders.php"
+```
+
+- A log file may not exist until the scheduler runs for the first time. Check the scheduler service, the installed cron entry, and the configured log path. A response with `"skipped":true` still confirms that the job executed; it may be outside the configured send window or reminders may be disabled.
+
 **Next recommended tasks**
 - Add an in-page first-run registration UI on `login.php` so visitors see the setup form automatically when `setup_required` is true.
 - Implement server-side HTML fallbacks for non-JS users (the API already accepts traditional POST arrays as fallback).

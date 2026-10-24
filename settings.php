@@ -114,6 +114,7 @@ $email_domain_blacklist = get_setting('email_domain_blacklist', '');
 $reminder_enabled     = (int) get_setting('reminder_enabled', '0');
 $reminder_days_before = (int) get_setting('reminder_days_before', '1');
 $reminder_time        = get_setting('reminder_time', '09:00');
+$cron_key             = get_setting('cron_key', '');
 $smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && !empty($smtp_password));
 
 $booking_step1_message = get_setting('booking_step1_message', '');
@@ -445,11 +446,6 @@ $reminder_email_message = get_setting('reminder_email_message', '');
       </fieldset>
 
       <fieldset class="field-group">
-        <legend>Live Time Marker</legend>
-        <label><input type="checkbox" name="booking_show_now_indicator" value="1" <?php echo $booking_show_now_indicator ? 'checked' : ''; ?>> Show red line for the current time</label>
-      </fieldset>
-
-      <fieldset class="field-group">
       <legend>Custom Booking Messages</legend>
       <label for="booking_step1_message">Step 1 message (shown when choosing appointment type/provider)</label>
       <textarea id="booking_step1_message" name="booking_step1_message" rows="2" placeholder="e.g. All appointments are free of charge"><?php echo htmlspecialchars($booking_step1_message); ?></textarea>
@@ -739,6 +735,24 @@ $reminder_email_message = get_setting('reminder_email_message', '');
         <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
         <button type="submit" <?php echo !$smtp_ready ? 'disabled' : ''; ?>>Save Reminder Settings</button>
         <div id="reminderMsg"></div>
+      </form>
+
+      <form id="cronSecurityForm" data-api data-no-reload="true"
+            action="settings_api.php?action=save" method="post">
+        <fieldset class="field-group">
+          <legend>Cron Security</legend>
+          <label for="cron_key">Cron key</label>
+          <input id="cron_key" name="cron_key" type="password" autocomplete="new-password"
+                 placeholder="<?php echo $cron_key !== '' ? 'Key configured - leave blank to keep it' : 'Optional: enter a long random key'; ?>">
+          <p style="font-size:.9em;color:#666;margin-top:4px;">
+            Used to protect web requests to <code>cron_reminders.php</code>. Leave blank to keep the current key.
+            CLI cron jobs do not need this key. The key is stored in the database, not in Git.
+          </p>
+          <input type="hidden" name="tab" value="cron">
+          <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8'); ?>">
+          <button type="submit">Save Cron Key</button>
+          <div id="cronSecurityMsg"></div>
+        </fieldset>
       </form>
  
       <script>

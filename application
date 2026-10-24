@@ -17,4 +17,4 @@
 #
 # Change the schedule below if the deployment environment requires it.
 #
-*/30 * * * * /usr/local/bin/php /var/www/html/appointments/cron_reminders.php >> /var/log/cron_reminders.log 2>&1
+*/30 * * * * root /usr/local/bin/php /var/www/html/appointments/cron_reminders.php >> /var/log/cron_reminders.log 2>&1

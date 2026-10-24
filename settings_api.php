@@ -187,6 +187,7 @@ try {
                 'confirmation_email_message'
             ],
             'sessions' => ['session_lifetime_hours'],
+            'cron' => ['cron_key'],
             'reminders' => ['reminder_enabled', 'reminder_days_before', 'reminder_time', 'reminder_email_message']
         ];
 
@@ -452,7 +453,7 @@ try {
                 }
                 
                 // Safety logic layer for masked fields
-                if ($k === 'smtp_password' && trim((string)$value) === '') {
+                if (in_array($k, ['smtp_password', 'cron_key'], true) && trim((string)$value) === '') {
                     continue; 
                 }
                 
@@ -475,6 +476,8 @@ try {
             $message = 'General settings saved successfully';
         } elseif ($tab === 'reminders') {
             $message = 'Reminder settings saved successfully';
+        } elseif ($tab === 'cron') {
+            $message = 'Cron security settings saved successfully';
         }
 
 

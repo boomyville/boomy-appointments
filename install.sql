@@ -248,6 +248,7 @@ INSERT INTO `settings` (`setting_key`,`setting_value`) VALUES
 ('reminder_enabled','0'),
 ('reminder_days_before','1'),
 ('reminder_time','09:00'),
+('cron_key',''),
 ('booking_step1_message',''),
 ('booking_step4_message',''),
 ('confirmation_email_message',''),
