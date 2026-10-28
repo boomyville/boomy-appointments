@@ -275,7 +275,7 @@ $orgPhone = get_setting('organization_number', '');
 
   <?php else: /* invalid or too_late — token expired means get_verification_by_code_and_task returned null */ ?>
     <span class="icon">❌</span>
-    <h1 class="danger-text">Invalid or expired link</h1>
+       <h1 class="danger-text"><?php echo $result === 'too_late' ? 'Too late to cancel online' : 'Invalid or expired link'; ?></h1>
     <p><?php echo htmlspecialchars($result === 'too_late' ? $message : 'This cancellation link is invalid, has expired, or has already been used.', ENT_QUOTES, 'UTF-8'); ?></p>
     <?php if ($orgEmail || $orgPhone): ?>
     <p>Please contact us directly:

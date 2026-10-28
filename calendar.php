@@ -1383,6 +1383,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
                 <option value="present">Present</option>
                 <option value="completed">Completed</option>
                 <option value="no show">No show</option>
+                <option value="cancelled">Cancelled</option>
               </select>
               <button type="button" id="cycleAppointmentStatusBtn" class="booking-mode-toggle-secondary">Toggle</button>
             </div>
@@ -1621,7 +1622,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     let pendingDraftProviderId = null;
     let notesExpanded = false;
     let pendingEmailPromptContext = null;
-    const appointmentStatusValues = ['booked', 'confirmed', 'present', 'completed', 'no show'];
+    const appointmentStatusValues = ['booked', 'confirmed', 'present', 'completed', 'no show', 'cancelled'];
     const appointmentEmailDeliveryReady = Boolean(<?php echo json_encode($appointmentEmailDeliveryReady); ?>);
 
     const fallbackDurationMinutes = appointmentTypes.length > 0 ? Number(appointmentTypes[0].duration_minutes || 30) : 30;

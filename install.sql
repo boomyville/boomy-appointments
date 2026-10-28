@@ -135,7 +135,7 @@ CREATE TABLE `appointments` (
   `appointment_type_id` INT UNSIGNED NOT NULL,
   `start_time` DATETIME NOT NULL,
   `end_time` DATETIME NOT NULL,
-  `status` ENUM('booked','unconfirmed','confirmed','present','completed','no_show') NOT NULL DEFAULT 'booked',
+  `status` ENUM('booked','unconfirmed','confirmed','present','completed','no_show','cancelled') NOT NULL DEFAULT 'booked',
   `notes` TEXT NULL,
   `hash_key` CHAR(64) NOT NULL,
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -1879,6 +1879,7 @@ function find_overlapping_appointment(int $providerId, DateTimeImmutable $startD
                 WHERE a.provider_id = ?
                   AND a.start_time < ?
                   AND a.end_time > ?';
+        $sql .= " AND a.status NOT IN ('cancelled', 'no_show')";
         $params = [
             $providerId,
             $endDate->format('Y-m-d H:i:s'),
