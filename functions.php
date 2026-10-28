@@ -2592,18 +2592,17 @@ function get_or_create_cancel_token(int $appointmentId): ?string
         return (string) $existing;
     }
  
-    // Set expiry 1 hour before appointment start
+    // Get/cancel token - remove duplicate ones (such as when a user/admin moves an appointment)
     $appt = get_appointment_by_id($appointmentId);
     if (!$appt) return null;
- 
+
+    // Expiry is enforced on cancel_appointment.php from the live appointment time,
+    // so rescheduling can't strand an old link.
     $expiresAt = null;
-    try {
-        $expiresAt = (new DateTimeImmutable((string) $appt['start_time']))
-            ->modify('-1 hour')
-            ->format('Y-m-d H:i:s');
-    } catch (Throwable $e) {
-        // No expiry if we can't parse — token will live until manually deleted
-    }
+
+    // A stale row would violate the unique (appointment_id, task) index
+    $db->prepare("DELETE FROM verification WHERE appointment_id = ? AND task = 'cancel_appointment'")
+    ->execute([$appointmentId]);
  
     $code = bin2hex(random_bytes(32)); // 64-char hex, same as other tokens
  

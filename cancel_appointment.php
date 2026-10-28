@@ -29,7 +29,11 @@ if ($token === '') {
         } elseif (in_array($appt['status'] ?? '', ['cancelled', 'no_show', 'completed'], true)) {
             $result  = 'already_cancelled';
             $message = 'This appointment has already been cancelled or completed.';
-        }
+        } elseif ((new DateTimeImmutable((string) $appt['start_time'], new DateTimeZone(get_app_timezone_name())))
+              <= (new DateTimeImmutable('now', new DateTimeZone(get_app_timezone_name())))->modify('+1 hour')) {
+          $result  = 'too_late';
+          $message = 'Online cancellation closes 1 hour before your appointment. Please contact us directly.';
+      } 
         // Token expiry is already enforced by get_verification_by_code_and_task (expires_at > NOW())
         // If we land here with no $result set yet, token was valid and appt is active.
     }
@@ -60,7 +64,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $result === null && $appt) {
         }
     }
 }
-
+//Keep appointment
+if ($result === null && isset($_GET['kept']) && $_SERVER['REQUEST_METHOD'] === 'GET') {
+    $result = 'kept';
+}
 if ($result === null) {
     $result = 'confirm';
 }
@@ -233,7 +240,7 @@ $orgPhone = get_setting('organization_number', '');
     <form method="post" action="cancel_appointment.php?token=<?php echo urlencode($token); ?>">
       <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
       <div class="actions">
-        <a href="book.php" class="btn ghost">Keep my appointment</a>
+        <a href="cancel_appointment.php?token=<?php echo urlencode($token); ?>&kept=1" class="btn ghost">Keep my appointment</a>
         <button type="submit" class="btn danger">Yes, cancel this appointment</button>
       </div>
     </form>
@@ -255,18 +262,21 @@ $orgPhone = get_setting('organization_number', '');
     </div>
     <?php endif; ?>
     <p>Would you like to book a new appointment?</p>
-    <a href="book.php" class="btn">Book a new appointment</a>
-
+    <a href="booking.php" class="btn">Book a new appointment</a>
+  <?php elseif ($result === 'kept'): ?>
+    <span class="icon">👍</span>
+    <h1>Your appointment is kept</h1>
+    <p>No changes were made. We look forward to seeing you.</p>
   <?php elseif ($result === 'already_cancelled'): ?>
     <span class="icon">ℹ️</span>
     <h1>Already cancelled</h1>
     <p><?php echo htmlspecialchars($message, ENT_QUOTES, 'UTF-8'); ?></p>
-    <a href="book.php" class="btn">Book a new appointment</a>
+    <a href="booking.php" class="btn">Book a new appointment</a>
 
   <?php else: /* invalid or too_late — token expired means get_verification_by_code_and_task returned null */ ?>
     <span class="icon">❌</span>
     <h1 class="danger-text">Invalid or expired link</h1>
-    <p>This cancellation link is invalid, has expired, or has already been used.</p>
+    <p><?php echo htmlspecialchars($result === 'too_late' ? $message : 'This cancellation link is invalid, has expired, or has already been used.', ENT_QUOTES, 'UTF-8'); ?></p>
     <?php if ($orgEmail || $orgPhone): ?>
     <p>Please contact us directly:
       <?php if ($orgEmail): ?><a href="mailto:<?php echo htmlspecialchars($orgEmail, ENT_QUOTES, 'UTF-8'); ?>"><?php echo htmlspecialchars($orgEmail, ENT_QUOTES, 'UTF-8'); ?></a><?php endif; ?>
