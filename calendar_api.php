@@ -45,7 +45,8 @@ try {
             FROM appointments a
             LEFT JOIN customers c ON c.id = a.customer_id
             LEFT JOIN appointment_types t ON t.id = a.appointment_type_id
-            WHERE a.start_time < ? AND a.end_time > ?";
+            WHERE a.start_time < ? AND a.end_time > ?
+              AND a.status <> 'cancelled'";
 
     $params = [$rangeEnd, $rangeStart];
 
