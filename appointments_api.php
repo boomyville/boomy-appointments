@@ -43,7 +43,7 @@ try {
         if (!empty($appointment['customer_id'])) {
             $customer = get_customer_by_id((int)$appointment['customer_id']);
         }
-        echo json_encode(['ok' => true, 'appointment' => $appointment, 'customer' => $customer]);
+        echo json_encode(['ok' => true, 'appointment' => $appointment, 'customer' => $customer, 'answers' => get_appointment_answers($id)]);
         exit;
     }
 
@@ -200,6 +200,11 @@ try {
             }
             echo json_encode($result);
             exit;
+        }
+
+        // Only touch answers when the client sent them (drag/drop and status updates do not)
+        if (array_key_exists('answers', $data)) {
+            save_appointment_answers((int) $appointmentId, (int) ($result['customer_id'] ?? $selectedCustomerId), sanitize_answers((array) $data['answers']), true);
         }
 
         echo json_encode(['ok' => true, 'appointment' => $result, 'customer' => $customer]);
@@ -416,6 +421,8 @@ try {
             ]);
             exit;
         }
+
+        save_appointment_answers((int) $appointment['id'], (int) $selectedCustomerId, sanitize_answers((array) ($data['answers'] ?? [])), true);
 
         echo json_encode([
             'ok' => true,

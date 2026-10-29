@@ -176,7 +176,7 @@ try {
                 'booking_deadline_hours', 'booking_max_advance_days',
                 'booking_show_monday', 'booking_show_tuesday', 'booking_show_wednesday', 'booking_show_thursday', 'booking_show_friday', 'booking_show_saturday', 'booking_show_sunday',
                 'booking_start_time', 'notify_admin_on_booking', 'booking_end_time', 'booking_week_start_day', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes', 'auto_no_show', 'prevent_same_user_booking', 'disable_online_booking',
-                'booking_step1_message', 'booking_step4_message' 
+                'booking_step1_message', 'booking_step4_message', 'user_questions'
             ],
             'authentication' => [
                 'password_min_length', 'password_max_length', 'password_require_lowercase', 'password_require_uppercase', 'password_require_number', 'password_require_symbol',
@@ -428,6 +428,11 @@ try {
                 $lines = array_filter(array_map('trim', explode("\n", $data['email_domain_blacklist'])));
                 $data['email_domain_blacklist'] = implode("\n", $lines);
             }
+        }
+
+        // Booking questions: the textarea (one question per line) is stored as JSON in `user_questions`
+        if ($tab === 'booking' && isset($data['user_questions_text'])) {
+            $data['user_questions'] = json_encode(parse_user_questions_text((string) $data['user_questions_text']), JSON_UNESCAPED_UNICODE);
         }
 
         // Processing Loop

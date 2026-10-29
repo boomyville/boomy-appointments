@@ -340,6 +340,8 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
             <option value="date_added_asc">Sort: Date added (oldest)</option>
             <option value="gender">Sort: Gender</option>
           </select>
+          <select id="answerQuestionSelect" style="min-width:200px; width:auto; margin-bottom:0; display:none;"><option value="">Question filter: none</option></select>
+          <select id="answerValueSelect" style="min-width:140px; width:auto; margin-bottom:0; display:none;"><option value="">Any answer</option></select>
           <button type="button" id="searchBtn" style="margin-bottom:0; width:auto;">Search</button>
           <button type="button" id="clearBtn" class="secondary" style="margin-bottom:0; width:auto;">Clear</button>
         </div>
@@ -758,6 +760,25 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       document.getElementById('nextPageBtn')?.addEventListener('click', () => { if (currentPage < totalPages) { currentPage++; loadCustomers(currentSearch, currentPage); } });
     }
 
+    const USER_QUESTIONS = <?php echo json_encode(get_user_questions(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOTE); ?>;
+    const answerQuestionSelect = document.getElementById('answerQuestionSelect');
+    const answerValueSelect    = document.getElementById('answerValueSelect');
+
+    function setupAnswerFilter() {
+      if (!USER_QUESTIONS.length) return;
+      answerQuestionSelect.style.display = '';
+      USER_QUESTIONS.forEach(q => answerQuestionSelect.add(new Option(q.label, q.id)));
+      answerQuestionSelect.addEventListener('change', () => {
+        answerValueSelect.length = 1;
+        const q = USER_QUESTIONS.find(x => x.id === answerQuestionSelect.value);
+        if (q) q.options.forEach(o => answerValueSelect.add(new Option(o, o)));
+        answerValueSelect.style.display = q ? '' : 'none';
+        loadCustomers(searchInput.value.trim(), 1);
+      });
+      answerValueSelect.addEventListener('change', () => loadCustomers(searchInput.value.trim(), 1));
+    }
+    setupAnswerFilter();
+
     async function loadCustomers(query = '', page = 1) {
       try {
         customersLoading.style.display = 'block';
@@ -766,6 +787,10 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
         currentPage   = Math.max(1, page);
 
         const params = new URLSearchParams({ action:'list', q:query, page:String(currentPage), limit:String(pageSize), sort:sortSelect?.value || 'full_name' });
+        if (answerQuestionSelect.value && answerValueSelect.value) {
+          params.set('answer_q', answerQuestionSelect.value);
+          params.set('answer_v', answerValueSelect.value);
+        }
         const resp = await fetch(`customers_api.php?${params}`);
         if (!resp.ok) throw new Error('Failed to load customers');
         const json = await resp.json();
@@ -864,7 +889,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       return v ? `<span class="meta-value">${escapeHtml(v)}</span>` : `<span class="meta-value empty">Not recorded</span>`;
     }
 
-    function renderMetaModalContent(customer, signals) {
+    function renderMetaModalContent(customer, signals, answers = []) {
       const rows = [
         { label: 'Full name',    value: customer.full_name,       span: false },
         { label: 'Email',        value: customer.email ? customer.email + (Number(customer.email_invalid) ? '  ⚠️ Invalid' : '') : customer.email, span: false },
@@ -882,9 +907,14 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
 
       const metaHtml = `<div class="meta-grid">${rows.map(r => `<div class="meta-item${r.span ? ' span-2' : ''}"><div class="meta-label">${escapeHtml(r.label)}</div>${metaValue(r.value)}</div>`).join('')}</div>`;
 
+      const labelStyle = 'font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:10px;';
+      const answersHtml = answers.length
+        ? `<div><div style="${labelStyle}">Booking questions</div><div class="meta-grid">${answers.map(a => `<div class="meta-item"><div class="meta-label">${escapeHtml(a.label)}</div>${metaValue(a.answer)}${a.updated_at ? `<div class="meta-label" style="margin-top:2px;">Updated ${escapeHtml(formatDateTime(a.updated_at))}</div>` : ''}</div>`).join('')}</div></div>`
+        : '';
+
       let signalsHtml = !signals.length ? `<p class="no-signals">No duplicate signals detected for this customer.</p>` : `<div class="signals-section">` + signals.map(s => `<div class="signal-row ${s.severity}"><div class="signal-icon">${{green:'🟢',yellow:'🟡',red:'🔴'}[s.severity] || '⚪'}</div><div class="signal-body"><div class="signal-title">${escapeHtml(s.label)} — ${s.count} share this</div><div class="signal-detail">${escapeHtml(s.value)}</div></div></div>`).join('') + `</div>`;
 
-      return `<div style="display:grid; gap:18px;"><div><div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:10px;">Session & contact metadata</div>${metaHtml}</div><div><div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:10px;">Duplicate signals</div>${signalsHtml}</div></div>`;
+      return `<div style="display:grid; gap:18px;"><div><div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:10px;">Session & contact metadata</div>${metaHtml}</div>${answersHtml}<div><div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:10px;">Duplicate signals</div>${signalsHtml}</div></div>`;
     }
 
     async function openMetaModal(customer) {
@@ -893,17 +923,19 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       metaModal.showModal();
 
       try {
-        const [metaResp, sigResp] = await Promise.all([
+        const [metaResp, sigResp, ansResp] = await Promise.all([
           fetch(`customers_api.php?action=meta&id=${customer.id}`),
-          fetch(`customers_api.php?action=signals&id=${customer.id}`)
+          fetch(`customers_api.php?action=signals&id=${customer.id}`),
+          fetch(`customers_api.php?action=answers&id=${customer.id}`)
         ]);
+        const ansJson = ansResp.ok ? await ansResp.json() : {};
         const metaJson = metaResp.ok ? await metaResp.json() : {};
         const sigJson  = sigResp.ok  ? await sigResp.json()  : {};
         const fullCustomer = metaJson.customer || customer;
         const signals      = sigJson.signals   || [];
 
         signalCache[customer.id] = signals;
-        metaModalBody.innerHTML = renderMetaModalContent(fullCustomer, signals);
+        metaModalBody.innerHTML = renderMetaModalContent(fullCustomer, signals, ansJson.answers || []);
       } catch (err) {
         metaModalBody.innerHTML = `<div class="alert error">Failed to load customer info: ${escapeHtml(err.message)}</div>`;
       }
@@ -922,7 +954,13 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     deleteModalConfirmBtn.addEventListener('click', handleConfirmDelete);
 
     searchBtn.addEventListener('click', () => loadCustomers(searchInput.value.trim(), 1));
-    clearBtn.addEventListener('click',  () => { searchInput.value = ''; loadCustomers('', 1); });
+    clearBtn.addEventListener('click',  () => {
+      searchInput.value = '';
+      answerQuestionSelect.value = '';
+      answerValueSelect.length = 1;
+      answerValueSelect.style.display = 'none';
+      loadCustomers('', 1);
+    });
     sortSelect?.addEventListener('change', () => loadCustomers(searchInput.value.trim(), 1));
     searchInput.addEventListener('keypress', e => { if (e.key === 'Enter') loadCustomers(searchInput.value.trim(), 1); });
 

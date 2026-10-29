@@ -119,6 +119,7 @@ $smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && !empty($smtp_pass
 
 $booking_step1_message = get_setting('booking_step1_message', '');
 $booking_step4_message = get_setting('booking_step4_message', '');
+$user_questions_text = format_user_questions_text(get_user_questions());
 $confirmation_email_message = get_setting('confirmation_email_message', '');
 $reminder_email_message = get_setting('reminder_email_message', '');
 
@@ -456,6 +457,15 @@ $reminder_email_message = get_setting('reminder_email_message', '');
         Leave blank to hide. Both messages are shown to customers on the public booking page.
       </p>
     </fieldset>
+
+      <fieldset class="field-group">
+        <legend>Booking Questions</legend>
+        <label for="user_questions_text">One question per line: <code>id | Question | Option A, Option B | required</code></label>
+        <textarea id="user_questions_text" name="user_questions_text" rows="5" placeholder="e.g. glasses | Do you wear glasses? | Yes, No"><?php echo htmlspecialchars($user_questions_text); ?></textarea>
+        <p style="font-size: 0.9em; color: #666; margin-top: 4px;">
+          The id (letters, numbers, underscore) is how answers are stored, so keep it the same if you rename a question. The word <code>required</code> is optional and only applies to the public booking page. Removing an option later shows past answers as n/a.
+        </p>
+      </fieldset>
 
       <fieldset class="field-group">
         <legend>Appointment Types</legend>

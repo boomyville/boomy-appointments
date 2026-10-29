@@ -288,3 +288,26 @@ CREATE TABLE `sessions` (
   KEY `idx_user_id` (`user_id`),
   KEY `idx_last_activity` (`last_activity_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- Booking questions (see the `user_questions` setting). Answers per appointment and latest per customer.
+CREATE TABLE `appointment_answers` (
+  `appointment_id` INT UNSIGNED NOT NULL,
+  `question_id` VARCHAR(32) NOT NULL,
+  `answer` VARCHAR(255) NOT NULL,
+  PRIMARY KEY (`appointment_id`, `question_id`),
+  CONSTRAINT `fk_aa_appt` FOREIGN KEY (`appointment_id`) REFERENCES `appointments` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `customer_answers` (
+  `customer_id` INT UNSIGNED NOT NULL,
+  `question_id` VARCHAR(32) NOT NULL,
+  `answer` VARCHAR(255) NOT NULL,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`customer_id`, `question_id`),
+  KEY `idx_ca_lookup` (`question_id`, `answer`),
+  CONSTRAINT `fk_ca_customer` FOREIGN KEY (`customer_id`) REFERENCES `customers` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO `settings` (`setting_key`, `setting_value`) VALUES ('user_questions', '[]')
+  ON DUPLICATE KEY UPDATE `setting_key` = `setting_key`;

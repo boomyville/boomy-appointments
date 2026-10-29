@@ -1478,6 +1478,10 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
               <textarea id="bookingNotes" name="notes" rows="3" placeholder="Optional notes for the booking draft"></textarea>
             </div>
           </div>
+
+          <div class="field span-2" id="bookingQuestionsWrap" style="display:none;">
+            <div id="bookingQuestions"></div>
+          </div>
         </div>
 
         <input type="hidden" id="bookingStart" value="">
@@ -2162,6 +2166,35 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       setTimeout(checkTimeSlotConflicts, 100);
     }
 
+    const USER_QUESTIONS = <?php echo json_encode(get_user_questions(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOTE); ?>;
+
+    function setBookingAnswers(answers) {
+      const wrap = document.getElementById('bookingQuestionsWrap');
+      const box = document.getElementById('bookingQuestions');
+      if (!wrap || !box) return;
+      wrap.style.display = USER_QUESTIONS.length ? '' : 'none';
+      const current = answers || {};
+      box.innerHTML = USER_QUESTIONS.map(function (q) {
+        const stored = current[q.id];
+        const stale = Boolean(stored) && q.options.indexOf(stored) === -1;
+        const opts = q.options.map(function (o) {
+          return '<option value="' + escapeHtml(o) + '"' + (stored === o ? ' selected' : '') + '>' + escapeHtml(o) + '</option>';
+        }).join('');
+        const staleOpt = stale ? '<option value="" selected>n/a (previous answer no longer offered)</option>' : '';
+        return '<label for="bq_' + escapeHtml(q.id) + '">' + escapeHtml(q.label) + '</label>'
+          + '<select id="bq_' + escapeHtml(q.id) + '" data-question="' + escapeHtml(q.id) + '">'
+          + '<option value=""' + (!stored ? ' selected' : '') + '>Not answered</option>' + staleOpt + opts + '</select>';
+      }).join('');
+    }
+
+    function collectBookingAnswers() {
+      const out = {};
+      document.querySelectorAll('#bookingQuestions select[data-question]').forEach(function (s) {
+        if (s.value) out[s.dataset.question] = s.value;
+      });
+      return out;
+    }
+
     function syncBookingNotes(value) {
       if (!bookingNotes) {
         return;
@@ -2198,6 +2231,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
         syncAppointmentStatusUI('booked');
         notesExpanded = false;
         syncBookingNotes('');
+        setBookingAnswers({});
         syncBookingDraftTimes();
       } else {
         selectedStartLabel.textContent = formatCalendarDate(calendar, startDate);
@@ -2215,6 +2249,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
           currentEditingAppointmentId = appt.id;
           syncAppointmentStatusUI(appt.status || 'booked');
           syncBookingNotes(appt.notes || '');
+          setBookingAnswers(options.answers || {});
           if (cust && cust.id) {
             setCustomerMode('existing');
             showSelectedCustomer({ id: cust.id, full_name: cust.full_name || ((cust.first_name || '') + ' ' + (cust.last_name || '')), email: cust.email || '', mobile: cust.mobile || '' });
@@ -2693,7 +2728,8 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
               mode: 'edit',
               title: (cust.full_name || appt.id ? ('Appt #' + appt.id) : (cust.full_name || appt.title)) + ' • ' + status,
               appointment: appt,
-              customer: cust
+              customer: cust,
+              answers: json.answers || {}
             });
           }).catch(err => {
             alert('Could not load appointment details');
@@ -3588,6 +3624,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       syncAppointmentStatusUI('booked');
       notesExpanded = false;
       syncBookingNotes('');
+      setBookingAnswers({});
       if (makeBookingBtn) {
         makeBookingBtn.textContent = 'Make booking';
       }
@@ -3709,7 +3746,8 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
             appointment_type_id: appointmentTypeId,
             start_time: startTime,
             status: statusValue,
-            notes: notesValue
+            notes: notesValue,
+            answers: collectBookingAnswers()
           }, (isEdit ? { appointment_id: currentEditingAppointmentId } : {}), (bookingEndOverrideActive ? { end_time: bookingEnd.value } : {})))
         });
 

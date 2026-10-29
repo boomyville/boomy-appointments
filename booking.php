@@ -793,6 +793,11 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
         <div id="existingMatches" class="results-list hidden"></div>
       </div>
 
+      <div id="questionsPane" class="hidden" style="margin-top:20px;">
+        <h3 style="margin:0 0 10px;">A few more questions</h3>
+        <div id="questionsFields" class="customer-grid"></div>
+      </div>
+
       <div class="actions">
         <button type="button" class="btn ghost" id="step3Back">Back</button>
         <button type="button" class="btn primary" id="step3Continue">Continue to summary</button>
@@ -872,6 +877,8 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       loading: false,
       requestToken: '',
       duplicateMatches: [],
+      userQuestions: [],
+      answers: {},
       prevent_same_user_booking: 0 
     };
 
@@ -1075,6 +1082,8 @@ function validateEmail(email) {
       state.prevent_same_user_booking = parseInt(data.prevent_same_user_booking ?? 0, 10);
 
       state.settings.customer_field_settings = data.customer_field_settings || {};
+      state.userQuestions = data.user_questions || [];
+      renderQuestions();
       fillSelects();
       state.appointmentTypeId = String(state.appointmentTypes[0]?.id || '');
       state.providerId = String(state.providers[0]?.id || '');
@@ -1286,6 +1295,36 @@ function validateEmail(email) {
       return true;
     }
 
+    function renderQuestions() {
+      const pane = document.getElementById('questionsPane');
+      const box = document.getElementById('questionsFields');
+      if (!pane || !box) return;
+      const qs = state.userQuestions || [];
+      pane.classList.toggle('hidden', qs.length === 0);
+      box.innerHTML = qs.map(q => {
+        const opts = q.options.map(o => `<option value="${escapeHtml(o)}"${state.answers[q.id] === o ? ' selected' : ''}>${escapeHtml(o)}</option>`).join('');
+        return `<div class="field span-3"><label for="question_${escapeHtml(q.id)}">${escapeHtml(q.label)}${q.required ? ' *' : ''}</label><select id="question_${escapeHtml(q.id)}" data-question="${escapeHtml(q.id)}"><option value="">Select an answer</option>${opts}</select></div>`;
+      }).join('');
+      box.querySelectorAll('select[data-question]').forEach(sel => {
+        sel.addEventListener('change', () => {
+          if (sel.value) state.answers[sel.dataset.question] = sel.value;
+          else delete state.answers[sel.dataset.question];
+        });
+      });
+    }
+
+    function validateQuestions() {
+      for (const q of (state.userQuestions || [])) {
+        if (q.required && !state.answers[q.id]) {
+          setToast('Missing required answer', `Please answer: ${q.label}`);
+          const el = document.getElementById('question_' + q.id);
+          if (el) el.focus();
+          return false;
+        }
+      }
+      return true;
+    }
+
     function validateCustomerInputs() {
       const fieldSettings = state.settings?.customer_field_settings || {};
 
@@ -1447,6 +1486,7 @@ function validateEmail(email) {
         customer_mode: state.customerMode,
         allow_duplicate: state.allowDuplicate,
         notes: '',
+        answers: state.answers,
         ...currentCustomerPayload(),
         ...collectClientMeta()
       };
@@ -1465,6 +1505,9 @@ function validateEmail(email) {
 
     async function handleStep3Continue() {
       if (!validateCustomerInputs()) {
+        return;
+      }
+      if (!validateQuestions()) {
         return;
       }
 
@@ -1538,6 +1581,8 @@ function validateEmail(email) {
       state.allowDuplicate = false;
       state.bookingResult = null;
       state.duplicateMatches = [];
+      state.answers = {};
+      renderQuestions();
       els.newFirstName.value = '';
       els.newMiddleName.value = '';
       els.newLastName.value = '';

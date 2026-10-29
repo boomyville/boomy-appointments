@@ -489,6 +489,7 @@ try {
             'prevent_same_user_booking' => (int) get_setting('prevent_same_user_booking', 0), // <-- EXPLICIT ROOT PROPERTY
             'booking_max_advance_days' => (int) get_setting('booking_max_advance_days', 60),
             'customer_field_settings' => get_customer_field_settings(),
+            'user_questions' => get_user_questions(),
             'appointment_types' => $appointmentTypes,
             'providers' => $providers,
             'month_start' => booking_server_now()->modify('first day of this month')->format('Y-m-d'),
@@ -710,6 +711,10 @@ if ($action === 'month' && $method === 'GET') {
             if ($customerEmail === '' || $customerMobile === '') booking_api_response(['error' => 'email and mobile are required'], 422);
         }
 
+        $answers = sanitize_answers((array) ($data['answers'] ?? []));
+        $answerError = validate_required_answers($answers);
+        if ($answerError) booking_api_response(['error' => $answerError], 422);
+
         if ($needsVerification) {
             $customer = null;
             if ($customerMode === 'existing') {
@@ -723,7 +728,6 @@ if ($action === 'month' && $method === 'GET') {
             if (!$customer) booking_api_response(['error' => 'Failed to load customer'], 500);
             update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
             $appointment = create_appointment((int)$customer['id'], $providerId, $appointmentTypeId, $startDate->format('Y-m-d H:i:s'), 'unconfirmed', null, $notesValue);
-            save_appointment_answers((int) $appointment['id'], (int) $customer['id'], sanitize_answers((array) ($data['answers'] ?? [])));  save_appointment_answers((int) $appointment['id'], (int) $customer['id'], sanitize_answers((array) ($data['answers'] ?? [])));
             if (!$appointment || isset($appointment['error'])) {
                 $errorCode = $appointment['error'] ?? 'create_failed';
                 $errorMessage = match ($errorCode) {
@@ -734,6 +738,10 @@ if ($action === 'month' && $method === 'GET') {
                 };
                 booking_api_response(['error' => $errorMessage, 'code' => $errorCode, 'conflict' => $appointment['conflict'] ?? null], $errorCode === 'create_failed' ? 500 : 422);
             }
+
+            // Unverified request: keep the answers on the appointment only. They are copied to the
+            // customer record once the email is verified (see the verify action).
+            save_appointment_answers((int) $appointment['id'], (int) $customer['id'], $answers, false);
 
             $verificationCode = create_appointment_verification_token((int) $appointment['id']);
             $emailSent = booking_send_verification_email($appointment, $provider, $appointmentType, $matches);
@@ -762,7 +770,6 @@ if ($action === 'month' && $method === 'GET') {
 update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
 
         $appointment = create_appointment((int) $customer['id'], $providerId, $appointmentTypeId, $startDate->format('Y-m-d H:i:s'), 'booked', null, $notesValue);
-        save_appointment_answers((int) $appointment['id'], (int) $customer['id'], sanitize_answers((array) ($data['answers'] ?? [])));  save_appointment_answers((int) $appointment['id'], (int) $customer['id'], sanitize_answers((array) ($data['answers'] ?? [])));
         if (!$appointment) booking_api_response(['error' => 'Failed to create appointment'], 500);
 
         if (isset($appointment['error'])) {
@@ -774,6 +781,8 @@ update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
 
             booking_api_response(['error' => $errorMessage, 'conflict' => $appointment['conflict'] ?? null], $code);
         }
+
+        save_appointment_answers((int) $appointment['id'], (int) $customer['id'], $answers, true);
 
         $emailSent = booking_send_confirmation_email($appointment);
         $adminNotifyResult = send_admin_booking_notification_email($appointment, false);
@@ -844,6 +853,7 @@ update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
             booking_api_response(['error' => $errorMessage, 'code' => $errorCode, 'conflict' => $appointment['conflict'] ?? null], $errorCode === 'finalize_failed' ? 500 : 422);
         }
 
+        copy_appointment_answers_to_customer((int) $appointment['id'], (int) ($appointment['customer_id'] ?? $customerIdToAssign));
         delete_verification_token((string) ($verification['code'] ?? ''));
         $emailSent = booking_send_confirmation_email($appointment);
         booking_api_response(['ok' => true, 'status' => 'completed', 'customer' => get_customer_by_id((int) $appointment['customer_id']), 'appointment' => $appointment, 'email_sent' => $emailSent, 'message' => 'Appointment verified and booked successfully']);

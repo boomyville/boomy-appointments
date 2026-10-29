@@ -355,35 +355,47 @@
             ];
             $orderBy = $sortMap[$sort] ?? $sortMap['full_name'];
 
-            if ($query === '') {
-                $stmt = $db->prepare("SELECT id, full_name, email, email_invalid, email_invalid_reason, mobile, date_of_birth, gender, date_added FROM customers ORDER BY {$orderBy} LIMIT ? OFFSET ?");
-
-                // Explicit typed bindings bypass syntax faults when engine-side emulation is off
-                $stmt->bindValue(1, $limit, PDO::PARAM_INT);
-                $stmt->bindValue(2, $offset, PDO::PARAM_INT);
-                $stmt->execute();
-                $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-                $countStmt = $db->query('SELECT COUNT(*) as cnt FROM customers');
-                $totalCount = (int) ($countStmt->fetch()['cnt'] ?? 0);
-            } else {
+            $answerQ = trim((string) ($_GET['answer_q'] ?? ''));
+            $answerV = trim((string) ($_GET['answer_v'] ?? ''));
+            $where = [];
+            $params = [];
+            if ($query !== '') {
                 $searchPattern = '%' . $query . '%';
-                $stmt = $db->prepare("SELECT id, full_name, email, email_invalid, email_invalid_reason, mobile, date_of_birth, gender, date_added FROM customers WHERE full_name LIKE ? OR email LIKE ? OR mobile LIKE ? ORDER BY {$orderBy} LIMIT ? OFFSET ?");
-
-                $stmt->bindValue(1, $searchPattern, PDO::PARAM_STR);
-                $stmt->bindValue(2, $searchPattern, PDO::PARAM_STR);
-                $stmt->bindValue(3, $searchPattern, PDO::PARAM_STR);
-                $stmt->bindValue(4, $limit, PDO::PARAM_INT);
-                $stmt->bindValue(5, $offset, PDO::PARAM_INT);
-                $stmt->execute();
-                $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-                $countStmt = $db->prepare('SELECT COUNT(*) as cnt FROM customers WHERE full_name LIKE ? OR email LIKE ? OR mobile LIKE ?');
-                $countStmt->execute([$searchPattern, $searchPattern, $searchPattern]);
-                $totalCount = (int) ($countStmt->fetch()['cnt'] ?? 0);
+                $where[] = '(full_name LIKE ? OR email LIKE ? OR mobile LIKE ?)';
+                array_push($params, $searchPattern, $searchPattern, $searchPattern);
             }
+            if ($answerQ !== '' && $answerV !== '') {
+                $where[] = 'EXISTS (SELECT 1 FROM customer_answers ca WHERE ca.customer_id = customers.id AND ca.question_id = ? AND ca.answer = ?)';
+                array_push($params, $answerQ, $answerV);
+            }
+            $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
+
+            $stmt = $db->prepare("SELECT id, full_name, email, email_invalid, email_invalid_reason, mobile, date_of_birth, gender, date_added FROM customers{$whereSql} ORDER BY {$orderBy} LIMIT ? OFFSET ?");
+            $i = 1;
+            foreach ($params as $p) {
+                $stmt->bindValue($i++, $p, PDO::PARAM_STR);
+            }
+            $stmt->bindValue($i++, $limit, PDO::PARAM_INT);
+            $stmt->bindValue($i, $offset, PDO::PARAM_INT);
+            $stmt->execute();
+            $customers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $countStmt = $db->prepare("SELECT COUNT(*) AS cnt FROM customers{$whereSql}");
+            $countStmt->execute($params);
+            $totalCount = (int) ($countStmt->fetch()['cnt'] ?? 0);
 
             echo json_encode(['customers' => $customers, 'total' => $totalCount]);
+            exit;
+        }
+
+        // GET /customers_api.php?action=answers&id=X - Booking question answers for a customer (admin only)
+        if ($action === 'answers' && $_SERVER['REQUEST_METHOD'] === 'GET') {
+            if ($role !== 'admin') {
+                http_response_code(403);
+                echo json_encode(['error' => 'permission denied']);
+                exit;
+            }
+            echo json_encode(['answers' => get_customer_answers_display((int) ($_GET['id'] ?? 0))]);
             exit;
         }
 

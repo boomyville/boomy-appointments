@@ -2633,11 +2633,65 @@ function get_verification_by_code_and_task(string $code, string $task): ?array
     $stmt->execute([$code, $task]);
     return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
 }
- 
+
+// ============================================================
+// Booking questions (the `user_questions` setting)
+// Stored as JSON: [{"id":"glasses","label":"Do you wear glasses?","options":["Yes","No"],"required":false}]
+// Answers live in appointment_answers (per appointment) and customer_answers (latest per customer).
+// ============================================================
+
 function get_user_questions(): array
 {
     $list = json_decode((string) get_setting('user_questions', '[]'), true);
-    return is_array($list) ? array_values(array_filter($list, fn($q) => !empty($q['id']) && !empty($q['label']) && !empty($q['options']))) : [];
+    if (!is_array($list)) {
+        return [];
+    }
+    $out = [];
+    foreach ($list as $q) {
+        if (!is_array($q) || empty($q['id']) || empty($q['label']) || empty($q['options']) || !is_array($q['options'])) {
+            continue;
+        }
+        $out[] = [
+            'id'       => (string) $q['id'],
+            'label'    => (string) $q['label'],
+            'options'  => array_values(array_map('strval', $q['options'])),
+            'required' => !empty($q['required']),
+        ];
+    }
+    return $out;
+}
+
+// Settings textarea -> question list. One question per line:  id | Label | Option A, Option B | required
+function parse_user_questions_text(string $text): array
+{
+    $out = [];
+    foreach (preg_split('/\R/', $text) as $line) {
+        $p = array_map('trim', explode('|', $line));
+        if (count($p) < 3 || $p[0] === '' || $p[1] === '') {
+            continue;
+        }
+        $id = substr(preg_replace('/[^a-z0-9_]/', '', strtolower($p[0])), 0, 32);
+        $options = array_values(array_unique(array_filter(array_map('trim', explode(',', $p[2])), 'strlen')));
+        if ($id === '' || !$options) {
+            continue;
+        }
+        $out[$id] = [
+            'id'       => $id,
+            'label'    => $p[1],
+            'options'  => $options,
+            'required' => isset($p[3]) && strtolower($p[3]) === 'required',
+        ];
+    }
+    return array_values($out);
+}
+
+function format_user_questions_text(array $questions): string
+{
+    $lines = [];
+    foreach ($questions as $q) {
+        $lines[] = $q['id'] . ' | ' . $q['label'] . ' | ' . implode(', ', $q['options']) . (!empty($q['required']) ? ' | required' : '');
+    }
+    return implode("\n", $lines);
 }
 
 // Keep only answers for configured questions whose value is a current option
@@ -2646,42 +2700,121 @@ function sanitize_answers(array $input): array
     $out = [];
     foreach (get_user_questions() as $q) {
         $a = trim((string) ($input[$q['id']] ?? ''));
-        if ($a !== '' && in_array($a, $q['options'], true)) $out[$q['id']] = $a;
+        if ($a !== '' && in_array($a, $q['options'], true)) {
+            $out[$q['id']] = $a;
+        }
     }
     return $out;
 }
 
-function save_appointment_answers(int $apptId, int $customerId, array $answers): void
+// Returns an error message if a required question has no (valid) answer, otherwise null
+function validate_required_answers(array $answers): ?string
 {
-    $db = get_db();
-    $db->prepare('DELETE FROM appointment_answers WHERE appointment_id = ?')->execute([$apptId]);
-    $ins  = $db->prepare('INSERT INTO appointment_answers (appointment_id, question_id, answer) VALUES (?, ?, ?)');
-    $cust = $db->prepare('INSERT INTO customer_answers (customer_id, question_id, answer) VALUES (?, ?, ?)
-                          ON DUPLICATE KEY UPDATE answer = VALUES(answer), updated_at = CURRENT_TIMESTAMP');
+    foreach (get_user_questions() as $q) {
+        if (!empty($q['required']) && !isset($answers[$q['id']])) {
+            return 'Please answer: ' . $q['label'];
+        }
+    }
+    return null;
+}
+
+function save_customer_answers(int $customerId, array $answers): void
+{
+    if ($customerId < 1 || !$answers) {
+        return;
+    }
+    $stmt = get_db()->prepare('INSERT INTO customer_answers (customer_id, question_id, answer) VALUES (?, ?, ?)
+                               ON DUPLICATE KEY UPDATE answer = VALUES(answer), updated_at = CURRENT_TIMESTAMP');
     foreach ($answers as $qid => $a) {
-        $ins->execute([$apptId, $qid, $a]);
-        $cust->execute([$customerId, $qid, $a]);
+        $stmt->execute([$customerId, $qid, $a]);
+    }
+}
+
+// Saves answers for an appointment. Only rows for currently configured questions are replaced,
+// so history for questions that were later removed from the setting is left alone.
+// Never throws: a failure here must not break a booking.
+function save_appointment_answers(int $apptId, int $customerId, array $answers, bool $updateCustomer = true): void
+{
+    if ($apptId < 1) {
+        return;
+    }
+    try {
+        $db  = get_db();
+        $ids = array_column(get_user_questions(), 'id');
+        if ($ids) {
+            $in = implode(',', array_fill(0, count($ids), '?'));
+            $db->prepare("DELETE FROM appointment_answers WHERE appointment_id = ? AND question_id IN ($in)")
+               ->execute(array_merge([$apptId], $ids));
+        }
+        $ins = $db->prepare('INSERT INTO appointment_answers (appointment_id, question_id, answer) VALUES (?, ?, ?)');
+        foreach ($answers as $qid => $a) {
+            $ins->execute([$apptId, $qid, $a]);
+        }
+        if ($updateCustomer) {
+            save_customer_answers($customerId, $answers);
+        }
+    } catch (Throwable $e) {
+        error_log('save_appointment_answers failed: ' . $e->getMessage());
+    }
+}
+
+// Used once an unconfirmed (email-verified) booking is confirmed
+function copy_appointment_answers_to_customer(int $apptId, int $customerId): void
+{
+    try {
+        save_customer_answers($customerId, get_appointment_answers($apptId));
+    } catch (Throwable $e) {
+        error_log('copy_appointment_answers_to_customer failed: ' . $e->getMessage());
     }
 }
 
 function get_appointment_answers(int $apptId): array   // [question_id => answer]
 {
-    $s = get_db()->prepare('SELECT question_id, answer FROM appointment_answers WHERE appointment_id = ?');
-    $s->execute([$apptId]);
-    return $s->fetchAll(PDO::FETCH_KEY_PAIR);
+    try {
+        $s = get_db()->prepare('SELECT question_id, answer FROM appointment_answers WHERE appointment_id = ?');
+        $s->execute([$apptId]);
+        return $s->fetchAll(PDO::FETCH_KEY_PAIR) ?: [];
+    } catch (Throwable $e) {
+        error_log('get_appointment_answers failed: ' . $e->getMessage());
+        return [];
+    }
 }
 
 function get_customer_answers(int $customerId): array  // [question_id => [answer, updated_at]]
 {
-    $s = get_db()->prepare('SELECT question_id, answer, updated_at FROM customer_answers WHERE customer_id = ?');
-    $s->execute([$customerId]);
-    $out = [];
-    foreach ($s->fetchAll(PDO::FETCH_ASSOC) as $r) $out[$r['question_id']] = [$r['answer'], $r['updated_at']];
-    return $out;
+    try {
+        $s = get_db()->prepare('SELECT question_id, answer, updated_at FROM customer_answers WHERE customer_id = ?');
+        $s->execute([$customerId]);
+        $out = [];
+        foreach ($s->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[$r['question_id']] = [$r['answer'], $r['updated_at']];
+        }
+        return $out;
+    } catch (Throwable $e) {
+        error_log('get_customer_answers failed: ' . $e->getMessage());
+        return [];
+    }
 }
 
 // Display rule: a stored value that is no longer an option shows as n/a
 function answer_display(array $question, ?string $stored): string
 {
     return ($stored !== null && in_array($stored, $question['options'], true)) ? $stored : 'n/a';
+}
+
+// One entry per configured question for a customer profile. answer is '' when never answered.
+function get_customer_answers_display(int $customerId): array
+{
+    $stored = get_customer_answers($customerId);
+    $out = [];
+    foreach (get_user_questions() as $q) {
+        $row = $stored[$q['id']] ?? null;
+        $out[] = [
+            'id'         => $q['id'],
+            'label'      => $q['label'],
+            'answer'     => $row ? answer_display($q, (string) $row[0]) : '',
+            'updated_at' => $row ? $row[1] : null,
+        ];
+    }
+    return $out;
 }
