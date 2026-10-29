@@ -2634,3 +2634,54 @@ function get_verification_by_code_and_task(string $code, string $task): ?array
     return $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
 }
  
+function get_user_questions(): array
+{
+    $list = json_decode((string) get_setting('user_questions', '[]'), true);
+    return is_array($list) ? array_values(array_filter($list, fn($q) => !empty($q['id']) && !empty($q['label']) && !empty($q['options']))) : [];
+}
+
+// Keep only answers for configured questions whose value is a current option
+function sanitize_answers(array $input): array
+{
+    $out = [];
+    foreach (get_user_questions() as $q) {
+        $a = trim((string) ($input[$q['id']] ?? ''));
+        if ($a !== '' && in_array($a, $q['options'], true)) $out[$q['id']] = $a;
+    }
+    return $out;
+}
+
+function save_appointment_answers(int $apptId, int $customerId, array $answers): void
+{
+    $db = get_db();
+    $db->prepare('DELETE FROM appointment_answers WHERE appointment_id = ?')->execute([$apptId]);
+    $ins  = $db->prepare('INSERT INTO appointment_answers (appointment_id, question_id, answer) VALUES (?, ?, ?)');
+    $cust = $db->prepare('INSERT INTO customer_answers (customer_id, question_id, answer) VALUES (?, ?, ?)
+                          ON DUPLICATE KEY UPDATE answer = VALUES(answer), updated_at = CURRENT_TIMESTAMP');
+    foreach ($answers as $qid => $a) {
+        $ins->execute([$apptId, $qid, $a]);
+        $cust->execute([$customerId, $qid, $a]);
+    }
+}
+
+function get_appointment_answers(int $apptId): array   // [question_id => answer]
+{
+    $s = get_db()->prepare('SELECT question_id, answer FROM appointment_answers WHERE appointment_id = ?');
+    $s->execute([$apptId]);
+    return $s->fetchAll(PDO::FETCH_KEY_PAIR);
+}
+
+function get_customer_answers(int $customerId): array  // [question_id => [answer, updated_at]]
+{
+    $s = get_db()->prepare('SELECT question_id, answer, updated_at FROM customer_answers WHERE customer_id = ?');
+    $s->execute([$customerId]);
+    $out = [];
+    foreach ($s->fetchAll(PDO::FETCH_ASSOC) as $r) $out[$r['question_id']] = [$r['answer'], $r['updated_at']];
+    return $out;
+}
+
+// Display rule: a stored value that is no longer an option shows as n/a
+function answer_display(array $question, ?string $stored): string
+{
+    return ($stored !== null && in_array($stored, $question['options'], true)) ? $stored : 'n/a';
+}

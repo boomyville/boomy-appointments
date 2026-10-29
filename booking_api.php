@@ -721,9 +721,9 @@ if ($action === 'month' && $method === 'GET') {
             }
 
             if (!$customer) booking_api_response(['error' => 'Failed to load customer'], 500);
-update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
-
+            update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
             $appointment = create_appointment((int)$customer['id'], $providerId, $appointmentTypeId, $startDate->format('Y-m-d H:i:s'), 'unconfirmed', null, $notesValue);
+            save_appointment_answers((int) $appointment['id'], (int) $customer['id'], sanitize_answers((array) ($data['answers'] ?? [])));  save_appointment_answers((int) $appointment['id'], (int) $customer['id'], sanitize_answers((array) ($data['answers'] ?? [])));
             if (!$appointment || isset($appointment['error'])) {
                 $errorCode = $appointment['error'] ?? 'create_failed';
                 $errorMessage = match ($errorCode) {
@@ -762,6 +762,7 @@ update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
 update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
 
         $appointment = create_appointment((int) $customer['id'], $providerId, $appointmentTypeId, $startDate->format('Y-m-d H:i:s'), 'booked', null, $notesValue);
+        save_appointment_answers((int) $appointment['id'], (int) $customer['id'], sanitize_answers((array) ($data['answers'] ?? [])));  save_appointment_answers((int) $appointment['id'], (int) $customer['id'], sanitize_answers((array) ($data['answers'] ?? [])));
         if (!$appointment) booking_api_response(['error' => 'Failed to create appointment'], 500);
 
         if (isset($appointment['error'])) {
