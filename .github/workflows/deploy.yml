@@ -95,6 +95,8 @@ jobs:
 
       - name: Build Deployment Summary
         if: always()
+        env:
+          CHANGED_FILES: ${{ steps.rsync-upload.outputs.changed_files }}
         run: |
           END_TIME=$(date +%s)
           START_TIME=${{ steps.start-time.outputs.time }}
@@ -121,12 +123,10 @@ jobs:
           echo "| Rsync Code | File Path / Action |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
           
-          while IFS= read -r line; do
+          echo "$CHANGED_FILES" | while IFS= read -r line; do
             if [ -n "$line" ]; then
               CODE=$(echo "$line" | awk '{print $1}')
               FILE=$(echo "$line" | cut -d' ' -f2-)
               echo "| \`$CODE\` | \`$FILE\` |" >> $GITHUB_STEP_SUMMARY
             fi
-          done << 'EOF'
-${{ steps.rsync-upload.outputs.changed_files }}
-EOF
+          done
