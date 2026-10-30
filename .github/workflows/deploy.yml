@@ -50,24 +50,38 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
 
+      - name: Record start time
+        id: start-time
+        run: echo "time=$(date +%s)" >> $GITHUB_OUTPUT
+
       - name: Upload files
+        id: rsync-upload
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          FLAGS="-rlvz --chmod=D755,F644"
+          FLAGS="-rlvz --itemize-changes --chmod=D755,F644"
           if [ "$DRY_RUN" = "true" ]; then FLAGS="$FLAGS --dry-run"; fi
 
-          # Excluded paths are never uploaded AND never deleted on the server
-          # (so they stay safe even if you later add --delete).
-          rsync $FLAGS \
+          # Run rsync and capture output
+          RSYNC_OUTPUT=$(rsync $FLAGS \
             --exclude='.git/' --exclude='.github/' --exclude='.gitignore' \
             --exclude='/config.php' --exclude='/adminer.php' --exclude='/manager.php' --exclude='/design/' \
             --exclude='/README.md' --exclude='/install.sql' --exclude='/config_sample.php' --exclude='/application' \
             -e "ssh -i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
-            ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
+            ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/")
+          
+          echo "$RSYNC_OUTPUT"
+
+          # Filter changed files (lines starting with <, >, or c)
+          CHANGED_FILES=$(echo "$RSYNC_OUTPUT" | grep -E '^[<>\.c][fcd>]' || echo "No files changed or initial sync.")
+          
+          delimiter="$(openssl rand -hex 8)"
+          echo "changed_files<<${delimiter}" >> $GITHUB_OUTPUT
+          echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
+          echo "${delimiter}" >> $GITHUB_OUTPUT
 
       - name: Fix file permissions on server
         if: ${{ inputs.dry_run != true }}
@@ -78,3 +92,50 @@ jobs:
         run: |
           ssh -i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
             $DEPLOY_USER@$DEPLOY_HOST "sudo chown -R 1000:1000 $DEPLOY_PATH"
+
+      - name: Build Deployment Summary
+        if: always()
+        env:
+          CHANGED_FILES: ${{ steps.rsync-upload.outputs.changed_files }}
+        run: |
+          END_TIME=$(date +%s)
+          START_TIME=${{ steps.start-time.outputs.time }}
+          DURATION=$(( END_TIME - START_TIME ))
+          
+          BRANCH_NAME="${{ inputs.branch }}"
+          if [ -z "$BRANCH_NAME" ]; then BRANCH_NAME="main (push)"; fi
+          
+          MODE="🚀 Live Deployment"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then MODE="🧪 Dry Run (No files modified)"; fi
+
+          STATUS="❌ Failed"
+          if [ "${{ job.status }}" = "success" ]; then STATUS="✅ Success"; fi
+
+          echo "### Deployment Report" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Result |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Status** | $STATUS |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Mode** | $MODE |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | \`$BRANCH_NAME\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Duration** | ${DURATION} seconds |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### 📋 File Changes Breakdown:" >> $GITHUB_STEP_SUMMARY
+          echo "| Action Type | File Path |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          
+          echo "$CHANGED_FILES" | while IFS= read -r line; do
+            if [ -n "$line" ]; then
+              CODE=$(echo "$line" | awk '{print $1}')
+              FILE=$(echo "$line" | cut -d' ' -f2-)
+              
+              # Translate rsync code into friendly text
+              ACTION="📄 Uploaded / Synced"
+              if [[ "$CODE" == *s* ]]; then
+                ACTION="✏️ Modified (Size Changed)"
+              elif [[ "$CODE" == *T* ]] || [[ "$CODE" == *t* ]]; then
+                ACTION="⏱️ Synced (Timestamp Update)"
+              fi
+              
+              echo "| $ACTION | \`$FILE\` |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done

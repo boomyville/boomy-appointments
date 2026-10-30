@@ -395,7 +395,8 @@ try {
             $storageStatus, 
             null, 
             $notes !== '' ? $notes : null, 
-            $isStaffUser
+            $isStaffUser,
+            'staff'
         );
         
         if (!$appointment) {

@@ -208,6 +208,11 @@ function ensure_appointment_schema(PDO $db): void
                 $update->execute([bin2hex(random_bytes(32)), (int) ($row['id'] ?? 0)]);
             }
         }
+
+        $hasBookingSource = (bool) $db->query("SHOW COLUMNS FROM appointments LIKE 'booking_source'")->fetch();
+        if (!$hasBookingSource) {
+            $db->exec("ALTER TABLE appointments ADD COLUMN booking_source ENUM('staff','online','unknown') NOT NULL DEFAULT 'unknown' AFTER hash_key");
+        }
     } catch (Throwable $e) {
         // Ignore schema bootstrap failures so the app can continue running.
     }
@@ -1769,7 +1774,7 @@ function get_appointment_by_id(int $id): ?array
 {
     try {
         $db = get_db();
-        $stmt = $db->prepare('SELECT id, customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key, created_at, updated_at FROM appointments WHERE id = ? LIMIT 1');
+        $stmt = $db->prepare('SELECT id, customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key, booking_source, created_at, updated_at FROM appointments WHERE id = ? LIMIT 1');
         $stmt->execute([$id]);
         return $stmt->fetch() ?: null;
     } catch (Throwable $e) {
@@ -1781,7 +1786,7 @@ function get_appointment_by_hash_key(string $hashKey): ?array
 {
     try {
         $db = get_db();
-        $stmt = $db->prepare('SELECT id, customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key, created_at, updated_at FROM appointments WHERE hash_key = ? LIMIT 1');
+        $stmt = $db->prepare('SELECT id, customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key, booking_source, created_at, updated_at FROM appointments WHERE hash_key = ? LIMIT 1');
         $stmt->execute([$hashKey]);
         return $stmt->fetch() ?: null;
     } catch (Throwable $e) {
@@ -1902,7 +1907,7 @@ function find_overlapping_appointment(int $providerId, DateTimeImmutable $startD
     }
 }
 
-function create_appointment(int $customerId, int $providerId, int $appointmentTypeId, string $startTime, ?string $status = null, ?string $endTime = null, ?string $notes = null, bool $allowStaffOverride = false): ?array
+function create_appointment(int $customerId, int $providerId, int $appointmentTypeId, string $startTime, ?string $status = null, ?string $endTime = null, ?string $notes = null, bool $allowStaffOverride = false, string $bookingSource = 'unknown'): ?array
 {
     try {
         $appointmentType = get_appointment_type_by_id($appointmentTypeId);
@@ -1945,8 +1950,8 @@ function create_appointment(int $customerId, int $providerId, int $appointmentTy
         ]));
 
         $db = get_db();
-        $stmt = $db->prepare('INSERT INTO appointments (customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([
+        $bookingSource = in_array($bookingSource, ['staff', 'online', 'unknown'], true) ? $bookingSource : 'unknown';
+        $insertValues = [
             $customerId,
             $providerId,
             $appointmentTypeId,
@@ -1955,7 +1960,18 @@ function create_appointment(int $customerId, int $providerId, int $appointmentTy
             $finalStatus,
             $notes !== null && trim($notes) !== '' ? trim($notes) : null,
             $hashKey,
-        ]);
+        ];
+        try {
+            $stmt = $db->prepare('INSERT INTO appointments (customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key, booking_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt->execute(array_merge($insertValues, [$bookingSource]));
+        } catch (PDOException $e) {
+            // Unknown column 1054 = booking_source migration not run yet. Fall back so bookings keep working.
+            if ((int) ($e->errorInfo[1] ?? 0) !== 1054) {
+                throw $e;
+            }
+            $stmt = $db->prepare('INSERT INTO appointments (customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt->execute($insertValues);
+        }
 
         return [
             'id' => (int) $db->lastInsertId(),
@@ -1967,6 +1983,7 @@ function create_appointment(int $customerId, int $providerId, int $appointmentTy
             'status' => $finalStatus,
             'notes' => $notes !== null && trim($notes) !== '' ? trim($notes) : null,
             'hash_key' => $hashKey,
+            'booking_source' => $bookingSource,
         ];
     } catch (Throwable $e) {
         return null;
@@ -2020,7 +2037,10 @@ function update_appointment(int $appointmentId, int $customerId, int $providerId
 
         $finalStatus = $status ?: (string) ($existingAppointment['status'] ?? 'booked');
         $db = get_db();
-        $stmt = $db->prepare('UPDATE appointments SET customer_id = ?, provider_id = ?, appointment_type_id = ?, start_time = ?, end_time = ?, status = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+        $existingBookingSource = in_array(($existingAppointment['booking_source'] ?? 'unknown'), ['staff', 'online', 'unknown'], true)
+            ? $existingAppointment['booking_source']
+            : 'unknown';
+        $stmt = $db->prepare('UPDATE appointments SET customer_id = ?, provider_id = ?, appointment_type_id = ?, start_time = ?, end_time = ?, status = ?, notes = ?, booking_source = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
         $stmt->execute([
             $customerId,
             $providerId,
@@ -2029,6 +2049,7 @@ function update_appointment(int $appointmentId, int $customerId, int $providerId
             $endDate->format('Y-m-d H:i:s'), // Will never be null now!
             $finalStatus,
             $notes !== null && trim($notes) !== '' ? trim($notes) : null,
+            $existingBookingSource,
             $appointmentId,
         ]);
 
@@ -2041,6 +2062,7 @@ function update_appointment(int $appointmentId, int $customerId, int $providerId
             'end_time' => $endDate->format('Y-m-d H:i:s'),
             'status' => $finalStatus,
             'notes' => $notes !== null && trim($notes) !== '' ? trim($notes) : null,
+            'booking_source' => $existingBookingSource,
         ];
     } catch (Throwable $e) {
         // Optional tracking logging trace during local development:

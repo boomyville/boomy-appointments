@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/functions.php';
 init_session();
 if (!is_logged_in()) {
@@ -18,6 +18,7 @@ $todaySeenCount = 0;
 $todayRemainingCount = 0;
 $todayPendingCount = 0;
 $todayNoShowCount = 0;
+$todayCancelledCount = 0;
 $nextAppointment = null;
 $weekStart = null;
 $weekTotal = 0;
@@ -178,13 +179,37 @@ $emailQualityPie = $makePieGradient([$customerStats['unique_email'], $customerSt
 $mobilePie = $makePieGradient([$customerStats['mobile_yes'], $customerStats['mobile_no']], ['#2563eb', '#64748b']);
 $genderPie = $makePieGradient(array_values($customerGenderCounts), ['#2563eb', '#ec4899', '#f59e0b', '#64748b']);
 
+// Booking channel: how appointments created in each period were booked (cancelled excluded).
+$channelPeriods = [];
+$channelLabels = ['online' => 'Booked online', 'staff' => 'Booked by staff', 'unknown' => 'Unknown (before tracking)'];
+foreach ([7, 30, 90] as $channelDays) {
+  $counts = ['Booked online' => 0, 'Booked by staff' => 0, 'Unknown (before tracking)' => 0];
+  try {
+    $channelStmt = $db->prepare("SELECT a.booking_source, COUNT(*) AS total_count
+      FROM appointments a
+      WHERE a.created_at >= DATE_SUB(NOW(), INTERVAL {$channelDays} DAY) AND a.status <> 'cancelled'{$appointmentScopeSql}
+      GROUP BY a.booking_source");
+    $channelStmt->execute($appointmentScopeParams);
+    foreach ($channelStmt->fetchAll(PDO::FETCH_ASSOC) as $channelRow) {
+      $channelKey = $channelLabels[$channelRow['booking_source']] ?? 'Unknown (before tracking)';
+      $counts[$channelKey] += (int) $channelRow['total_count'];
+    }
+  } catch (Throwable $e) {}
+  $channelPeriods[(string) $channelDays] = $counts;
+}
+$channelCounts = $channelPeriods['90'];
+$channelColors = ['#2563eb', '#10b981', '#94a3b8'];
+$channelPie = $makePieGradient(array_values($channelCounts), $channelColors);
+$channelTotal = array_sum($channelCounts);
+
 try {
   $todayStatsStmt = $db->prepare("SELECT
-    COUNT(*) AS total_count,
+    SUM(CASE WHEN a.status <> 'cancelled' THEN 1 ELSE 0 END) AS total_count,
     SUM(CASE WHEN a.status IN ('present', 'completed') THEN 1 ELSE 0 END) AS seen_count,
-    SUM(CASE WHEN a.start_time >= ? AND a.status NOT IN ('completed', 'no_show') THEN 1 ELSE 0 END) AS remaining_count,
+    SUM(CASE WHEN a.start_time >= ? AND a.status NOT IN ('completed', 'no_show', 'cancelled') THEN 1 ELSE 0 END) AS remaining_count,
     SUM(CASE WHEN a.status = 'unconfirmed' THEN 1 ELSE 0 END) AS pending_count,
-    SUM(CASE WHEN a.status = 'no_show' THEN 1 ELSE 0 END) AS no_show_count
+    SUM(CASE WHEN a.status = 'no_show' THEN 1 ELSE 0 END) AS no_show_count,
+    SUM(CASE WHEN a.status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled_count
     FROM appointments a
     WHERE a.start_time >= ? AND a.start_time < ?{$appointmentScopeSql}");
   $todayStatsStmt->execute(array_merge([
@@ -198,13 +223,14 @@ try {
   $todayRemainingCount = (int) ($todayStats['remaining_count'] ?? 0);
   $todayPendingCount = (int) ($todayStats['pending_count'] ?? 0);
   $todayNoShowCount = (int) ($todayStats['no_show_count'] ?? 0);
+  $todayCancelledCount = (int) ($todayStats['cancelled_count'] ?? 0);
 
   $nextStmt = $db->prepare("SELECT a.start_time, a.end_time, c.full_name AS customer_name, t.name AS type_name
     FROM appointments a
     LEFT JOIN customers c ON c.id = a.customer_id
     LEFT JOIN appointment_types t ON t.id = a.appointment_type_id
     WHERE a.start_time >= ?
-      AND a.status NOT IN ('completed', 'no_show'){$appointmentScopeSql}
+      AND a.status NOT IN ('completed', 'no_show', 'cancelled'){$appointmentScopeSql}
     ORDER BY a.start_time ASC
     LIMIT 1");
   $nextStmt->execute(array_merge([$dashboardNow->format('Y-m-d H:i:s')], $appointmentScopeParams));
@@ -523,6 +549,10 @@ $nextAppointmentType = $nextAppointment['type_name'] ?? 'Appointment';
           <strong><?php echo $todayNoShowCount; ?></strong>
           <span>No-shows</span>
         </div>
+        <div class="dashboard-today-stat">
+          <strong><?php echo $todayCancelledCount; ?></strong>
+          <span>Cancelled today</span>
+        </div>
       </div>
 
       <div class="dashboard-next-appointment">
@@ -622,6 +652,27 @@ $nextAppointmentType = $nextAppointment['type_name'] ?? 'Appointment';
             <tr><td>Completed rate</td><td>Week <?php echo number_format($currentWeekCompletedRate, 1); ?>% · Month <?php echo number_format($currentMonthCompletedRate, 1); ?>% · Year <?php echo number_format($currentYearCompletedRate, 1); ?>%</td></tr>
           </table>
         </div>
+        <div class="week-detail-card" style="grid-column:1 / -1;">
+          <h3>Booking channel
+            <select id="bookingChannelPeriod" style="font-size:.8rem; margin-left:8px; width:auto;">
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="90" selected>Last 90 days</option>
+            </select>
+          </h3>
+          <div class="customer-chart-content">
+            <div id="bookingChannelPie" class="customer-pie" role="img" aria-label="Booking channel distribution" style="background:<?php echo htmlspecialchars($channelPie, ENT_QUOTES, 'UTF-8'); ?>"></div>
+            <ul id="bookingChannelLegend" class="customer-chart-legend">
+              <?php $channelIndex = 0; foreach ($channelCounts as $channelLabel => $channelCount): ?>
+                <li>
+                  <i class="customer-chart-swatch" style="background:<?php echo $channelColors[$channelIndex % count($channelColors)]; ?>"></i>
+                  <span><?php echo htmlspecialchars($channelLabel); ?>: <?php echo (int) $channelCount; ?><?php echo $channelTotal > 0 ? ' (' . number_format(((int) $channelCount / $channelTotal) * 100, 0) . '%)' : ''; ?></span>
+                </li>
+                <?php $channelIndex++; ?>
+              <?php endforeach; ?>
+            </ul>
+          </div>
+        </div>
       </div>
       <p class="week-modal-note">Rates use resolved appointments only: completed and no-show. Average weeks exclude weeks with no appointments, and the year comparison starts from the first recorded appointment.</p>
     </div>
@@ -693,6 +744,35 @@ $nextAppointmentType = $nextAppointment['type_name'] ?? 'Appointment';
 
   <script src="assets/js/global.js"></script>
   <script>
+    (function () {
+      var periodSelect = document.getElementById('bookingChannelPeriod');
+      var pie = document.getElementById('bookingChannelPie');
+      var legend = document.getElementById('bookingChannelLegend');
+      if (!periodSelect || !pie || !legend) return;
+      var periods = <?php echo json_encode($channelPeriods, 15); ?>;
+      var colors = <?php echo json_encode($channelColors, 15); ?>;
+      var labels = <?php echo json_encode(array_keys($channelCounts), 15); ?>;
+
+      function render(period) {
+        var counts = periods[period] || {};
+        var values = labels.map(function (label) { return Number(counts[label] || 0); });
+        var total = values.reduce(function (sum, value) { return sum + value; }, 0);
+        var offset = 0;
+        var segments = values.map(function (value, index) {
+          var next = offset + (total ? value / total * 100 : 0);
+          var segment = colors[index] + ' ' + offset + '% ' + next + '%';
+          offset = next;
+          return segment;
+        });
+        pie.style.background = total ? 'conic-gradient(' + segments.join(', ') + ')' : '#334155';
+        legend.innerHTML = labels.map(function (label, index) {
+          var percent = total ? Math.round(values[index] / total * 100) : 0;
+          return '<li><i class="customer-chart-swatch" style="background:' + colors[index] + '"></i><span>' + label + ': ' + values[index] + (total ? ' (' + percent + '%)' : '') + '</span></li>';
+        }).join('');
+      }
+      periodSelect.addEventListener('change', function () { render(periodSelect.value); });
+    })();
+
     (function () {
       var openButton = document.getElementById('weekAtGlanceButton');
       var modal = document.getElementById('weekAtGlanceModal');

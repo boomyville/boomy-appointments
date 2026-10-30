@@ -344,14 +344,14 @@
             $sort = strtolower(trim((string) ($_GET['sort'] ?? 'full_name')));
 
             $sortMap = [
-                'full_name' => 'full_name ASC, id ASC',
-                'first_name' => "TRIM(SUBSTRING_INDEX(full_name, ' ', 1)) ASC, full_name ASC, id ASC",
-                'last_name' => "TRIM(SUBSTRING_INDEX(full_name, ' ', -1)) ASC, full_name ASC, id ASC",
-                'mobile' => 'mobile ASC, full_name ASC, id ASC',
-                'email' => 'email ASC, full_name ASC, id ASC',
-                'date_added_desc' => 'date_added DESC, full_name ASC, id ASC',
-                'date_added_asc' => 'date_added ASC, full_name ASC, id ASC',
-                'gender' => 'gender ASC, full_name ASC, id ASC',
+                'full_name' => 'customers.full_name ASC, customers.id ASC',
+                'first_name' => "TRIM(SUBSTRING_INDEX(customers.full_name, ' ', 1)) ASC, customers.full_name ASC, customers.id ASC",
+                'last_name' => "TRIM(SUBSTRING_INDEX(customers.full_name, ' ', -1)) ASC, customers.full_name ASC, customers.id ASC",
+                'mobile' => 'customers.mobile ASC, customers.full_name ASC, customers.id ASC',
+                'email' => 'customers.email ASC, customers.full_name ASC, customers.id ASC',
+                'date_added_desc' => 'customers.date_added DESC, customers.full_name ASC, customers.id ASC',
+                'date_added_asc' => 'customers.date_added ASC, customers.full_name ASC, customers.id ASC',
+                'gender' => 'customers.gender ASC, customers.full_name ASC, customers.id ASC',
             ];
             $orderBy = $sortMap[$sort] ?? $sortMap['full_name'];
 
@@ -370,7 +370,20 @@
             }
             $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 
-            $stmt = $db->prepare("SELECT id, full_name, email, email_invalid, email_invalid_reason, mobile, date_of_birth, gender, date_added FROM customers{$whereSql} ORDER BY {$orderBy} LIMIT ? OFFSET ?");
+            $hasBookingSource = (bool) $db->query("SHOW COLUMNS FROM appointments LIKE 'booking_source'")->fetch();
+            $bookingSourceExpression = $hasBookingSource ? 'a.booking_source' : "'unknown'";
+            $stmt = $db->prepare("SELECT customers.id, customers.full_name, customers.email, customers.email_invalid, customers.email_invalid_reason, customers.mobile, customers.date_of_birth, customers.gender, customers.date_added,
+                CASE
+                    WHEN COALESCE(SUM(CASE WHEN {$bookingSourceExpression} = 'online' THEN 1 ELSE 0 END), 0) > 0
+                     AND COALESCE(SUM(CASE WHEN {$bookingSourceExpression} IN ('staff', 'unknown') OR {$bookingSourceExpression} IS NULL THEN 1 ELSE 0 END), 0) > 0 THEN 'mixed'
+                    WHEN COALESCE(SUM(CASE WHEN {$bookingSourceExpression} = 'online' THEN 1 ELSE 0 END), 0) > 0 THEN 'online_only'
+                    ELSE 'none'
+                END AS booking_profile
+                FROM customers
+                LEFT JOIN appointments a ON a.customer_id = customers.id
+                {$whereSql}
+                GROUP BY customers.id, customers.full_name, customers.email, customers.email_invalid, customers.email_invalid_reason, customers.mobile, customers.date_of_birth, customers.gender, customers.date_added
+                ORDER BY {$orderBy} LIMIT ? OFFSET ?");
             $i = 1;
             foreach ($params as $p) {
                 $stmt->bindValue($i++, $p, PDO::PARAM_STR);
@@ -438,7 +451,53 @@
                 exit;
             }
 
-            echo json_encode(['ok' => true, 'customer' => $customer]);
+            $stats = [
+                'total' => 0,
+                'online' => 0,
+                'staff' => 0,
+                'unknown' => 0,
+                'cancelled' => 0,
+                'no_show' => 0,
+                'resolved' => 0,
+                'last_appointment' => null,
+                'recent_appointments' => [],
+            ];
+            try {
+                $hasBookingSource = (bool) $db->query("SHOW COLUMNS FROM appointments LIKE 'booking_source'")->fetch();
+                $bookingSourceExpression = $hasBookingSource ? 'a.booking_source' : "'unknown'";
+                $statsStmt = $db->prepare("
+                    SELECT COUNT(*) AS total,
+                        SUM(CASE WHEN {$bookingSourceExpression} = 'online' THEN 1 ELSE 0 END) AS online,
+                        SUM(CASE WHEN {$bookingSourceExpression} = 'staff' THEN 1 ELSE 0 END) AS staff,
+                        SUM(CASE WHEN {$bookingSourceExpression} = 'unknown' OR {$bookingSourceExpression} IS NULL THEN 1 ELSE 0 END) AS unknown,
+                        SUM(CASE WHEN a.status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
+                        SUM(CASE WHEN a.status = 'no_show' THEN 1 ELSE 0 END) AS no_show,
+                        SUM(CASE WHEN a.status IN ('completed', 'present', 'no_show') THEN 1 ELSE 0 END) AS resolved
+                    FROM appointments a
+                    WHERE a.customer_id = ?
+                ");
+                $statsStmt->execute([$customerId]);
+                $statsRow = $statsStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+                foreach (['total', 'online', 'staff', 'unknown', 'cancelled', 'no_show', 'resolved'] as $key) {
+                    $stats[$key] = (int) ($statsRow[$key] ?? 0);
+                }
+
+                $recentStmt = $db->prepare("
+                    SELECT a.start_time, a.status, {$bookingSourceExpression} AS booking_source, t.name AS appointment_type
+                    FROM appointments a
+                    LEFT JOIN appointment_types t ON t.id = a.appointment_type_id
+                    WHERE a.customer_id = ?
+                    ORDER BY a.start_time DESC
+                    LIMIT 10
+                ");
+                $recentStmt->execute([$customerId]);
+                $stats['recent_appointments'] = $recentStmt->fetchAll(PDO::FETCH_ASSOC);
+                $stats['last_appointment'] = $stats['recent_appointments'][0]['start_time'] ?? null;
+            } catch (Throwable $e) {
+                // Return zeroed statistics if an older schema cannot be queried.
+            }
+
+            echo json_encode(['ok' => true, 'customer' => $customer, 'appointment_stats' => $stats]);
             exit;
         }
 
