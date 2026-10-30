@@ -1,0 +1,63 @@
+name: Deploy to Oracle VM
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to deploy"
+        required: true
+        default: "main"
+        type: string
+      dry_run:
+        description: "Dry run (list what would change, upload nothing)"
+        type: boolean
+        default: false
+
+# Never run two deploys at once
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch || 'main' }}
+
+      - name: Set up SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Upload files
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          FLAGS="-rlvz --chmod=D755,F644"
+          if [ "$DRY_RUN" = "true" ]; then FLAGS="$FLAGS --dry-run"; fi
+
+          # Excluded paths are never uploaded AND never deleted on the server
+          # (so they stay safe even if you later add --delete).
+          rsync $FLAGS \
+            --exclude='.git/' --exclude='.github/' --exclude='.gitignore' \
+            --exclude='/config.php' --exclude='/adminer.php' --exclude='/manager.php' --exclude='/design/' \
+            --exclude='/README.md' --exclude='/install.sql' --exclude='/config_sample.php' --exclude='/application' \
+            -e "ssh -i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
+            ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
