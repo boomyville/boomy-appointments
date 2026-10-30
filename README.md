@@ -1,7 +1,7 @@
 # Boomy Appointments 
 
 ### What is this?
-A super lightweight appointment booking system built with plain PHP, a simple API layer, and a modular JavaScript frontend styled with Pico.css. No bloated frameworks—just fast, clean code that gets the job done.
+A super lightweight appointment booking system built with plain PHP, a simple API layer, and a modular JavaScript frontend styled with Pico.css.
 
 ---
 
@@ -13,18 +13,6 @@ A super lightweight appointment booking system built with plain PHP, a simple AP
 - **`assets/js/global.js`**: Modular JS utility functions for `fetch()` API calls and auto-handling forms marked with `data-api`.
 - **`install.sql`**: The SQL schema and starting seed data.
 - **`.github/workflows/deploy.yml`**: The automated deployment script that pushes code straight to the production server.
-
----
-
-### Custom PHP functions (`functions.php`)
-- `init_session()`: Sets up hardened session cookies (HttpOnly, SameSite).
-- `get_db()`: Returns a singleton PDO database connection configured with exceptions and prepared statements.
-- `get_user_by_email(email)`: Looks up a user row or returns `null`.
-- `create_user(email, password, full_name, role)`: Hashes passwords securely and adds a new user.
-- `verify_user_credentials(email, password)`: Checks password hashes and returns the user array or `null`.
-- `is_logged_in()`: Checks if `$_SESSION['user']` exists.
-- `require_login()`: Bumps unauthenticated users over to `login.php`.
-- `csrf_token()` / `verify_csrf_token(token)`: Generates and verifies anti-CSRF tokens to keep things secure.
 
 ---
 
