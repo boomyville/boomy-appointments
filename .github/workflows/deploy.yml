@@ -120,13 +120,22 @@ jobs:
           echo "| **Duration** | ${DURATION} seconds |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "#### 📋 File Changes Breakdown:" >> $GITHUB_STEP_SUMMARY
-          echo "| Rsync Code | File Path / Action |" >> $GITHUB_STEP_SUMMARY
+          echo "| Action Type | File Path |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
           
           echo "$CHANGED_FILES" | while IFS= read -r line; do
             if [ -n "$line" ]; then
               CODE=$(echo "$line" | awk '{print $1}')
               FILE=$(echo "$line" | cut -d' ' -f2-)
-              echo "| \`$CODE\` | \`$FILE\` |" >> $GITHUB_STEP_SUMMARY
+              
+              # Translate rsync code into friendly text
+              ACTION="📄 Uploaded / Synced"
+              if [[ "$CODE" == *s* ]]; then
+                ACTION="✏️ Modified (Size Changed)"
+              elif [[ "$CODE" == *T* ]] || [[ "$CODE" == *t* ]]; then
+                ACTION="⏱️ Synced (Timestamp Update)"
+              fi
+              
+              echo "| $ACTION | \`$FILE\` |" >> $GITHUB_STEP_SUMMARY
             fi
           done
