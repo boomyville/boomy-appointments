@@ -61,3 +61,13 @@ jobs:
             --exclude='/README.md' --exclude='/install.sql' --exclude='/config_sample.php' --exclude='/application' \
             -e "ssh -i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
             ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/"
+
+      - name: Fix file permissions on server
+        if: ${{ inputs.dry_run != true }}
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ssh -i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            $DEPLOY_USER@$DEPLOY_HOST "sudo chown -R 1000:1000 $DEPLOY_PATH"
