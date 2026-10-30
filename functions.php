@@ -1774,7 +1774,7 @@ function get_appointment_by_id(int $id): ?array
 {
     try {
         $db = get_db();
-        $stmt = $db->prepare('SELECT id, customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key, created_at, updated_at FROM appointments WHERE id = ? LIMIT 1');
+        $stmt = $db->prepare('SELECT id, customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key, booking_source, created_at, updated_at FROM appointments WHERE id = ? LIMIT 1');
         $stmt->execute([$id]);
         return $stmt->fetch() ?: null;
     } catch (Throwable $e) {
@@ -1786,7 +1786,7 @@ function get_appointment_by_hash_key(string $hashKey): ?array
 {
     try {
         $db = get_db();
-        $stmt = $db->prepare('SELECT id, customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key, created_at, updated_at FROM appointments WHERE hash_key = ? LIMIT 1');
+        $stmt = $db->prepare('SELECT id, customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key, booking_source, created_at, updated_at FROM appointments WHERE hash_key = ? LIMIT 1');
         $stmt->execute([$hashKey]);
         return $stmt->fetch() ?: null;
     } catch (Throwable $e) {
@@ -2037,7 +2037,10 @@ function update_appointment(int $appointmentId, int $customerId, int $providerId
 
         $finalStatus = $status ?: (string) ($existingAppointment['status'] ?? 'booked');
         $db = get_db();
-        $stmt = $db->prepare('UPDATE appointments SET customer_id = ?, provider_id = ?, appointment_type_id = ?, start_time = ?, end_time = ?, status = ?, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+        $existingBookingSource = in_array(($existingAppointment['booking_source'] ?? 'unknown'), ['staff', 'online', 'unknown'], true)
+            ? $existingAppointment['booking_source']
+            : 'unknown';
+        $stmt = $db->prepare('UPDATE appointments SET customer_id = ?, provider_id = ?, appointment_type_id = ?, start_time = ?, end_time = ?, status = ?, notes = ?, booking_source = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
         $stmt->execute([
             $customerId,
             $providerId,
@@ -2046,6 +2049,7 @@ function update_appointment(int $appointmentId, int $customerId, int $providerId
             $endDate->format('Y-m-d H:i:s'), // Will never be null now!
             $finalStatus,
             $notes !== null && trim($notes) !== '' ? trim($notes) : null,
+            $existingBookingSource,
             $appointmentId,
         ]);
 
@@ -2058,6 +2062,7 @@ function update_appointment(int $appointmentId, int $customerId, int $providerId
             'end_time' => $endDate->format('Y-m-d H:i:s'),
             'status' => $finalStatus,
             'notes' => $notes !== null && trim($notes) !== '' ? trim($notes) : null,
+            'booking_source' => $existingBookingSource,
         ];
     } catch (Throwable $e) {
         // Optional tracking logging trace during local development:
