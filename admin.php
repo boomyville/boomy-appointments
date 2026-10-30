@@ -18,6 +18,7 @@ $todaySeenCount = 0;
 $todayRemainingCount = 0;
 $todayPendingCount = 0;
 $todayNoShowCount = 0;
+$todayCancelledCount = 0;
 $nextAppointment = null;
 $weekStart = null;
 $weekTotal = 0;
@@ -203,11 +204,12 @@ $channelTotal = array_sum($channelCounts);
 
 try {
   $todayStatsStmt = $db->prepare("SELECT
-    COUNT(*) AS total_count,
+    SUM(CASE WHEN a.status <> 'cancelled' THEN 1 ELSE 0 END) AS total_count,
     SUM(CASE WHEN a.status IN ('present', 'completed') THEN 1 ELSE 0 END) AS seen_count,
-    SUM(CASE WHEN a.start_time >= ? AND a.status NOT IN ('completed', 'no_show') THEN 1 ELSE 0 END) AS remaining_count,
+    SUM(CASE WHEN a.start_time >= ? AND a.status NOT IN ('completed', 'no_show', 'cancelled') THEN 1 ELSE 0 END) AS remaining_count,
     SUM(CASE WHEN a.status = 'unconfirmed' THEN 1 ELSE 0 END) AS pending_count,
-    SUM(CASE WHEN a.status = 'no_show' THEN 1 ELSE 0 END) AS no_show_count
+    SUM(CASE WHEN a.status = 'no_show' THEN 1 ELSE 0 END) AS no_show_count,
+    SUM(CASE WHEN a.status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled_count
     FROM appointments a
     WHERE a.start_time >= ? AND a.start_time < ?{$appointmentScopeSql}");
   $todayStatsStmt->execute(array_merge([
@@ -221,13 +223,14 @@ try {
   $todayRemainingCount = (int) ($todayStats['remaining_count'] ?? 0);
   $todayPendingCount = (int) ($todayStats['pending_count'] ?? 0);
   $todayNoShowCount = (int) ($todayStats['no_show_count'] ?? 0);
+  $todayCancelledCount = (int) ($todayStats['cancelled_count'] ?? 0);
 
   $nextStmt = $db->prepare("SELECT a.start_time, a.end_time, c.full_name AS customer_name, t.name AS type_name
     FROM appointments a
     LEFT JOIN customers c ON c.id = a.customer_id
     LEFT JOIN appointment_types t ON t.id = a.appointment_type_id
     WHERE a.start_time >= ?
-      AND a.status NOT IN ('completed', 'no_show'){$appointmentScopeSql}
+      AND a.status NOT IN ('completed', 'no_show', 'cancelled'){$appointmentScopeSql}
     ORDER BY a.start_time ASC
     LIMIT 1");
   $nextStmt->execute(array_merge([$dashboardNow->format('Y-m-d H:i:s')], $appointmentScopeParams));
@@ -545,6 +548,10 @@ $nextAppointmentType = $nextAppointment['type_name'] ?? 'Appointment';
         <div class="dashboard-today-stat">
           <strong><?php echo $todayNoShowCount; ?></strong>
           <span>No-shows</span>
+        </div>
+        <div class="dashboard-today-stat">
+          <strong><?php echo $todayCancelledCount; ?></strong>
+          <span>Cancelled today</span>
         </div>
       </div>
 
