@@ -178,20 +178,25 @@ $emailQualityPie = $makePieGradient([$customerStats['unique_email'], $customerSt
 $mobilePie = $makePieGradient([$customerStats['mobile_yes'], $customerStats['mobile_no']], ['#2563eb', '#64748b']);
 $genderPie = $makePieGradient(array_values($customerGenderCounts), ['#2563eb', '#ec4899', '#f59e0b', '#64748b']);
 
-// Booking channel: how appointments created in the last 90 days were booked (cancelled excluded)
-$channelCounts = ['Booked online' => 0, 'Booked by staff' => 0, 'Unknown (before tracking)' => 0];
-try {
-  $channelStmt = $db->prepare("SELECT a.booking_source, COUNT(*) AS total_count
-    FROM appointments a
-    WHERE a.created_at >= DATE_SUB(NOW(), INTERVAL 90 DAY) AND a.status <> 'cancelled'{$appointmentScopeSql}
-    GROUP BY a.booking_source");
-  $channelStmt->execute($appointmentScopeParams);
-  $channelLabels = ['online' => 'Booked online', 'staff' => 'Booked by staff', 'unknown' => 'Unknown (before tracking)'];
-  foreach ($channelStmt->fetchAll(PDO::FETCH_ASSOC) as $channelRow) {
-    $channelKey = $channelLabels[$channelRow['booking_source']] ?? 'Unknown (before tracking)';
-    $channelCounts[$channelKey] += (int) $channelRow['total_count'];
-  }
-} catch (Throwable $e) {}
+// Booking channel: how appointments created in each period were booked (cancelled excluded).
+$channelPeriods = [];
+$channelLabels = ['online' => 'Booked online', 'staff' => 'Booked by staff', 'unknown' => 'Unknown (before tracking)'];
+foreach ([7, 30, 90] as $channelDays) {
+  $counts = ['Booked online' => 0, 'Booked by staff' => 0, 'Unknown (before tracking)' => 0];
+  try {
+    $channelStmt = $db->prepare("SELECT a.booking_source, COUNT(*) AS total_count
+      FROM appointments a
+      WHERE a.created_at >= DATE_SUB(NOW(), INTERVAL {$channelDays} DAY) AND a.status <> 'cancelled'{$appointmentScopeSql}
+      GROUP BY a.booking_source");
+    $channelStmt->execute($appointmentScopeParams);
+    foreach ($channelStmt->fetchAll(PDO::FETCH_ASSOC) as $channelRow) {
+      $channelKey = $channelLabels[$channelRow['booking_source']] ?? 'Unknown (before tracking)';
+      $counts[$channelKey] += (int) $channelRow['total_count'];
+    }
+  } catch (Throwable $e) {}
+  $channelPeriods[(string) $channelDays] = $counts;
+}
+$channelCounts = $channelPeriods['90'];
 $channelColors = ['#2563eb', '#10b981', '#94a3b8'];
 $channelPie = $makePieGradient(array_values($channelCounts), $channelColors);
 $channelTotal = array_sum($channelCounts);
@@ -641,10 +646,16 @@ $nextAppointmentType = $nextAppointment['type_name'] ?? 'Appointment';
           </table>
         </div>
         <div class="week-detail-card" style="grid-column:1 / -1;">
-          <h3>Booking channel <span style="font-weight:400; font-size:.8rem; color:var(--muted);">(appointments booked in the last 90 days)</span></h3>
+          <h3>Booking channel
+            <select id="bookingChannelPeriod" style="font-size:.8rem; margin-left:8px; width:auto;">
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+              <option value="90" selected>Last 90 days</option>
+            </select>
+          </h3>
           <div class="customer-chart-content">
-            <div class="customer-pie" role="img" aria-label="Booking channel distribution" style="background:<?php echo htmlspecialchars($channelPie, ENT_QUOTES, 'UTF-8'); ?>"></div>
-            <ul class="customer-chart-legend">
+            <div id="bookingChannelPie" class="customer-pie" role="img" aria-label="Booking channel distribution" style="background:<?php echo htmlspecialchars($channelPie, ENT_QUOTES, 'UTF-8'); ?>"></div>
+            <ul id="bookingChannelLegend" class="customer-chart-legend">
               <?php $channelIndex = 0; foreach ($channelCounts as $channelLabel => $channelCount): ?>
                 <li>
                   <i class="customer-chart-swatch" style="background:<?php echo $channelColors[$channelIndex % count($channelColors)]; ?>"></i>
@@ -726,6 +737,35 @@ $nextAppointmentType = $nextAppointment['type_name'] ?? 'Appointment';
 
   <script src="assets/js/global.js"></script>
   <script>
+    (function () {
+      var periodSelect = document.getElementById('bookingChannelPeriod');
+      var pie = document.getElementById('bookingChannelPie');
+      var legend = document.getElementById('bookingChannelLegend');
+      if (!periodSelect || !pie || !legend) return;
+      var periods = <?php echo json_encode($channelPeriods, 15); ?>;
+      var colors = <?php echo json_encode($channelColors, 15); ?>;
+      var labels = <?php echo json_encode(array_keys($channelCounts), 15); ?>;
+
+      function render(period) {
+        var counts = periods[period] || {};
+        var values = labels.map(function (label) { return Number(counts[label] || 0); });
+        var total = values.reduce(function (sum, value) { return sum + value; }, 0);
+        var offset = 0;
+        var segments = values.map(function (value, index) {
+          var next = offset + (total ? value / total * 100 : 0);
+          var segment = colors[index] + ' ' + offset + '% ' + next + '%';
+          offset = next;
+          return segment;
+        });
+        pie.style.background = total ? 'conic-gradient(' + segments.join(', ') + ')' : '#334155';
+        legend.innerHTML = labels.map(function (label, index) {
+          var percent = total ? Math.round(values[index] / total * 100) : 0;
+          return '<li><i class="customer-chart-swatch" style="background:' + colors[index] + '"></i><span>' + label + ': ' + values[index] + (total ? ' (' + percent + '%)' : '') + '</span></li>';
+        }).join('');
+      }
+      periodSelect.addEventListener('change', function () { render(periodSelect.value); });
+    })();
+
     (function () {
       var openButton = document.getElementById('weekAtGlanceButton');
       var modal = document.getElementById('weekAtGlanceModal');

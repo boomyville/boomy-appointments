@@ -208,6 +208,11 @@ function ensure_appointment_schema(PDO $db): void
                 $update->execute([bin2hex(random_bytes(32)), (int) ($row['id'] ?? 0)]);
             }
         }
+
+        $hasBookingSource = (bool) $db->query("SHOW COLUMNS FROM appointments LIKE 'booking_source'")->fetch();
+        if (!$hasBookingSource) {
+            $db->exec("ALTER TABLE appointments ADD COLUMN booking_source ENUM('staff','online','unknown') NOT NULL DEFAULT 'unknown' AFTER hash_key");
+        }
     } catch (Throwable $e) {
         // Ignore schema bootstrap failures so the app can continue running.
     }

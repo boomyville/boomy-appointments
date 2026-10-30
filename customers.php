@@ -183,6 +183,8 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .customers-table th { padding: 12px; text-align: left; font-weight: 700; color: var(--text); border-bottom: 2px solid var(--panel-border); }
     .customers-table td { padding: 10px 12px; border-bottom: 1px solid var(--panel-border); vertical-align: middle; }
     .customers-table tbody tr:hover { background: rgba(36, 87, 255, 0.03); }
+    .customer-name-online { color: #38bdf8; font-weight: 700; }
+    .customer-name-mixed { color: #84cc16; font-weight: 700; }
 
     .action-group { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
     .action-group button { padding: 4px 10px; font-size: 0.82rem; margin-bottom: 0; border-radius: 999px; border: 1px solid var(--panel-border); background: rgba(255,255,255,0.7); color: var(--text); cursor: pointer; font: inherit; font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
@@ -632,7 +634,8 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
         row.dataset.customerId = c.id;
 
         // 1. Full Name Column
-        let html = `<td data-label="Full Name">${escapeHtml(c.full_name)}</td>`;
+        const bookingClass = c.booking_profile === 'online_only' ? ' customer-name-online' : (c.booking_profile === 'mixed' ? ' customer-name-mixed' : '');
+        let html = `<td data-label="Full Name" class="${bookingClass.trim()}">${escapeHtml(c.full_name)}</td>`;
         
         // 2. Date of Birth Column (Conditional)
         if (isDobColumnVisible) {
@@ -889,7 +892,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       return v ? `<span class="meta-value">${escapeHtml(v)}</span>` : `<span class="meta-value empty">Not recorded</span>`;
     }
 
-    function renderMetaModalContent(customer, signals, answers = []) {
+    function renderMetaModalContent(customer, signals, answers = [], appointmentStats = null) {
       const rows = [
         { label: 'Full name',    value: customer.full_name,       span: false },
         { label: 'Email',        value: customer.email ? customer.email + (Number(customer.email_invalid) ? '  ⚠️ Invalid' : '') : customer.email, span: false },
@@ -911,10 +914,17 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       const answersHtml = answers.length
         ? `<div><div style="${labelStyle}">Booking questions</div><div class="meta-grid">${answers.map(a => `<div class="meta-item"><div class="meta-label">${escapeHtml(a.label)}</div>${metaValue(a.answer)}${a.updated_at ? `<div class="meta-label" style="margin-top:2px;">Updated ${escapeHtml(formatDateTime(a.updated_at))}</div>` : ''}</div>`).join('')}</div></div>`
         : '';
+      const stats = appointmentStats || {};
+      const sourceLabel = (value) => ({ online: 'Online', staff: 'Non-online / staff', unknown: 'Unknown' }[value] || value || 'Unknown');
+      const recentAppointments = Array.isArray(stats.recent_appointments) ? stats.recent_appointments : [];
+      const appointmentRows = recentAppointments.length
+        ? `<div class="meta-grid">${recentAppointments.map(a => `<div class="meta-item"><div class="meta-label">${escapeHtml(formatDateTime(a.start_time))}</div><div class="meta-value">${escapeHtml(a.appointment_type || 'Appointment')} · ${escapeHtml(sourceLabel(a.booking_source))} · ${escapeHtml(String(a.status || '').replace(/_/g, ' '))}</div></div>`).join('')}</div>`
+        : '<p class="no-signals">No appointments recorded.</p>';
+      const appointmentStatsHtml = `<div><div style="${labelStyle}">Appointment history</div><div class="meta-grid"><div class="meta-item"><div class="meta-label">Total appointments</div>${metaValue(stats.total || 0)}</div><div class="meta-item"><div class="meta-label">Online</div>${metaValue(stats.online || 0)}</div><div class="meta-item"><div class="meta-label">Non-online / staff</div>${metaValue(stats.staff || 0)}</div><div class="meta-item"><div class="meta-label">Unknown source</div>${metaValue(stats.unknown || 0)}</div><div class="meta-item"><div class="meta-label">No-shows</div>${metaValue(`${stats.no_show || 0} of ${stats.resolved || 0} resolved`)}</div><div class="meta-item"><div class="meta-label">Last appointment</div>${metaValue(stats.last_appointment ? formatDateTime(stats.last_appointment) : '')}</div></div>${appointmentRows}</div>`;
 
       let signalsHtml = !signals.length ? `<p class="no-signals">No duplicate signals detected for this customer.</p>` : `<div class="signals-section">` + signals.map(s => `<div class="signal-row ${s.severity}"><div class="signal-icon">${{green:'🟢',yellow:'🟡',red:'🔴'}[s.severity] || '⚪'}</div><div class="signal-body"><div class="signal-title">${escapeHtml(s.label)} — ${s.count} share this</div><div class="signal-detail">${escapeHtml(s.value)}</div></div></div>`).join('') + `</div>`;
 
-      return `<div style="display:grid; gap:18px;"><div><div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:10px;">Session & contact metadata</div>${metaHtml}</div>${answersHtml}<div><div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:10px;">Duplicate signals</div>${signalsHtml}</div></div>`;
+      return `<div style="display:grid; gap:18px;"><div><div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:10px;">Session & contact metadata</div>${metaHtml}</div>${appointmentStatsHtml}${answersHtml}<div><div style="font-size:0.72rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:10px;">Duplicate signals</div>${signalsHtml}</div></div>`;
     }
 
     async function openMetaModal(customer) {
@@ -935,7 +945,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
         const signals      = sigJson.signals   || [];
 
         signalCache[customer.id] = signals;
-        metaModalBody.innerHTML = renderMetaModalContent(fullCustomer, signals, ansJson.answers || []);
+        metaModalBody.innerHTML = renderMetaModalContent(fullCustomer, signals, ansJson.answers || [], metaJson.appointment_stats || {});
       } catch (err) {
         metaModalBody.innerHTML = `<div class="alert error">Failed to load customer info: ${escapeHtml(err.message)}</div>`;
       }
