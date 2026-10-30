@@ -33,6 +33,13 @@ jobs:
         with:
           ref: ${{ inputs.branch || 'main' }}
 
+      - name: Reject UTF-8 BOM in PHP files
+        run: |
+          if grep -rlI $'\xEF\xBB\xBF' --include='*.php' .; then
+            echo "Deployment stopped: a PHP file contains a UTF-8 BOM."
+            exit 1
+          fi
+
       - name: Set up SSH
         env:
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}

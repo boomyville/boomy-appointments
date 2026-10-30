@@ -2166,7 +2166,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       setTimeout(checkTimeSlotConflicts, 100);
     }
 
-    const USER_QUESTIONS = <?php echo json_encode(get_user_questions(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOTE); ?>;
+    const USER_QUESTIONS = <?php echo json_encode(get_user_questions(), 15); ?>;
 
     function setBookingAnswers(answers) {
       const wrap = document.getElementById('bookingQuestionsWrap');

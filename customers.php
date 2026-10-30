@@ -760,7 +760,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       document.getElementById('nextPageBtn')?.addEventListener('click', () => { if (currentPage < totalPages) { currentPage++; loadCustomers(currentSearch, currentPage); } });
     }
 
-    const USER_QUESTIONS = <?php echo json_encode(get_user_questions(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOTE); ?>;
+    const USER_QUESTIONS = <?php echo json_encode(get_user_questions(), 15); ?>;
     const answerQuestionSelect = document.getElementById('answerQuestionSelect');
     const answerValueSelect    = document.getElementById('answerValueSelect');
 
