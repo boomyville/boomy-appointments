@@ -65,7 +65,7 @@ jobs:
           FLAGS="-rlvz --itemize-changes --chmod=D755,F644"
           if [ "$DRY_RUN" = "true" ]; then FLAGS="$FLAGS --dry-run"; fi
 
-          # Run rsync and capture output into a temp file and variable
+          # Run rsync and capture output
           RSYNC_OUTPUT=$(rsync $FLAGS \
             --exclude='.git/' --exclude='.github/' --exclude='.gitignore' \
             --exclude='/config.php' --exclude='/adminer.php' --exclude='/manager.php' --exclude='/design/' \
@@ -75,10 +75,9 @@ jobs:
           
           echo "$RSYNC_OUTPUT"
 
-          # Filter changed files (lines starting with < or > or c in rsync itemize format)
+          # Filter changed files (lines starting with <, >, or c)
           CHANGED_FILES=$(echo "$RSYNC_OUTPUT" | grep -E '^[<>\.c][fcd>]' || echo "No files changed or initial sync.")
           
-          # Store multi-line output safely for GitHub Actions step outputs
           delimiter="$(openssl rand -hex 8)"
           echo "changed_files<<${delimiter}" >> $GITHUB_OUTPUT
           echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
@@ -118,7 +117,16 @@ jobs:
           echo "| **Branch** | \`$BRANCH_NAME\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Duration** | ${DURATION} seconds |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "#### 📝 Changed Files / Sync Log:" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.rsync-upload.outputs.changed_files }}" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "#### 📋 File Changes Breakdown:" >> $GITHUB_STEP_SUMMARY
+          echo "| Rsync Code | File Path / Action |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          
+          while IFS= read -r line; do
+            if [ -n "$line" ]; then
+              CODE=$(echo "$line" | awk '{print $1}')
+              FILE=$(echo "$line" | cut -d' ' -f2-)
+              echo "| \`$CODE\` | \`$FILE\` |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done << 'EOF'
+${{ steps.rsync-upload.outputs.changed_files }}
+EOF
