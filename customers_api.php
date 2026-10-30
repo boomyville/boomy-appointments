@@ -196,54 +196,7 @@
             }
 
             $customer = $result['customer'] ?? null;
-            $stats = [
-                'total' => 0,
-                'online' => 0,
-                'staff' => 0,
-                'unknown' => 0,
-                'no_show' => 0,
-                'resolved' => 0,
-                'last_appointment' => null,
-                'recent_appointments' => [],
-            ];
-            try {
-                $statsStmt = $db->prepare("
-                    SELECT
-                        COUNT(*) AS total,
-                        SUM(CASE WHEN a.booking_source = 'online' THEN 1 ELSE 0 END) AS online,
-                        SUM(CASE WHEN a.booking_source = 'staff' THEN 1 ELSE 0 END) AS staff,
-                        SUM(CASE WHEN a.booking_source = 'unknown' OR a.booking_source IS NULL THEN 1 ELSE 0 END) AS unknown,
-                        SUM(CASE WHEN a.status = 'no_show' THEN 1 ELSE 0 END) AS no_show,
-                        SUM(CASE WHEN a.status IN ('completed', 'present', 'no_show') THEN 1 ELSE 0 END) AS resolved
-                    FROM appointments a
-                    WHERE a.customer_id = ? AND a.status <> 'cancelled'
-                ");
-                $statsStmt->execute([$customerId]);
-                $statsRow = $statsStmt->fetch(PDO::FETCH_ASSOC) ?: [];
-                foreach (array_keys($stats) as $key) {
-                    if (array_key_exists($key . '_count', $statsRow)) {
-                        $stats[$key] = (int) $statsRow[$key . '_count'];
-                    } elseif (array_key_exists($key, $statsRow) && $key !== 'last_appointment' && $key !== 'recent_appointments') {
-                        $stats[$key] = (int) $statsRow[$key];
-                    }
-                }
-
-                $recentStmt = $db->prepare("
-                    SELECT a.start_time, a.status, a.booking_source, t.name AS appointment_type
-                    FROM appointments a
-                    LEFT JOIN appointment_types t ON t.id = a.appointment_type_id
-                    WHERE a.customer_id = ? AND a.status <> 'cancelled'
-                    ORDER BY a.start_time DESC
-                    LIMIT 10
-                ");
-                $recentStmt->execute([$customerId]);
-                $stats['recent_appointments'] = $recentStmt->fetchAll(PDO::FETCH_ASSOC);
-                $stats['last_appointment'] = $stats['recent_appointments'][0]['start_time'] ?? null;
-            } catch (Throwable $e) {
-                // Older installations may not have booking-source tracking yet.
-            }
-
-            echo json_encode(['ok' => true, 'customer' => $customer, 'appointment_stats' => $stats]);
+            echo json_encode(['ok' => true, 'customer' => $customer]);
             exit;
         }
 
@@ -417,15 +370,17 @@
             }
             $whereSql = $where ? ' WHERE ' . implode(' AND ', $where) : '';
 
+            $hasBookingSource = (bool) $db->query("SHOW COLUMNS FROM appointments LIKE 'booking_source'")->fetch();
+            $bookingSourceExpression = $hasBookingSource ? 'a.booking_source' : "'unknown'";
             $stmt = $db->prepare("SELECT customers.id, customers.full_name, customers.email, customers.email_invalid, customers.email_invalid_reason, customers.mobile, customers.date_of_birth, customers.gender, customers.date_added,
                 CASE
-                    WHEN COALESCE(SUM(CASE WHEN a.booking_source = 'online' THEN 1 ELSE 0 END), 0) > 0
-                     AND COALESCE(SUM(CASE WHEN a.booking_source IN ('staff', 'unknown') OR a.booking_source IS NULL THEN 1 ELSE 0 END), 0) > 0 THEN 'mixed'
-                    WHEN COALESCE(SUM(CASE WHEN a.booking_source = 'online' THEN 1 ELSE 0 END), 0) > 0 THEN 'online_only'
+                    WHEN COALESCE(SUM(CASE WHEN {$bookingSourceExpression} = 'online' THEN 1 ELSE 0 END), 0) > 0
+                     AND COALESCE(SUM(CASE WHEN {$bookingSourceExpression} IN ('staff', 'unknown') OR {$bookingSourceExpression} IS NULL THEN 1 ELSE 0 END), 0) > 0 THEN 'mixed'
+                    WHEN COALESCE(SUM(CASE WHEN {$bookingSourceExpression} = 'online' THEN 1 ELSE 0 END), 0) > 0 THEN 'online_only'
                     ELSE 'none'
                 END AS booking_profile
                 FROM customers
-                LEFT JOIN appointments a ON a.customer_id = customers.id AND a.status <> 'cancelled'
+                LEFT JOIN appointments a ON a.customer_id = customers.id
                 {$whereSql}
                 GROUP BY customers.id, customers.full_name, customers.email, customers.email_invalid, customers.email_invalid_reason, customers.mobile, customers.date_of_birth, customers.gender, customers.date_added
                 ORDER BY {$orderBy} LIMIT ? OFFSET ?");
@@ -496,7 +451,53 @@
                 exit;
             }
 
-            echo json_encode(['ok' => true, 'customer' => $customer]);
+            $stats = [
+                'total' => 0,
+                'online' => 0,
+                'staff' => 0,
+                'unknown' => 0,
+                'cancelled' => 0,
+                'no_show' => 0,
+                'resolved' => 0,
+                'last_appointment' => null,
+                'recent_appointments' => [],
+            ];
+            try {
+                $hasBookingSource = (bool) $db->query("SHOW COLUMNS FROM appointments LIKE 'booking_source'")->fetch();
+                $bookingSourceExpression = $hasBookingSource ? 'a.booking_source' : "'unknown'";
+                $statsStmt = $db->prepare("
+                    SELECT COUNT(*) AS total,
+                        SUM(CASE WHEN {$bookingSourceExpression} = 'online' THEN 1 ELSE 0 END) AS online,
+                        SUM(CASE WHEN {$bookingSourceExpression} = 'staff' THEN 1 ELSE 0 END) AS staff,
+                        SUM(CASE WHEN {$bookingSourceExpression} = 'unknown' OR {$bookingSourceExpression} IS NULL THEN 1 ELSE 0 END) AS unknown,
+                        SUM(CASE WHEN a.status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled,
+                        SUM(CASE WHEN a.status = 'no_show' THEN 1 ELSE 0 END) AS no_show,
+                        SUM(CASE WHEN a.status IN ('completed', 'present', 'no_show') THEN 1 ELSE 0 END) AS resolved
+                    FROM appointments a
+                    WHERE a.customer_id = ?
+                ");
+                $statsStmt->execute([$customerId]);
+                $statsRow = $statsStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+                foreach (['total', 'online', 'staff', 'unknown', 'cancelled', 'no_show', 'resolved'] as $key) {
+                    $stats[$key] = (int) ($statsRow[$key] ?? 0);
+                }
+
+                $recentStmt = $db->prepare("
+                    SELECT a.start_time, a.status, {$bookingSourceExpression} AS booking_source, t.name AS appointment_type
+                    FROM appointments a
+                    LEFT JOIN appointment_types t ON t.id = a.appointment_type_id
+                    WHERE a.customer_id = ?
+                    ORDER BY a.start_time DESC
+                    LIMIT 10
+                ");
+                $recentStmt->execute([$customerId]);
+                $stats['recent_appointments'] = $recentStmt->fetchAll(PDO::FETCH_ASSOC);
+                $stats['last_appointment'] = $stats['recent_appointments'][0]['start_time'] ?? null;
+            } catch (Throwable $e) {
+                // Return zeroed statistics if an older schema cannot be queried.
+            }
+
+            echo json_encode(['ok' => true, 'customer' => $customer, 'appointment_stats' => $stats]);
             exit;
         }
 
