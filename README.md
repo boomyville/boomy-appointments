@@ -1,111 +1,93 @@
-# Boomy Appointments — Quick Developer Guide
+# Boomy Appointments 
 
-**Overview**
-- **Purpose:** Lightweight appointment system with a small API layer and modular JS front-end.
-- **Styling:** Uses Pico.css (CDN) for semantic UI.
+### What is this?
+A super lightweight appointment booking system built with plain PHP, a simple API layer, and a modular JavaScript frontend styled with Pico.css. No bloated frameworks—just fast, clean code that gets the job done.
 
-**Files**
-- **functions.php:** Core PHP helpers (DB connection, sessions, CSRF, user helpers). See [functions.php](functions.php)
-- **auth.php:** Authentication API endpoints (`status`, `register_first_admin`, `login`, `logout`). See [auth.php](auth.php)
-- **login.php:** Login page (progressive-enhanced form that posts to the API). See [login.php](login.php)
-- **admin.php:** Minimal protected admin page with logout. See [admin.php](admin.php)
-- **assets/js/global.js:** Modular JS utilities for API calls and automatic handling of forms with `data-api`. See [assets/js/global.js](assets/js/global.js)
-- **install.sql:** SQL schema and seed data for starting the app. See [install.sql](install.sql)
+---
 
-**Custom PHP functions (in functions.php)**
-- **init_session():** Hardened session initialization (cookie flags, samesite).
-- **get_db():** Returns a PDO connection (singleton) configured for prepared statements and exceptions.
-- **get_user_by_email(email):** Fetches a user row by email or returns `null`.
-- **create_user(email, password, full_name, role):** Hashes password and inserts a user, returns new user id.
-- **verify_user_credentials(email, password):** Verifies password and returns user array or `null`.
-- **is_logged_in():** Checks `$_SESSION['user']`.
-- **require_login():** Redirects to `login.php` when not authenticated.
-- **csrf_token():** Generates/returns a session CSRF token string.
-- **verify_csrf_token(token):** Safe equals check for CSRF token.
+### What's in the repo?
+- **`functions.php`**: All the core PHP backend helpers (database connections, sessions, CSRF checks, user stuff).
+- **`auth.php`**: The API endpoints for handling status checks, admin registration, logging in, and logging out.
+- **`login.php`**: The login page with a progressive-enhanced form that talks to the API.
+- **`admin.php`**: A protected admin dashboard page.
+- **`assets/js/global.js`**: Modular JS utility functions for `fetch()` API calls and auto-handling forms marked with `data-api`.
+- **`install.sql`**: The SQL schema and starting seed data.
+- **`.github/workflows/deploy.yml`**: The automated deployment script that pushes code straight to the production server.
 
-**Auth API endpoints (auth.php)**
-- **GET ?action=status**: Returns JSON: `{"setup_required": true}` if no users exist; otherwise returns authentication status. Example response:
+---
 
-```json
-{ "setup_required": true }
-```
+### Custom PHP functions (`functions.php`)
+- `init_session()`: Sets up hardened session cookies (HttpOnly, SameSite).
+- `get_db()`: Returns a singleton PDO database connection configured with exceptions and prepared statements.
+- `get_user_by_email(email)`: Looks up a user row or returns `null`.
+- `create_user(email, password, full_name, role)`: Hashes passwords securely and adds a new user.
+- `verify_user_credentials(email, password)`: Checks password hashes and returns the user array or `null`.
+- `is_logged_in()`: Checks if `$_SESSION['user']` exists.
+- `require_login()`: Bumps unauthenticated users over to `login.php`.
+- `csrf_token()` / `verify_csrf_token(token)`: Generates and verifies anti-CSRF tokens to keep things secure.
 
-- **POST ?action=register_first_admin**: Create the initial admin account (only works when users table is empty). Required JSON body: `email`, `password`, `full_name`, `csrf_token`.
+---
 
-Example fetch (from browser):
+### Auth API Endpoints (`auth.php`)
 
-```js
-const token = document.querySelector('input[name="csrf_token"]').value;
-await fetch('/auth.php?action=register_first_admin', {
-  method: 'POST',
-  credentials: 'same-origin',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ email: 'admin@example.com', password: 'S3curePa$$', full_name: 'Admin User', csrf_token: token })
-});
-```
+- **`GET ?action=status`**  
+  Returns JSON indicating if setup is needed: `{"setup_required": true}`.
 
-Or curl (note cookie jar to preserve session cookie and CSRF token — see notes):
+- **`POST ?action=register_first_admin`**  
+  Creates the very first admin account (only works if the users table is completely empty). Requires a JSON body with `email`, `password`, `full_name`, and `csrf_token`.
 
-```bash
-# First load login.php to get a session cookie and CSRF hidden field (manual or scripted)
-curl -c cookies.txt http://localhost/login.php
-# Extract csrf_token from the response or manually copy from page, then:
-curl -b cookies.txt -c cookies.txt -X POST \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@example.com","password":"S3curePa$$","full_name":"Admin User","csrf_token":"<TOKEN_HERE>"}' \
-  "http://localhost/auth.php?action=register_first_admin"
-```
+- **`POST ?action=login`**  
+  Logs an existing user in using `email`, `password`, and `csrf_token`.
 
-- **POST ?action=login**: Log in an existing user. JSON: `email`, `password`, `csrf_token`. Returns `ok` and `redirect` on success.
+- **`POST ?action=logout`**  
+  Clears the session.
 
-- **POST ?action=logout**: Logs out. JSON: `csrf_token`.
+---
 
-**Client JS utilities (assets/js/global.js)**
-- **apiPost(url, data):** Sends JSON POST with `credentials: 'same-origin'` and returns fetch `Response`.
-- **formToObject(form):** Converts a form to a plain object.
-- **attachApiForms(root):** Attaches submit handlers to `<form data-api>` forms to submit via JSON `fetch()` and handle JSON responses. By default `DOMContentLoaded` calls this, so any `<form data-api>` will be handled.
+### Client JS Utilities (`assets/js/global.js`)
+- `apiPost(url, data)`: Sends a JSON POST request with credentials included.
+- `formToObject(form)`: Turns any HTML form into a clean JavaScript object.
+- `attachApiForms(root)`: Automatically hooks into any `<form data-api>` on the page so they submit via JSON `fetch()` without needing manual event listeners everywhere.
 
-**Initial setup flow (how first user is created)**
-- On a fresh database (no rows in `users`), calling `GET /auth.php?action=status` returns `{"setup_required": true}`.
-- The provided `login.php` page does not yet render a separate register UI automatically; instead: load `login.php` in a browser to obtain a session cookie and the CSRF token (hidden input). Then POST to `/auth.php?action=register_first_admin` with JSON including that `csrf_token` and desired account details. On success you will be logged in and redirected to `admin.php`.
+---
 
-**Security notes**
-- CSRF: All API POST actions require a valid CSRF token generated by `csrf_token()` and present in the session; include it in JSON body as `csrf_token` or in traditional POST.
-- Passwords: Passwords are hashed using `password_hash()` (PHP default). Keep `APP_DEBUG` off in production.
-- Sessions: `init_session()` sets `httponly` and `samesite` cookie flags; ensure HTTPS and `secure` flag for production.
+### First-Run Setup Flow
+1. On a fresh database with zero users, hitting `GET /auth.php?action=status` returns `{"setup_required": true}`.
+2. Load `login.php` in your browser to grab a session cookie and the hidden CSRF token.
+3. POST your admin details + the token to `/auth.php?action=register_first_admin`. Once it succeeds, you're logged in and sent straight to `admin.php`.
 
-**How to apply the DB schema**
-- Edit `config.php` if you need a different DB name/credentials.
-- Run the SQL file against your MySQL/MariaDB server:
+---
 
-```bash
-mysql -u root -p < install.sql
-```
+### How to Deploy Automatically (GitHub Actions)
 
-Or import from a client tool and ensure the DB user in `config.php` can access `boomy_appointments`.
+This repo includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) that automatically syncs your files over to the production VM using `rsync` over SSH every time you push to `main` (or whenever you trigger it manually).
 
-**Scheduled reminder emails**
-- The `application` file is a generic cron schedule that runs `cron_reminders.php` every 30 minutes. Installing `install.sql` creates the database setting but does not install an operating-system or container cron job.
-- Copy the schedule file into the cron directory configured by the hosting environment, or create an equivalent scheduled task. Container images differ: some expect five cron fields in a user crontab, while standard `/etc/cron.d` files also require a user field. For standard `/etc/cron.d`, the entry is typically:
+#### 1. Add these 5 Repository Secrets
+Go to your GitHub repo **Settings → Secrets and variables → Actions**, click **New repository secret**, and add these:
 
-```cron
-*/30 * * * * root /usr/local/bin/php /var/www/html/appointments/cron_reminders.php >> /var/log/cron_reminders.log 2>&1
-```
+| Secret Name | What to put in it |
+| :--- | :--- |
+| **`DEPLOY_SSH_KEY`** | The full contents of your private deploy key (including the `-----BEGIN...-----` lines). |
+| **`DEPLOY_KNOWN_HOSTS`** | The server's host key line (from running `ssh-keyscan -t ed25519 YOUR_VM_IP`). |
+| **`DEPLOY_HOST`** | Your server's public IP address or domain name. |
+| **`DEPLOY_USER`** | `ubuntu` |
+| **`DEPLOY_PATH`** | `/home/ubuntu/main-site/www/appointments` |
 
-- Adjust the PHP and application paths for the deployment environment. Do not commit server-specific paths, container names, or secrets to this repository.
-- Configure SMTP first, then enable reminders in **Settings**. Set `reminder_days_before` and `reminder_time`; the script only sends during the 60-minute window beginning at the configured server time.
-- The optional `cron_key` is stored in the `settings` table and can be set or rotated from **Settings → Cron Security**. For web execution, pass it as `?key=...` or the `X-CRON-KEY` header. Do not put the key in Git or directly in a tracked cron file.
-- If a cron key is configured, use a secret-managed HTTP request or another protected deployment mechanism for the scheduled call. Direct CLI execution is intended for deployments without a configured web cron key.
-- Test the job manually and inspect its JSON response:
+#### 2. Running a Deployment
+- **Automatic:** Every time you push code to the `main` branch, it deploys automatically.
+- **Manual:** Go to the **Actions** tab on GitHub, select **Deploy to Oracle VM**, click **Run workflow**, pick which branch you want to push, and toggle **Dry run** if you just want to test it safely without changing any files on the server first!
 
-```bash
-php cron_reminders.php
-curl -fsS -H "X-CRON-KEY: $CRON_KEY" "https://example.com/appointments/cron_reminders.php"
-```
+*Note: Server-only files like `config.php`, `adminer.php`, and database files are excluded from the upload script so they never get overwritten or accidentally exposed.*
 
-- A log file may not exist until the scheduler runs for the first time. Check the scheduler service, the installed cron entry, and the configured log path. A response with `"skipped":true` still confirms that the job executed; it may be outside the configured send window or reminders may be disabled.
+---
 
-**Next recommended tasks**
-- Add an in-page first-run registration UI on `login.php` so visitors see the setup form automatically when `setup_required` is true.
-- Implement server-side HTML fallbacks for non-JS users (the API already accepts traditional POST arrays as fallback).
-- Add automated tests for auth flows and CSRF behavior.
+### Setting up the Database & Cron
+1. Edit `config.php` with your database credentials if needed.
+2. Import the schema:
+   ```bash
+   mysql -u root -p < install.sql
+   ```
+3. For automated appointment reminders, point a cron job at `cron_reminders.php` every 30 minutes:
+   ```cron
+   */30 * * * * root /usr/local/bin/php /var/www/html/appointments/cron_reminders.php >> /var/log/cron_reminders.log 2>&1
+   ```
