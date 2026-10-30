@@ -99,6 +99,7 @@ $smtp_password = get_setting('smtp_password', '');
 $mail_from_address = get_setting('mail_from_address', '');
 $mail_from_name = get_setting('mail_from_name', APP_NAME ?? 'Boomy Appointments');
 $notify_admin_on_booking = (int) get_setting('notify_admin_on_booking', '0');
+$notify_admin_on_cancel = (int) get_setting('notify_admin_on_cancel', '0');
 
 // Authentication settings
 $password_min_length = (int) get_setting('password_min_length', '8');
@@ -343,6 +344,14 @@ $reminder_email_message = get_setting('reminder_email_message', '');
         </label>
         <p style="font-size: 0.9em; color: #666; margin-top: 4px;">
           Sends a notification to the <strong>Organisation Email</strong> (set on the General tab) whenever a customer creates a new appointment online — including pending bookings awaiting verification.
+        </p>
+        <label style="margin-top: 12px;">
+          <input type="hidden" name="notify_admin_on_cancel" value="0">
+          <input type="checkbox" name="notify_admin_on_cancel" value="1" <?php echo $notify_admin_on_cancel === 1 ? 'checked' : ''; ?>>
+          <strong>Email the admin when a customer cancels an appointment</strong>
+        </label>
+        <p style="font-size: 0.9em; color: #666; margin-top: 4px;">
+          Sends a notification to the <strong>Organisation Email</strong> when a customer cancels using the link in their reminder or confirmation email. Cancellations made by staff in the calendar do not send an email.
         </p>
       </fieldset>
       <fieldset class="field-group">

@@ -52,12 +52,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $result === null && $appt) {
                  WHERE id = ? AND status NOT IN ('cancelled','completed','no_show')"
             );
             $stmt->execute([(int) $appt['id']]);
+            $wasCancelled = $stmt->rowCount() > 0;
 
             delete_verification_token($token); // reuse existing function
 
             $result  = 'success';
             $message = 'Your appointment has been cancelled successfully.';
             $appt    = get_appointment_by_id((int) $appt['id']);
+
+            // Notify the admin (if enabled). A mail problem must never turn a successful cancel into an error.
+            if ($wasCancelled && $appt) {
+                try {
+                    $notifyResult = send_admin_cancellation_notification_email($appt);
+                    if (!$notifyResult['ok'] && ($notifyResult['error'] ?? '') !== 'Admin notifications disabled') {
+                        error_log('Admin cancellation notification failed: ' . ($notifyResult['error'] ?? 'unknown'));
+                    }
+                } catch (Throwable $e) {
+                    error_log('Admin cancellation notification error: ' . $e->getMessage());
+                }
+            }
         } catch (Throwable $e) {
             $result  = 'invalid';
             $message = 'An error occurred while cancelling. Please contact us directly.';

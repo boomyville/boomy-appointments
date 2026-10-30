@@ -1380,6 +1380,78 @@ function send_admin_booking_notification_email(array $appointment, bool $pending
     return ['ok' => false, 'error' => 'Failed to send admin notification email'];
 }
 
+function send_admin_cancellation_notification_email(array $appointment): array
+{
+    if (!(bool) (int) get_setting('notify_admin_on_cancel', '0')) {
+        return ['ok' => false, 'error' => 'Admin notifications disabled'];
+    }
+
+    if (!email_transport_is_ready()) {
+        return ['ok' => false, 'error' => 'Mail settings not configured'];
+    }
+
+    $adminEmail = trim((string) get_setting('organization_email', ''));
+    if ($adminEmail === '') {
+        return ['ok' => false, 'error' => 'Organisation email not configured'];
+    }
+
+    $customer = get_customer_by_id((int) ($appointment['customer_id'] ?? 0));
+    $provider = get_user_by_id((int) ($appointment['provider_id'] ?? 0));
+    $appointmentType = get_appointment_type_by_id((int) ($appointment['appointment_type_id'] ?? 0));
+
+    $siteName = trim((string) get_setting('site_name', APP_NAME ?? 'Boomy Appointments'));
+    if ($siteName === '') {
+        $siteName = APP_NAME ?? 'Boomy Appointments';
+    }
+
+    $appointmentTypeName = trim((string) ($appointmentType['name'] ?? 'Appointment'));
+    $providerName = format_appointment_person_name($provider) ?: 'Not recorded';
+    $startTime = format_app_datetime((string) ($appointment['start_time'] ?? ''));
+    $endTime = format_app_datetime((string) ($appointment['end_time'] ?? ''));
+    $customerName = trim((string) ($customer['full_name'] ?? '')) ?: 'Not recorded';
+    $customerEmail = trim((string) ($customer['email'] ?? '')) ?: 'Not recorded';
+    $customerMobile = trim((string) ($customer['mobile'] ?? '')) ?: 'Not recorded';
+    $cancelledAt = format_app_datetime(date('Y-m-d H:i:s'));
+
+    $h = fn(string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8');
+    $subject = 'Appointment cancelled by customer - ' . $siteName;
+
+    $body_html = '<h2>Appointment cancelled by customer</h2>'
+        . '<p>The customer cancelled this appointment using the link in their email (cancelled ' . $h($cancelledAt) . ').</p>'
+        . '<h3>Appointment Details</h3>'
+        . '<ul>'
+        . '<li><strong>Appointment type:</strong> ' . $h($appointmentTypeName) . '</li>'
+        . '<li><strong>Provider:</strong> ' . $h($providerName) . '</li>'
+        . '<li><strong>Start time:</strong> ' . $h($startTime) . '</li>'
+        . '<li><strong>End time:</strong> ' . $h($endTime) . '</li>'
+        . '</ul>'
+        . '<h3>Customer Details</h3>'
+        . '<ul>'
+        . '<li><strong>Name:</strong> ' . $h($customerName) . '</li>'
+        . '<li><strong>Email:</strong> ' . $h($customerEmail) . '</li>'
+        . '<li><strong>Mobile:</strong> ' . $h($customerMobile) . '</li>'
+        . '</ul>';
+
+    $body_plain = "Appointment cancelled by customer - {$siteName}\n\n"
+        . "The customer cancelled this appointment using the link in their email (cancelled {$cancelledAt}).\n\n"
+        . "Appointment Details\n"
+        . "Appointment type: {$appointmentTypeName}\n"
+        . "Provider: {$providerName}\n"
+        . "Start time: {$startTime}\n"
+        . "End time: {$endTime}\n\n"
+        . "Customer Details\n"
+        . "Name: {$customerName}\n"
+        . "Email: {$customerEmail}\n"
+        . "Mobile: {$customerMobile}\n";
+
+    $sendResult = send_email($adminEmail, $subject, $body_html, $body_plain);
+    if ($sendResult === true) {
+        return ['ok' => true, 'sent' => true];
+    }
+
+    return ['ok' => false, 'error' => 'Failed to send admin cancellation email'];
+}
+
 // Customer settings and validation helpers
 function get_customer_field_settings(): array
 {
