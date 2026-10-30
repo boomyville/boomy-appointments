@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 require_once __DIR__ . '/functions.php';
 init_session();
 if (!is_logged_in()) {
