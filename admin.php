@@ -178,6 +178,24 @@ $emailQualityPie = $makePieGradient([$customerStats['unique_email'], $customerSt
 $mobilePie = $makePieGradient([$customerStats['mobile_yes'], $customerStats['mobile_no']], ['#2563eb', '#64748b']);
 $genderPie = $makePieGradient(array_values($customerGenderCounts), ['#2563eb', '#ec4899', '#f59e0b', '#64748b']);
 
+// Booking channel: how appointments created in the last 90 days were booked (cancelled excluded)
+$channelCounts = ['Booked online' => 0, 'Booked by staff' => 0, 'Unknown (before tracking)' => 0];
+try {
+  $channelStmt = $db->prepare("SELECT a.booking_source, COUNT(*) AS total_count
+    FROM appointments a
+    WHERE a.created_at >= DATE_SUB(NOW(), INTERVAL 90 DAY) AND a.status <> 'cancelled'{$appointmentScopeSql}
+    GROUP BY a.booking_source");
+  $channelStmt->execute($appointmentScopeParams);
+  $channelLabels = ['online' => 'Booked online', 'staff' => 'Booked by staff', 'unknown' => 'Unknown (before tracking)'];
+  foreach ($channelStmt->fetchAll(PDO::FETCH_ASSOC) as $channelRow) {
+    $channelKey = $channelLabels[$channelRow['booking_source']] ?? 'Unknown (before tracking)';
+    $channelCounts[$channelKey] += (int) $channelRow['total_count'];
+  }
+} catch (Throwable $e) {}
+$channelColors = ['#2563eb', '#10b981', '#94a3b8'];
+$channelPie = $makePieGradient(array_values($channelCounts), $channelColors);
+$channelTotal = array_sum($channelCounts);
+
 try {
   $todayStatsStmt = $db->prepare("SELECT
     COUNT(*) AS total_count,
@@ -621,6 +639,21 @@ $nextAppointmentType = $nextAppointment['type_name'] ?? 'Appointment';
             <tr><td>No-show rate</td><td>Week <?php echo number_format($currentWeekNoShowRate, 1); ?>% · Month <?php echo number_format($currentMonthNoShowRate, 1); ?>% · Year <?php echo number_format($currentYearNoShowRate, 1); ?>%</td></tr>
             <tr><td>Completed rate</td><td>Week <?php echo number_format($currentWeekCompletedRate, 1); ?>% · Month <?php echo number_format($currentMonthCompletedRate, 1); ?>% · Year <?php echo number_format($currentYearCompletedRate, 1); ?>%</td></tr>
           </table>
+        </div>
+        <div class="week-detail-card" style="grid-column:1 / -1;">
+          <h3>Booking channel <span style="font-weight:400; font-size:.8rem; color:var(--muted);">(appointments booked in the last 90 days)</span></h3>
+          <div class="customer-chart-content">
+            <div class="customer-pie" role="img" aria-label="Booking channel distribution" style="background:<?php echo htmlspecialchars($channelPie, ENT_QUOTES, 'UTF-8'); ?>"></div>
+            <ul class="customer-chart-legend">
+              <?php $channelIndex = 0; foreach ($channelCounts as $channelLabel => $channelCount): ?>
+                <li>
+                  <i class="customer-chart-swatch" style="background:<?php echo $channelColors[$channelIndex % count($channelColors)]; ?>"></i>
+                  <span><?php echo htmlspecialchars($channelLabel); ?>: <?php echo (int) $channelCount; ?><?php echo $channelTotal > 0 ? ' (' . number_format(((int) $channelCount / $channelTotal) * 100, 0) . '%)' : ''; ?></span>
+                </li>
+                <?php $channelIndex++; ?>
+              <?php endforeach; ?>
+            </ul>
+          </div>
         </div>
       </div>
       <p class="week-modal-note">Rates use resolved appointments only: completed and no-show. Average weeks exclude weeks with no appointments, and the year comparison starts from the first recorded appointment.</p>

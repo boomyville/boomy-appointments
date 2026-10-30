@@ -727,7 +727,7 @@ if ($action === 'month' && $method === 'GET') {
 
             if (!$customer) booking_api_response(['error' => 'Failed to load customer'], 500);
             update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
-            $appointment = create_appointment((int)$customer['id'], $providerId, $appointmentTypeId, $startDate->format('Y-m-d H:i:s'), 'unconfirmed', null, $notesValue);
+            $appointment = create_appointment((int)$customer['id'], $providerId, $appointmentTypeId, $startDate->format('Y-m-d H:i:s'), 'unconfirmed', null, $notesValue, false, 'online');
             if (!$appointment || isset($appointment['error'])) {
                 $errorCode = $appointment['error'] ?? 'create_failed';
                 $errorMessage = match ($errorCode) {
@@ -769,7 +769,7 @@ if ($action === 'month' && $method === 'GET') {
         if (!$customer) booking_api_response(['error' => 'Failed to load customer'], 500);
 update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
 
-        $appointment = create_appointment((int) $customer['id'], $providerId, $appointmentTypeId, $startDate->format('Y-m-d H:i:s'), 'booked', null, $notesValue);
+        $appointment = create_appointment((int) $customer['id'], $providerId, $appointmentTypeId, $startDate->format('Y-m-d H:i:s'), 'booked', null, $notesValue, false, 'online');
         if (!$appointment) booking_api_response(['error' => 'Failed to create appointment'], 500);
 
         if (isset($appointment['error'])) {

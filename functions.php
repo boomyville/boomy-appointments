@@ -1902,7 +1902,7 @@ function find_overlapping_appointment(int $providerId, DateTimeImmutable $startD
     }
 }
 
-function create_appointment(int $customerId, int $providerId, int $appointmentTypeId, string $startTime, ?string $status = null, ?string $endTime = null, ?string $notes = null, bool $allowStaffOverride = false): ?array
+function create_appointment(int $customerId, int $providerId, int $appointmentTypeId, string $startTime, ?string $status = null, ?string $endTime = null, ?string $notes = null, bool $allowStaffOverride = false, string $bookingSource = 'unknown'): ?array
 {
     try {
         $appointmentType = get_appointment_type_by_id($appointmentTypeId);
@@ -1945,8 +1945,8 @@ function create_appointment(int $customerId, int $providerId, int $appointmentTy
         ]));
 
         $db = get_db();
-        $stmt = $db->prepare('INSERT INTO appointments (customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([
+        $bookingSource = in_array($bookingSource, ['staff', 'online', 'unknown'], true) ? $bookingSource : 'unknown';
+        $insertValues = [
             $customerId,
             $providerId,
             $appointmentTypeId,
@@ -1955,7 +1955,18 @@ function create_appointment(int $customerId, int $providerId, int $appointmentTy
             $finalStatus,
             $notes !== null && trim($notes) !== '' ? trim($notes) : null,
             $hashKey,
-        ]);
+        ];
+        try {
+            $stmt = $db->prepare('INSERT INTO appointments (customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key, booking_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt->execute(array_merge($insertValues, [$bookingSource]));
+        } catch (PDOException $e) {
+            // Unknown column 1054 = booking_source migration not run yet. Fall back so bookings keep working.
+            if ((int) ($e->errorInfo[1] ?? 0) !== 1054) {
+                throw $e;
+            }
+            $stmt = $db->prepare('INSERT INTO appointments (customer_id, provider_id, appointment_type_id, start_time, end_time, status, notes, hash_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+            $stmt->execute($insertValues);
+        }
 
         return [
             'id' => (int) $db->lastInsertId(),
@@ -1967,6 +1978,7 @@ function create_appointment(int $customerId, int $providerId, int $appointmentTy
             'status' => $finalStatus,
             'notes' => $notes !== null && trim($notes) !== '' ? trim($notes) : null,
             'hash_key' => $hashKey,
+            'booking_source' => $bookingSource,
         ];
     } catch (Throwable $e) {
         return null;
