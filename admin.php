@@ -15,11 +15,11 @@ $appointmentCount = 0;
 $appointmentTypeCount = 0;
 $todayAppointmentCount = 0;
 $todaySeenCount = 0;
-$todayRemainingCount = 0;
 $todayPendingCount = 0;
 $todayNoShowCount = 0;
 $todayCancelledCount = 0;
 $nextAppointment = null;
+$upcomingToday = [];
 $weekStart = null;
 $weekTotal = 0;
 $lastWeekTotal = 0;
@@ -206,21 +206,18 @@ try {
   $todayStatsStmt = $db->prepare("SELECT
     SUM(CASE WHEN a.status <> 'cancelled' THEN 1 ELSE 0 END) AS total_count,
     SUM(CASE WHEN a.status IN ('present', 'completed') THEN 1 ELSE 0 END) AS seen_count,
-    SUM(CASE WHEN a.start_time >= ? AND a.status NOT IN ('completed', 'no_show', 'cancelled') THEN 1 ELSE 0 END) AS remaining_count,
     SUM(CASE WHEN a.status = 'unconfirmed' THEN 1 ELSE 0 END) AS pending_count,
     SUM(CASE WHEN a.status = 'no_show' THEN 1 ELSE 0 END) AS no_show_count,
     SUM(CASE WHEN a.status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled_count
     FROM appointments a
     WHERE a.start_time >= ? AND a.start_time < ?{$appointmentScopeSql}");
   $todayStatsStmt->execute(array_merge([
-    $dashboardNow->format('Y-m-d H:i:s'),
     $todayStart->format('Y-m-d H:i:s'),
     $tomorrowStart->format('Y-m-d H:i:s')
   ], $appointmentScopeParams));
   $todayStats = $todayStatsStmt->fetch(PDO::FETCH_ASSOC) ?: [];
   $todayAppointmentCount = (int) ($todayStats['total_count'] ?? 0);
   $todaySeenCount = (int) ($todayStats['seen_count'] ?? 0);
-  $todayRemainingCount = (int) ($todayStats['remaining_count'] ?? 0);
   $todayPendingCount = (int) ($todayStats['pending_count'] ?? 0);
   $todayNoShowCount = (int) ($todayStats['no_show_count'] ?? 0);
   $todayCancelledCount = (int) ($todayStats['cancelled_count'] ?? 0);
@@ -235,6 +232,22 @@ try {
     LIMIT 1");
   $nextStmt->execute(array_merge([$dashboardNow->format('Y-m-d H:i:s')], $appointmentScopeParams));
   $nextAppointment = $nextStmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+  // Everything still to come today (including one that has started but is not yet marked present), soonest first
+  $upcomingStmt = $db->prepare("SELECT a.start_time, a.status, c.full_name AS customer_name, t.name AS type_name
+    FROM appointments a
+    LEFT JOIN customers c ON c.id = a.customer_id
+    LEFT JOIN appointment_types t ON t.id = a.appointment_type_id
+    WHERE a.start_time >= ? AND a.start_time < ? AND a.end_time > ?
+      AND a.status NOT IN ('present', 'completed', 'no_show', 'cancelled'){$appointmentScopeSql}
+    ORDER BY a.start_time ASC
+    LIMIT 50");
+  $upcomingStmt->execute(array_merge([
+    $todayStart->format('Y-m-d H:i:s'),
+    $tomorrowStart->format('Y-m-d H:i:s'),
+    $dashboardNow->format('Y-m-d H:i:s')
+  ], $appointmentScopeParams));
+  $upcomingToday = $upcomingStmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Throwable $e) {}
 
 try {
@@ -403,6 +416,15 @@ $nextAppointmentType = $nextAppointment['type_name'] ?? 'Appointment';
     .dashboard-next-appointment strong { color:var(--text); }
     .dashboard-next-appointment span { color:var(--muted); }
     .dashboard-next-label { flex-basis:100%; font-size:.78rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+    .dashboard-upcoming-list { flex-basis:100%; list-style:none; margin:4px 0 0; padding:0; }
+    .dashboard-upcoming-list li { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 12px; margin:0; padding:7px 0; border-bottom:1px solid var(--panel-border); }
+    .dashboard-upcoming-list li:last-child { border-bottom:0; }
+    .dashboard-upcoming-list li.is-next { font-size:1.05rem; }
+    .dashboard-upcoming-list .dashboard-upcoming-time { min-width:76px; font-weight:700; color:var(--text); }
+    .dashboard-upcoming-list .dashboard-upcoming-name { font-weight:600; color:var(--text); }
+    .dashboard-upcoming-list .dashboard-upcoming-type { font-size:.88rem; color:var(--muted); }
+    .dashboard-upcoming-list .dashboard-upcoming-flag { font-size:.78rem; font-weight:600; color:#b45309; }
+    .dashboard-upcoming-list .dashboard-upcoming-badge { padding:1px 8px; border-radius:99px; background:var(--accent); color:#fff; font-size:.7rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
     @media (max-width: 720px) {
       .dashboard-today-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
       .dashboard-today-stat-primary { grid-column:span 2; }
@@ -538,10 +560,6 @@ $nextAppointmentType = $nextAppointment['type_name'] ?? 'Appointment';
           <span>Seen or completed</span>
         </div>
         <div class="dashboard-today-stat">
-          <strong><?php echo $todayRemainingCount; ?></strong>
-          <span>Remaining today</span>
-        </div>
-        <div class="dashboard-today-stat">
           <strong><?php echo $todayPendingCount; ?></strong>
           <span>Awaiting confirmation</span>
         </div>
@@ -556,8 +574,20 @@ $nextAppointmentType = $nextAppointment['type_name'] ?? 'Appointment';
       </div>
 
       <div class="dashboard-next-appointment">
-        <span class="dashboard-next-label">Next appointment</span>
-        <?php if ($nextAppointment): ?>
+        <span class="dashboard-next-label"><?php echo $upcomingToday ? 'Upcoming today (' . count($upcomingToday) . ')' : 'Next appointment'; ?></span>
+        <?php if ($upcomingToday): ?>
+          <ul class="dashboard-upcoming-list">
+            <?php foreach ($upcomingToday as $upcomingIndex => $upcomingRow): ?>
+              <li<?php echo $upcomingIndex === 0 ? ' class="is-next"' : ''; ?>>
+                <span class="dashboard-upcoming-time"><?php echo htmlspecialchars((new DateTimeImmutable((string) $upcomingRow['start_time'], $dashboardTimezone))->format('g:i A')); ?></span>
+                <span class="dashboard-upcoming-name"><?php echo htmlspecialchars(trim((string) ($upcomingRow['customer_name'] ?? '')) !== '' ? $upcomingRow['customer_name'] : 'Customer'); ?></span>
+                <span class="dashboard-upcoming-type"><?php echo htmlspecialchars($upcomingRow['type_name'] ?? 'Appointment'); ?></span>
+                <?php if (($upcomingRow['status'] ?? '') === 'unconfirmed'): ?><span class="dashboard-upcoming-flag">Awaiting confirmation</span><?php endif; ?>
+                <?php if ($upcomingIndex === 0): ?><span class="dashboard-upcoming-badge">Next</span><?php endif; ?>
+              </li>
+            <?php endforeach; ?>
+          </ul>
+        <?php elseif ($nextAppointment): ?>
           <strong><?php echo htmlspecialchars($nextAppointmentDay . ' at ' . $nextAppointmentTime . ' - ' . $nextAppointmentName); ?></strong>
           <span><?php echo htmlspecialchars($nextAppointmentType); ?></span>
         <?php else: ?>
