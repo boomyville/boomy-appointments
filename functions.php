@@ -1695,8 +1695,9 @@ function create_customer(string $fullName, ?string $email, ?string $mobile, ?str
         $normalizedDateOfBirth = normalize_customer_date_of_birth($dateOfBirth);
         $normalizedGender = normalize_customer_gender($gender);
 
-        $columns = ['full_name', 'email', 'mobile'];
-        $values = [$fullName, $email ?: '', $mobile ?: ''];
+        // date_added is stamped with app (server) time rather than the database clock, which runs in UTC
+        $columns = ['full_name', 'email', 'mobile', 'date_added'];
+        $values = [$fullName, $email ?: '', $mobile ?: '', date('Y-m-d H:i:s')];
 
         if ($normalizedDateOfBirth !== null) {
             $columns[] = 'date_of_birth';
@@ -2817,10 +2818,12 @@ function save_customer_answers(int $customerId, array $answers): void
     if ($customerId < 1 || !$answers) {
         return;
     }
-    $stmt = get_db()->prepare('INSERT INTO customer_answers (customer_id, question_id, answer) VALUES (?, ?, ?)
-                               ON DUPLICATE KEY UPDATE answer = VALUES(answer), updated_at = CURRENT_TIMESTAMP');
+    // Stamp with app (server) time rather than the database clock, which runs in UTC
+    $now = date('Y-m-d H:i:s');
+    $stmt = get_db()->prepare('INSERT INTO customer_answers (customer_id, question_id, answer, updated_at) VALUES (?, ?, ?, ?)
+                               ON DUPLICATE KEY UPDATE answer = VALUES(answer), updated_at = VALUES(updated_at)');
     foreach ($answers as $qid => $a) {
-        $stmt->execute([$customerId, $qid, $a]);
+        $stmt->execute([$customerId, $qid, $a, $now]);
     }
 }
 
