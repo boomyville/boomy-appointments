@@ -7,7 +7,12 @@ init_session();
 $siteName = get_site_name();
 $supportMessage = get_support_contact_message($siteName);
 
-$code = trim((string) ($_REQUEST['code'] ?? ''));
+// One code, or several separated by commas (e.g. ?code=HASH1,HASH2) to handle a group of appointments together
+$codes = array_slice(array_values(array_unique(array_filter(array_map('trim', explode(',', (string) ($_REQUEST['code'] ?? ''))), 'strlen'))), 0, 10);
+$multi = count($codes) > 1;
+$code = $multi ? '' : ($codes[0] ?? '');
+$codesParam = implode(',', $codes);
+$multiView = [];
 $action = trim((string) ($_POST['action'] ?? ''));
 $feedbackMessage = '';
 $feedbackClass = '';
@@ -44,6 +49,85 @@ if ($code !== '') {
                 }
             }
         }
+    }
+}
+
+if ($multi) {
+    $timezone = new DateTimeZone(get_app_timezone_name());
+    $loadGroup = function () use ($codes): array {
+        $items = [];
+        foreach ($codes as $groupCode) {
+            $found = get_appointment_by_hash_key($groupCode);
+            if ($found) {
+                $items[] = $found;
+            }
+        }
+        return $items;
+    };
+    $group = $loadGroup();
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($action, ['confirm', 'delete'], true)) {
+        $now = new DateTimeImmutable('now', $timezone);
+        $done = 0;
+        $failed = 0;
+        foreach ($group as $item) {
+            $itemStatus = strtolower(trim((string) ($item['status'] ?? '')));
+            $itemStart = new DateTimeImmutable((string) $item['start_time'], $timezone);
+            if ($now >= $itemStart) {
+                continue; // already started
+            }
+            if ($action === 'confirm' && $itemStatus === 'booked') {
+                $stmt = get_db()->prepare("UPDATE appointments SET status = 'confirmed', updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+                $stmt->execute([(int) $item['id']]);
+                $done++;
+            } elseif ($action === 'delete' && in_array($itemStatus, ['booked', 'confirmed'], true)) {
+                if (delete_appointment((int) $item['id'])) {
+                    $done++;
+                } else {
+                    $failed++;
+                }
+            }
+        }
+        if ($failed > 0) {
+            $feedbackMessage = 'Some appointments could not be updated right now. Please contact the office.';
+            $feedbackClass = 'error';
+        } elseif ($done === 0) {
+            $feedbackMessage = $action === 'confirm' ? 'There was nothing left to confirm.' : 'There was nothing left to delete.';
+            $feedbackClass = 'error';
+        } elseif ($action === 'confirm') {
+            $feedbackMessage = 'Thanks for confirming ' . ($done === 1 ? 'your appointment.' : 'your ' . $done . ' appointments.');
+            $feedbackClass = 'success';
+        } else {
+            $feedbackMessage = ($done === 1 ? 'The appointment has' : $done . ' appointments have') . ' been deleted. Please book a new appointment if you still need one.';
+            $feedbackClass = 'success';
+        }
+        $group = $loadGroup();
+    }
+
+    $now = new DateTimeImmutable('now', $timezone);
+    foreach ($group as $item) {
+        $itemStatus = strtolower(trim((string) ($item['status'] ?? '')));
+        $itemStart = new DateTimeImmutable((string) $item['start_time'], $timezone);
+        $itemCustomer = get_customer_by_id((int) ($item['customer_id'] ?? 0));
+        $itemType = get_appointment_type_by_id((int) ($item['appointment_type_id'] ?? 0));
+        $itemProvider = get_user_by_id((int) ($item['provider_id'] ?? 0));
+        $started = $now >= $itemStart;
+        $multiView[] = [
+            'type'         => (string) ($itemType['name'] ?? 'Appointment'),
+            'provider'     => format_appointment_person_name($itemProvider) ?: 'Not recorded',
+            'start'        => format_app_datetime((string) ($item['start_time'] ?? '')),
+            'end'          => format_app_datetime((string) ($item['end_time'] ?? '')),
+            'customer'     => trim((string) ($itemCustomer['full_name'] ?? '')) ?: 'Not recorded',
+            'mobile'       => trim((string) ($itemCustomer['mobile'] ?? '')) ?: 'Not recorded',
+            'status'       => str_replace('_', ' ', $itemStatus),
+            'note'         => $started ? 'This appointment has already started.' : ($itemStatus === 'unconfirmed' ? 'Awaiting email verification. Use the link in that verification email.' : ''),
+            'can_confirm'  => !$started && $itemStatus === 'booked',
+            'can_delete'   => !$started && in_array($itemStatus, ['booked', 'confirmed'], true),
+        ];
+    }
+    if (!$multiView && $feedbackMessage === '') {
+        $feedbackMessage = 'These appointment links are invalid, expired, or the appointments have already been removed.';
+        $feedbackClass = 'error';
     }
 }
 
@@ -161,7 +245,58 @@ $statusLabel = $appointment ? str_replace('_', ' ', (string) ($appointment['stat
       <p class="status-banner <?php echo $feedbackClass === 'success' ? 'success' : 'error'; ?>"><?php echo htmlspecialchars($feedbackMessage); ?></p>
     <?php endif; ?>
 
-    <?php if ($appointment): ?>
+    <?php if ($multi && $multiView): ?>
+      <?php
+        $multiConfirmCount = count(array_filter($multiView, fn($v) => $v['can_confirm']));
+        $multiDeleteCount = count(array_filter($multiView, fn($v) => $v['can_delete']));
+      ?>
+      <p>These <?php echo count($multiView); ?> appointments are booked under the same email address. Review them below, then confirm or delete them together.</p>
+      <?php foreach ($multiView as $v): ?>
+        <section class="appointment-summary" aria-label="Appointment details">
+          <dl>
+            <dt>Customer full name</dt>
+            <dd><?php echo htmlspecialchars($v['customer']); ?></dd>
+
+            <dt>Appointment type</dt>
+            <dd><?php echo htmlspecialchars($v['type']); ?></dd>
+
+            <dt>Provider</dt>
+            <dd><?php echo htmlspecialchars($v['provider']); ?></dd>
+
+            <dt>Start time</dt>
+            <dd><?php echo htmlspecialchars($v['start']); ?></dd>
+
+            <dt>End time</dt>
+            <dd><?php echo htmlspecialchars($v['end']); ?></dd>
+
+            <dt>Mobile number</dt>
+            <dd><?php echo htmlspecialchars($v['mobile']); ?></dd>
+
+            <dt>Status</dt>
+            <dd><?php echo htmlspecialchars($v['status']); ?><?php echo $v['note'] !== '' ? ' - ' . htmlspecialchars($v['note']) : ''; ?></dd>
+          </dl>
+        </section>
+      <?php endforeach; ?>
+
+      <?php if ($multiConfirmCount > 0 || $multiDeleteCount > 0): ?>
+        <div class="actions">
+          <?php if ($multiConfirmCount > 0): ?>
+            <form method="post">
+              <input type="hidden" name="code" value="<?php echo htmlspecialchars($codesParam); ?>">
+              <input type="hidden" name="action" value="confirm">
+              <button type="submit">Confirm <?php echo $multiConfirmCount === 1 ? 'appointment' : $multiConfirmCount . ' appointments'; ?></button>
+            </form>
+          <?php endif; ?>
+          <?php if ($multiDeleteCount > 0): ?>
+            <form method="post" onsubmit="return confirm('Delete <?php echo $multiDeleteCount === 1 ? 'this appointment' : 'these ' . $multiDeleteCount . ' appointments'; ?>? This cannot be undone.');">
+              <input type="hidden" name="code" value="<?php echo htmlspecialchars($codesParam); ?>">
+              <input type="hidden" name="action" value="delete">
+              <button type="submit" class="secondary">Delete <?php echo $multiDeleteCount === 1 ? 'appointment' : $multiDeleteCount . ' appointments'; ?></button>
+            </form>
+          <?php endif; ?>
+        </div>
+      <?php endif; ?>
+    <?php elseif ($appointment): ?>
       <p>Review the details below. If this is correct, confirm the appointment. If you need to change it, delete it and create a new booking.</p>
       <section class="appointment-summary" aria-label="Appointment details">
         <dl>

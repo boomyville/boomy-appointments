@@ -1211,6 +1211,166 @@ function format_appointment_person_name(?array $person): string
     return trim((string) ($person['email'] ?? ''));
 }
 
+// ============================================================
+// Other appointments on the same day for the same email address
+// (listed in the verification and confirmation emails)
+// ============================================================
+
+function describe_same_day_appointment(array $row, DateTimeImmutable $now, DateTimeZone $timezone): array
+{
+    $start = new DateTimeImmutable((string) $row['start_time'], $timezone);
+    $end = new DateTimeImmutable((string) ($row['end_time'] ?? $row['start_time']), $timezone);
+    $status = strtolower(trim((string) ($row['status'] ?? '')));
+    $hashKey = trim((string) ($row['hash_key'] ?? ''));
+    $upcoming = $start > $now;
+
+    $statusLabels = [
+        'unconfirmed' => 'Awaiting email verification',
+        'booked'      => 'Booked',
+        'confirmed'   => 'Confirmed',
+        'present'     => 'Arrived',
+        'completed'   => 'Completed',
+        'no_show'     => 'Missed',
+    ];
+
+    $type = get_appointment_type_by_id((int) ($row['appointment_type_id'] ?? 0));
+    $provider = get_user_by_id((int) ($row['provider_id'] ?? 0));
+    $customerName = trim((string) ($row['full_name'] ?? ''));
+
+    return [
+        'id'            => (int) ($row['id'] ?? 0),
+        'hash_key'      => $hashKey,
+        'status'        => $status,
+        'status_label'  => $statusLabels[$status] ?? ucfirst(str_replace('_', ' ', $status)),
+        'start_time'    => (string) $row['start_time'],
+        'time_label'    => $start->format('g:i A') . ' - ' . $end->format('g:i A'),
+        'customer_name' => $customerName !== '' ? $customerName : 'Customer',
+        'type_name'     => trim((string) ($type['name'] ?? 'Appointment')),
+        'provider_name' => format_appointment_person_name($provider) ?: 'Not recorded',
+        // Appointments awaiting email verification can only be handled from their own verification email
+        'can_confirm'   => $upcoming && $hashKey !== '' && $status === 'booked',
+        'can_delete'    => $upcoming && $hashKey !== '' && in_array($status, ['booked', 'confirmed'], true),
+        'is_current'    => false,
+    ];
+}
+
+// Other (non-cancelled) appointments on the same day booked under the same email address
+function get_same_day_appointments_for_email(array $appointment): array
+{
+    try {
+        $customer = get_customer_by_id((int) ($appointment['customer_id'] ?? 0));
+        $email = strtolower(trim((string) ($customer['email'] ?? '')));
+        $startRaw = trim((string) ($appointment['start_time'] ?? ''));
+        if ($email === '' || $startRaw === '') {
+            return [];
+        }
+
+        $timezone = new DateTimeZone(get_app_timezone_name());
+        $dayStart = (new DateTimeImmutable($startRaw, $timezone))->setTime(0, 0, 0);
+        $dayEnd = $dayStart->modify('+1 day');
+        $now = new DateTimeImmutable('now', $timezone);
+
+        $stmt = get_db()->prepare("SELECT a.id, a.start_time, a.end_time, a.status, a.hash_key, a.provider_id, a.appointment_type_id, c.full_name
+            FROM appointments a
+            JOIN customers c ON c.id = a.customer_id
+            WHERE LOWER(c.email) = ? AND a.start_time >= ? AND a.start_time < ? AND a.id <> ? AND a.status <> 'cancelled'
+            ORDER BY a.start_time ASC, a.id ASC");
+        $stmt->execute([$email, $dayStart->format('Y-m-d H:i:s'), $dayEnd->format('Y-m-d H:i:s'), (int) ($appointment['id'] ?? 0)]);
+
+        $out = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $out[] = describe_same_day_appointment($row, $now, $timezone);
+        }
+        return $out;
+    } catch (Throwable $e) {
+        error_log('get_same_day_appointments_for_email failed: ' . $e->getMessage());
+        return [];
+    }
+}
+
+// Builds the "other appointments today" section for an email. Returns ['html', 'plain', 'count'].
+// With $withActions (confirmation email) every actionable appointment gets Confirm / Delete buttons,
+// plus "all" buttons that put every code in one link (confirm_appointment.php?code=HASH1,HASH2,...).
+function build_same_day_appointments_email_block(array $appointment, bool $withActions): array
+{
+    $empty = ['html' => '', 'plain' => '', 'count' => 0];
+    $others = get_same_day_appointments_for_email($appointment);
+    if (!$others) {
+        return $empty;
+    }
+
+    $esc = fn($v): string => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+    $rows = $others;
+
+    if ($withActions) {
+        $timezone = new DateTimeZone(get_app_timezone_name());
+        $customer = get_customer_by_id((int) ($appointment['customer_id'] ?? 0));
+        $current = describe_same_day_appointment(
+            array_merge($appointment, ['full_name' => $customer['full_name'] ?? '']),
+            new DateTimeImmutable('now', $timezone),
+            $timezone
+        );
+        $current['is_current'] = true;
+        $rows[] = $current;
+        usort($rows, fn(array $a, array $b): int => strcmp($a['start_time'], $b['start_time']) ?: ($a['id'] <=> $b['id']));
+    }
+
+    $dayLabel = format_app_datetime((string) $appointment['start_time'], 'l j F Y');
+    $actionable = array_values(array_filter($rows, fn(array $r): bool => $r['can_delete']));
+    $allCodes = implode(',', array_column($actionable, 'hash_key'));
+
+    $btn = 'display:inline-block;padding:7px 14px;border-radius:999px;text-decoration:none;font-weight:700;font-size:13px;margin:2px 4px 2px 0;';
+    $confirmStyle = $btn . 'background:#2457ff;color:#ffffff;';
+    $deleteStyle = $btn . 'background:#ffffff;color:#b91c1c;border:1px solid #b91c1c;';
+
+    $intro = $withActions
+        ? 'More than one appointment is booked with this email address on ' . $dayLabel . '. You can confirm or delete them individually or all together.'
+        : 'Other appointments are already booked with this email address on ' . $dayLabel . '.';
+
+    $html = '<h3>' . $esc($withActions ? 'Your appointments on ' . $dayLabel : 'Other appointments on ' . $dayLabel) . '</h3>'
+        . '<p>' . $esc($intro) . '</p>'
+        . '<table role="presentation" style="border-collapse:collapse;width:100%;">';
+    $plain = $intro . "\n\n";
+
+    foreach ($rows as $r) {
+        $title = $r['customer_name'] . ($r['is_current'] ? ' (this booking)' : '');
+        $html .= '<tr style="border-top:1px solid #e5e7eb;">'
+            . '<td style="padding:10px 12px 10px 0;vertical-align:top;white-space:nowrap;"><strong>' . $esc($r['time_label']) . '</strong></td>'
+            . '<td style="padding:10px 12px 10px 0;vertical-align:top;"><strong>' . $esc($title) . '</strong><br>'
+            . $esc($r['type_name'] . ' with ' . $r['provider_name']) . '<br>'
+            . '<span style="color:#6b7280;">' . $esc($r['status_label']) . '</span></td>';
+        $plain .= '- ' . $r['time_label'] . ': ' . $title . ' (' . $r['type_name'] . ' with ' . $r['provider_name'] . ') [' . $r['status_label'] . "]\n";
+
+        if ($withActions) {
+            $cells = '';
+            if ($r['can_confirm']) {
+                $url = build_app_url('confirm_appointment.php', ['code' => $r['hash_key']]);
+                $cells .= '<a href="' . $esc($url) . '" style="' . $confirmStyle . '">Confirm</a>';
+                $plain .= '    Confirm ' . $r['customer_name'] . ': ' . $url . "\n";
+            }
+            if ($r['can_delete']) {
+                $url = build_app_url('confirm_appointment.php', ['code' => $r['hash_key']]);
+                $cells .= '<a href="' . $esc($url) . '" style="' . $deleteStyle . '">Delete</a>';
+                $plain .= '    Delete ' . $r['customer_name'] . ': ' . $url . "\n";
+            }
+            $html .= '<td style="padding:10px 0;vertical-align:top;">' . $cells . '</td>';
+        }
+        $html .= '</tr>';
+    }
+    $html .= '</table>';
+
+    if ($withActions && count($actionable) >= 2) {
+        $allUrl = build_app_url('confirm_appointment.php', ['code' => $allCodes]);
+        $html .= '<p style="margin-top:14px;"><strong>All ' . count($actionable) . ' appointments:</strong><br>'
+            . '<a href="' . $esc($allUrl) . '" style="' . $confirmStyle . '">Confirm all ' . count($actionable) . '</a>'
+            . '<a href="' . $esc($allUrl) . '" style="' . $deleteStyle . '">Delete all ' . count($actionable) . '</a></p>'
+            . '<p style="font-size:13px;color:#6b7280;">Both buttons open a page where you review the appointments before anything changes.</p>';
+        $plain .= "\nAll " . count($actionable) . ' appointments (opens a page where you confirm or delete them): ' . $allUrl . "\n";
+    }
+
+    return ['html' => $html, 'plain' => $plain . "\n", 'count' => count($others)];
+}
+
 function send_appointment_confirmation_email(int $appointmentId): array
 {
     if (!email_transport_is_ready()) {
@@ -1264,6 +1424,7 @@ function send_appointment_confirmation_email(int $appointmentId): array
     $providerDisplay = $providerName !== '' ? $providerName : 'Not recorded';
     $customerMobileDisplay = $customerMobile !== '' ? $customerMobile : 'Not recorded';
     $customMessage = trim((string) get_setting('confirmation_email_message', ''));
+    $sameDay = build_same_day_appointments_email_block($appointment, true);
 
     $subject = 'Your appointment has been successfully booked for ' . $siteName;
     $body_html = '<h2>Your appointment has been successfully booked for ' . htmlspecialchars($siteName, ENT_QUOTES, 'UTF-8') . '</h2>'
@@ -1280,6 +1441,7 @@ function send_appointment_confirmation_email(int $appointmentId): array
         . '<li><strong>Customer full name:</strong> ' . htmlspecialchars($customerName !== '' ? $customerName : 'Not recorded', ENT_QUOTES, 'UTF-8') . '</li>'
         . '<li><strong>Mobile number:</strong> ' . htmlspecialchars($customerMobileDisplay, ENT_QUOTES, 'UTF-8') . '</li>'
         . '</ul>'
+        . $sameDay['html']
         . ($customMessage !== '' ? '<p>' . nl2br(htmlspecialchars($customMessage, ENT_QUOTES, 'UTF-8')) . '</p>' : '')
         . '<p><a href="' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '" style="background-color:#2457ff;color:#ffffff;padding:12px 20px;text-decoration:none;border-radius:999px;display:inline-block;font-weight:700;">Confirm or modify your appointment</a></p>'
         . '<p>Or copy this link: ' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '</p>';
@@ -1294,6 +1456,7 @@ function send_appointment_confirmation_email(int $appointmentId): array
         . "Customer details:\n"
         . "Customer full name: " . ($customerName !== '' ? $customerName : 'Not recorded') . "\n"
         . "Mobile number: {$customerMobileDisplay}\n\n"
+        . $sameDay['plain']
         . ($customMessage !== '' ? "{$customMessage}\n\n" : '')
         . "Confirm or modify your appointment: {$appointmentUrl}\n";
 
