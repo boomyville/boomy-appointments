@@ -27,7 +27,7 @@ if ($siteName === '') {
       --border: rgba(18, 27, 43, 0.12);
       --accent: #2457ff;
       --accent-strong: #1639b5;
-      --accent-soft: rgba(36, 87, 255, 0.12);
+      --accent-soft: rgba(var(--accent-rgb, 36, 87, 255), 0.12);
       --danger: #d92d20;
       --shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
       --shadow-soft: 0 12px 32px rgba(15, 23, 42, 0.08);
@@ -56,7 +56,7 @@ if ($siteName === '') {
       margin: 0;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background:
-        radial-gradient(circle at top left, rgba(36, 87, 255, 0.18), transparent 28%),
+        radial-gradient(circle at top left, rgba(var(--accent-rgb, 36, 87, 255), 0.18), transparent 28%),
         radial-gradient(circle at 85% 18%, rgba(245, 158, 11, 0.14), transparent 24%),
         var(--bg);
       color: var(--text);
@@ -135,7 +135,7 @@ if ($siteName === '') {
     .match-item {
       padding: 14px;
       border-radius: 18px;
-      background: color-mix(in srgb, rgba(36, 87, 255, 0.08) 45%, var(--panel-strong));
+      background: color-mix(in srgb, rgba(var(--accent-rgb, 36, 87, 255), 0.08) 45%, var(--panel-strong));
       border: 1px solid var(--border);
     }
 
@@ -222,6 +222,7 @@ if ($siteName === '') {
       }
     }
   </style>
+<?php render_theme_head(); ?>
 </head>
 <body>
   <main class="shell">

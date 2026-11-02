@@ -197,8 +197,8 @@ $statusLabel = $appointment ? str_replace('_', ' ', (string) ($appointment['stat
       margin: 1.25rem 0;
       padding: 1rem;
       border-radius: 18px;
-      background: rgba(36, 87, 255, 0.04);
-      border: 1px solid rgba(36, 87, 255, 0.10);
+      background: rgba(var(--accent-rgb, 36, 87, 255), 0.04);
+      border: 1px solid rgba(var(--accent-rgb, 36, 87, 255), 0.10);
     }
 
     .appointment-summary dl {
@@ -232,6 +232,7 @@ $statusLabel = $appointment ? str_replace('_', ' ', (string) ($appointment['stat
       margin: 0;
     }
   </style>
+<?php render_theme_head(); ?>
 </head>
 <body>
 <main class="container">

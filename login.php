@@ -9,6 +9,7 @@ init_session();
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Login - <?php echo htmlspecialchars(APP_NAME); ?></title>
   <link rel="stylesheet" href="assets/css/pico.min.css" id="pico-css" onerror="this.onerror=null; this.href='https://unpkg.com/@picocss/pico@2.*/css/pico.min.css';">
+<?php render_theme_head(); ?>
 </head>
 <body>
 <main class="container">

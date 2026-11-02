@@ -1212,6 +1212,218 @@ function format_appointment_person_name(?array $person): string
 }
 
 // ============================================================
+// Theme: colours (day + night) and font, set in Settings > Theme.
+// Only values that differ from the defaults are stored, so an untouched install looks exactly as before.
+// ============================================================
+
+function theme_defaults(): array
+{
+    return [
+        'theme_primary'        => '#2457ff',
+        'theme_secondary'      => '#10b981',
+        'theme_tertiary'       => '#f59e0b',
+        'theme_primary_dark'   => '#7ca2ff',
+        'theme_secondary_dark' => '#34d399',
+        'theme_tertiary_dark'  => '#fbbf24',
+        'theme_font'           => 'default',
+    ];
+}
+
+// key => label, CSS font stack, and the Google Fonts family spec (null = installed system font)
+function theme_font_options(): array
+{
+    $sys = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    return [
+        'default'     => ['label' => 'App default (Inter if installed, else system)', 'stack' => 'Inter, ' . $sys, 'google' => null],
+        'system'      => ['label' => 'System UI',                'stack' => $sys . ', Roboto',                                                         'google' => null],
+        'helvetica'   => ['label' => 'Helvetica',                'stack' => '"Helvetica Neue", Helvetica, Arial, sans-serif',                         'google' => null],
+        'trebuchet'   => ['label' => 'Trebuchet MS',             'stack' => '"Trebuchet MS", "Lucida Grande", "Lucida Sans Unicode", Tahoma, sans-serif', 'google' => null],
+        'verdana'     => ['label' => 'Verdana',                  'stack' => 'Verdana, Geneva, sans-serif',                                            'google' => null],
+        'georgia'     => ['label' => 'Georgia (serif)',          'stack' => 'Georgia, "Times New Roman", Times, serif',                               'google' => null],
+        'fira_sans'   => ['label' => 'Fira Sans',                'stack' => '"Fira Sans", ' . $sys,                                                   'google' => 'Fira+Sans:wght@400;500;600;700'],
+        'kreon'       => ['label' => 'Kreon (slab serif)',       'stack' => 'Kreon, Georgia, "Times New Roman", serif',                               'google' => 'Kreon:wght@400;500;600;700'],
+        'inter'       => ['label' => 'Inter',                    'stack' => 'Inter, ' . $sys,                                                         'google' => 'Inter:wght@400;500;600;700'],
+        'roboto'      => ['label' => 'Roboto',                   'stack' => 'Roboto, ' . $sys,                                                        'google' => 'Roboto:wght@400;500;700'],
+        'open_sans'   => ['label' => 'Open Sans',                'stack' => '"Open Sans", ' . $sys,                                                   'google' => 'Open+Sans:wght@400;600;700'],
+        'lato'        => ['label' => 'Lato',                     'stack' => 'Lato, ' . $sys,                                                          'google' => 'Lato:wght@400;700'],
+        'montserrat'  => ['label' => 'Montserrat',               'stack' => 'Montserrat, ' . $sys,                                                    'google' => 'Montserrat:wght@400;500;600;700'],
+        'poppins'     => ['label' => 'Poppins',                  'stack' => 'Poppins, ' . $sys,                                                       'google' => 'Poppins:wght@400;500;600;700'],
+        'nunito'      => ['label' => 'Nunito',                   'stack' => 'Nunito, ' . $sys,                                                        'google' => 'Nunito:wght@400;600;700'],
+        'source_sans' => ['label' => 'Source Sans 3',            'stack' => '"Source Sans 3", ' . $sys,                                               'google' => 'Source+Sans+3:wght@400;600;700'],
+    ];
+}
+
+// '#abc' / '#AABBCC' -> '#aabbcc', anything else -> null
+function theme_normalize_hex(?string $value): ?string
+{
+    $v = strtolower(trim((string) $value));
+    if (preg_match('/^#([0-9a-f])([0-9a-f])([0-9a-f])$/', $v, $m)) {
+        return '#' . $m[1] . $m[1] . $m[2] . $m[2] . $m[3] . $m[3];
+    }
+    return preg_match('/^#[0-9a-f]{6}$/', $v) ? $v : null;
+}
+
+function theme_hex_to_rgb(string $hex): array
+{
+    return [hexdec(substr($hex, 1, 2)), hexdec(substr($hex, 3, 2)), hexdec(substr($hex, 5, 2))];
+}
+
+// Moves $hex toward $target by $ratio (0..1)
+function theme_mix_hex(string $hex, string $target, float $ratio): string
+{
+    $a = theme_hex_to_rgb($hex);
+    $b = theme_hex_to_rgb($target);
+    $out = '#';
+    for ($i = 0; $i < 3; $i++) {
+        $out .= str_pad(dechex((int) round($a[$i] + ($b[$i] - $a[$i]) * $ratio)), 2, '0', STR_PAD_LEFT);
+    }
+    return $out;
+}
+
+// Effective theme: ['values' => all 7 settings (saved or default), 'custom' => keys that differ from default, 'defaults' => ...]
+function get_theme_settings(): array
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+    $defaults = theme_defaults();
+    $fonts = theme_font_options();
+    $values = $defaults;
+    $custom = [];
+    $saved = [];
+    try {
+        $stmt = get_db()->query("SELECT setting_key, setting_value FROM settings WHERE setting_key LIKE 'theme\\_%'");
+        $saved = $stmt ? $stmt->fetchAll(PDO::FETCH_KEY_PAIR) : [];
+    } catch (Throwable $e) {
+        $saved = [];
+    }
+    foreach ($defaults as $key => $default) {
+        $raw = trim((string) ($saved[$key] ?? ''));
+        if ($key === 'theme_font') {
+            if ($raw !== '' && isset($fonts[$raw]) && $raw !== $default) {
+                $values[$key] = $raw;
+                $custom[$key] = true;
+            }
+        } else {
+            $hex = theme_normalize_hex($raw);
+            if ($hex !== null && $hex !== $default) {
+                $values[$key] = $hex;
+                $custom[$key] = true;
+            }
+        }
+    }
+    return $cache = ['values' => $values, 'custom' => $custom, 'defaults' => $defaults];
+}
+
+// Settings form POST -> values to store. Anything invalid or equal to the default is stored as '' (= use default).
+function sanitize_theme_post(array $data): array
+{
+    $fonts = theme_font_options();
+    $out = [];
+    foreach (theme_defaults() as $key => $default) {
+        $raw = trim((string) ($data[$key] ?? ''));
+        if ($key === 'theme_font') {
+            $out[$key] = ($raw !== $default && isset($fonts[$raw])) ? $raw : '';
+        } else {
+            $hex = theme_normalize_hex($raw);
+            $out[$key] = ($hex !== null && $hex !== $default) ? $hex : '';
+        }
+    }
+    return $out;
+}
+
+function theme_mode_declarations(array $theme, string $mode): string
+{
+    $v = $theme['values'];
+    $c = $theme['custom'];
+    $sfx = $mode === 'dark' ? '_dark' : '';
+    $out = '';
+
+    if (isset($c['theme_primary' . $sfx])) {
+        $p = $v['theme_primary' . $sfx];
+        [$r, $g, $b] = theme_hex_to_rgb($p);
+        $strong = $mode === 'dark' ? theme_mix_hex($p, '#ffffff', 0.26) : theme_mix_hex($p, '#000000', 0.35);
+        $soft = 'rgba(' . $r . ',' . $g . ',' . $b . ',' . ($mode === 'dark' ? '0.16' : '0.12') . ')';
+        $out .= '--accent:' . $p . ';--accent-strong:' . $strong . ';--accent-soft:' . $soft . ';--accent-rgb:' . $r . ',' . $g . ',' . $b . ';--selected:' . $p . ';'
+            . '--pico-primary:' . $p . ';--pico-primary-background:' . $p . ';--pico-primary-border:' . $p . ';'
+            . '--pico-primary-underline:rgba(' . $r . ',' . $g . ',' . $b . ',0.5);'
+            . '--pico-primary-hover:' . $strong . ';--pico-primary-hover-background:' . $strong . ';--pico-primary-hover-border:' . $strong . ';--pico-primary-hover-underline:' . $strong . ';'
+            . '--pico-primary-focus:rgba(' . $r . ',' . $g . ',' . $b . ',0.25);';
+    }
+    if (isset($c['theme_secondary' . $sfx])) {
+        $out .= '--accent-2:' . $v['theme_secondary' . $sfx] . ';';
+    }
+    if (isset($c['theme_tertiary' . $sfx])) {
+        $t = $v['theme_tertiary' . $sfx];
+        $out .= '--accent-3:' . $t . ';--current:' . $t . ';';
+    }
+    return $out;
+}
+
+// The CSS that overrides each page's own variables. Empty string when nothing is customised.
+function build_theme_css(array $theme): string
+{
+    $light = theme_mode_declarations($theme, 'light');
+    $dark = theme_mode_declarations($theme, 'dark');
+    $css = '';
+
+    // Admin pages set data-theme via the toggle; public pages follow the visitor's OS setting.
+    if ($light !== '') {
+        $css .= 'html:root[data-theme="light"]{' . $light . '}';
+        $css .= '@media (prefers-color-scheme: light){html:root:not([data-theme]){' . $light . '}}';
+    }
+    if ($dark !== '') {
+        $css .= 'html:root[data-theme="dark"]{' . $dark . '}';
+        $css .= '@media (prefers-color-scheme: dark){html:root:not([data-theme]){' . $dark . '}}';
+    }
+
+    if (isset($theme['custom']['theme_font'])) {
+        $fonts = theme_font_options();
+        $stack = $fonts[$theme['values']['theme_font']]['stack'] ?? '';
+        if ($stack !== '') {
+            $css .= ':root{--theme-font:' . $stack . ';--font-family:' . $stack . ';--pico-font-family:' . $stack . ';--pico-font-family-sans-serif:' . $stack . ';}';
+            $css .= 'html body,html button,html input,html select,html textarea,html option{font-family:var(--theme-font);}';
+        }
+    }
+    return $css;
+}
+
+// Call once just before </head> on every page (after the page's own <style>).
+function render_theme_head(): void
+{
+    try {
+        $theme = get_theme_settings();
+        if (isset($theme['custom']['theme_font'])) {
+            $google = theme_font_options()[$theme['values']['theme_font']]['google'] ?? null;
+            if ($google) {
+                echo '<link rel="preconnect" href="https://fonts.googleapis.com">' . "\n";
+                echo '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' . "\n";
+                echo '<link rel="stylesheet" href="' . htmlspecialchars('https://fonts.googleapis.com/css2?family=' . $google . '&display=swap', ENT_QUOTES, 'UTF-8') . '">' . "\n";
+            }
+        }
+        $css = build_theme_css($theme);
+        if ($css !== '') {
+            echo '<style id="app-theme">' . $css . '</style>' . "\n";
+        }
+    } catch (Throwable $e) {
+        error_log('render_theme_head failed: ' . $e->getMessage());
+    }
+}
+
+// Emails cannot use CSS variables, so they use the day-mode primary colour directly.
+function theme_email_primary(): string
+{
+    return get_theme_settings()['values']['theme_primary'];
+}
+
+function theme_email_tint(float $alpha): string
+{
+    [$r, $g, $b] = theme_hex_to_rgb(theme_email_primary());
+    return 'rgba(' . $r . ',' . $g . ',' . $b . ',' . $alpha . ')';
+}
+
+// ============================================================
 // Other appointments on the same day for the same email address
 // (listed in the verification and confirmation emails)
 // ============================================================
@@ -1320,7 +1532,7 @@ function build_same_day_appointments_email_block(array $appointment, bool $withA
     $allCodes = implode(',', array_column($actionable, 'hash_key'));
 
     $btn = 'display:inline-block;padding:7px 14px;border-radius:999px;text-decoration:none;font-weight:700;font-size:13px;margin:2px 4px 2px 0;';
-    $confirmStyle = $btn . 'background:#2457ff;color:#ffffff;';
+    $confirmStyle = $btn . 'background:' . theme_email_primary() . ';color:#ffffff;';
     $deleteStyle = $btn . 'background:#ffffff;color:#b91c1c;border:1px solid #b91c1c;';
 
     $intro = $withActions
@@ -1443,7 +1655,7 @@ function send_appointment_confirmation_email(int $appointmentId): array
         . '</ul>'
         . $sameDay['html']
         . ($customMessage !== '' ? '<p>' . nl2br(htmlspecialchars($customMessage, ENT_QUOTES, 'UTF-8')) . '</p>' : '')
-        . '<p><a href="' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '" style="background-color:#2457ff;color:#ffffff;padding:12px 20px;text-decoration:none;border-radius:999px;display:inline-block;font-weight:700;">Confirm or modify your appointment</a></p>'
+        . '<p><a href="' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '" style="background-color:' . theme_email_primary() . ';color:#ffffff;padding:12px 20px;text-decoration:none;border-radius:999px;display:inline-block;font-weight:700;">Confirm or modify your appointment</a></p>'
         . '<p>Or copy this link: ' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '</p>';
 
     $body_plain = "Your appointment has been successfully booked for {$siteName}\n\n"

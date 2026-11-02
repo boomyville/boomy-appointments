@@ -28,7 +28,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       --border: rgba(18, 27, 43, 0.12);
       --accent: #2457ff;
       --accent-strong: #1639b5;
-      --accent-soft: rgba(36, 87, 255, 0.12);
+      --accent-soft: rgba(var(--accent-rgb, 36, 87, 255), 0.12);
       --danger: #d92d20;
       --success: #067647;
       --shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
@@ -69,7 +69,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       margin: 0;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background:
-        radial-gradient(circle at top left, rgba(36, 87, 255, 0.18), transparent 28%),
+        radial-gradient(circle at top left, rgba(var(--accent-rgb, 36, 87, 255), 0.18), transparent 28%),
         radial-gradient(circle at 85% 18%, rgba(245, 158, 11, 0.14), transparent 24%),
         var(--bg);
       color: var(--text);
@@ -90,7 +90,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
     padding: 28px;
     border: 1px solid var(--border);
     border-radius: 28px;
-    background: linear-gradient(135deg, rgba(36, 87, 255, 0.08), var(--hero-bg-blend));
+    background: linear-gradient(135deg, rgba(var(--accent-rgb, 36, 87, 255), 0.08), var(--hero-bg-blend));
     box-shadow: var(--shadow);
     position: relative;
     overflow: hidden;
@@ -103,7 +103,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       width: 260px;
       height: 260px;
       border-radius: 50%;
-      background: radial-gradient(circle, rgba(36, 87, 255, 0.16), transparent 68%);
+      background: radial-gradient(circle, rgba(var(--accent-rgb, 36, 87, 255), 0.16), transparent 68%);
       pointer-events: none;
     }
 
@@ -643,6 +643,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
     }
 }
   </style>
+<?php render_theme_head(); ?>
 </head>
 <body>
   <main class="booking-shell">

@@ -14,6 +14,7 @@ $blocked = !can_register_admin();
   <title>Register - <?php echo htmlspecialchars(APP_NAME); ?></title>
   <link rel="stylesheet" href="assets/css/pico.min.css" id="pico-css" onerror="this.onerror=null; this.href='https://unpkg.com/@picocss/pico@2.*/css/pico.min.css';">
   <link rel="stylesheet" href="assets/css/theme.css">
+<?php render_theme_head(); ?>
 </head>
 <body>
 <main class="container">

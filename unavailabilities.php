@@ -50,7 +50,7 @@ if (!empty($providers)) {
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--text);
       background:
-        radial-gradient(circle at top left, rgba(36, 87, 255, 0.14), transparent 35%),
+        radial-gradient(circle at top left, rgba(var(--accent-rgb, 36, 87, 255), 0.14), transparent 35%),
         radial-gradient(circle at top right, rgba(16, 185, 129, 0.12), transparent 28%),
         linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
     }
@@ -147,7 +147,7 @@ if (!empty($providers)) {
     }
 
     .unavail-table tbody tr:hover {
-      background: rgba(36, 87, 255, 0.03);
+      background: rgba(var(--accent-rgb, 36, 87, 255), 0.03);
     }
 
     .badge {
@@ -159,7 +159,7 @@ if (!empty($providers)) {
       text-transform: uppercase;
     }
 
-    .badge--single { background: rgba(36, 87, 255, 0.1); color: var(--accent); }
+    .badge--single { background: rgba(var(--accent-rgb, 36, 87, 255), 0.1); color: var(--accent); }
     .badge--recurring { background: rgba(16, 185, 129, 0.1); color: var(--accent-2); }
 
     .modal-dialog {
@@ -254,6 +254,7 @@ if (!empty($providers)) {
     .alert.error { background: rgba(239, 68, 68, 0.08); color: #7f1d1d; border: 1px solid rgba(239, 68, 68, 0.2); }
     .alert.success { background: rgba(16, 185, 129, 0.08); color: #065f46; border: 1px solid rgba(16, 185, 129, 0.2); }
   </style>
+<?php render_theme_head(); ?>
 </head>
 <body>
   <?php $current_page = 'unavailabilities.php'; include __DIR__ . '/assets/nav.html'; ?>
