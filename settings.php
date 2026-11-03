@@ -121,6 +121,10 @@ $smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && !empty($smtp_pass
 $booking_step1_message = get_setting('booking_step1_message', '');
 $booking_step4_message = get_setting('booking_step4_message', '');
 $user_questions_text = format_user_questions_text(get_user_questions());
+$themeData = get_theme_settings();
+$themeValues = $themeData['values'];
+$themeDefaults = $themeData['defaults'];
+$themeFonts = theme_font_options();
 $confirmation_email_message = get_setting('confirmation_email_message', '');
 $reminder_email_message = get_setting('reminder_email_message', '');
 
@@ -150,6 +154,7 @@ $reminder_email_message = get_setting('reminder_email_message', '');
     .appointment-types-table input[type="number"] { width: 100%; }
     .appointment-types-table input[type="color"] { width: 100%; min-width: 72px; height: 40px; padding: 2px; }
   </style>
+<?php render_theme_head(); ?>
 </head>
 <body>
   <?php $current_page = 'settings.php'; include __DIR__ . '/assets/nav.html'; ?>
@@ -168,6 +173,7 @@ $reminder_email_message = get_setting('reminder_email_message', '');
     <button class="tab" data-tab="sessions" role="tab">Sessions</button>
     <button class="tab" data-tab="phpmailer" role="tab">PHPMailer</button>
     <button class="tab" data-tab="login_attempts" role="tab">Login Attempts</button>
+    <button class="tab" data-tab="theme" role="tab">Theme</button>
   </nav>
 
   <!-- GENERAL TAB -->
@@ -216,6 +222,117 @@ $reminder_email_message = get_setting('reminder_email_message', '');
       <div id="generalMsg"></div>
     </form>
   </section>
+
+  <!-- THEME TAB -->
+  <section id="tab-theme" class="tab-panel">
+    <form id="themeForm" data-api data-no-reload="true" action="settings_api.php?action=save" method="post">
+      <p>Choose the colours and font used across the public booking pages, emails and the admin area. Night colours are used when dark mode is on. A colour left at its default keeps the original look.</p>
+
+      <div style="overflow-x:auto;">
+        <table style="width:auto; min-width:360px;">
+          <thead><tr><th></th><th>Day</th><th>Night</th></tr></thead>
+          <tbody>
+            <?php foreach (['primary' => ['Primary', 'buttons, links and highlights'], 'secondary' => ['Secondary', 'supporting accents'], 'tertiary' => ['Tertiary', 'the "today / current" highlight']] as $themeKey => $themeInfo): ?>
+              <tr>
+                <td><strong><?php echo $themeInfo[0]; ?></strong><br><small><?php echo $themeInfo[1]; ?></small></td>
+                <td><input type="color" id="theme_<?php echo $themeKey; ?>" name="theme_<?php echo $themeKey; ?>" value="<?php echo htmlspecialchars($themeValues['theme_' . $themeKey]); ?>" data-default="<?php echo htmlspecialchars($themeDefaults['theme_' . $themeKey]); ?>"></td>
+                <td><input type="color" id="theme_<?php echo $themeKey; ?>_dark" name="theme_<?php echo $themeKey; ?>_dark" value="<?php echo htmlspecialchars($themeValues['theme_' . $themeKey . '_dark']); ?>" data-default="<?php echo htmlspecialchars($themeDefaults['theme_' . $themeKey . '_dark']); ?>"></td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
+      <small id="themeContrastWarning" style="display:none; color:#b45309;"></small>
+
+      <label for="theme_font">Font</label>
+      <select id="theme_font" name="theme_font">
+        <?php foreach ($themeFonts as $fontKey => $fontInfo): ?>
+          <option value="<?php echo htmlspecialchars($fontKey); ?>" data-stack="<?php echo htmlspecialchars($fontInfo['stack']); ?>" data-google="<?php echo htmlspecialchars((string) $fontInfo['google']); ?>"<?php echo $themeValues['theme_font'] === $fontKey ? ' selected' : ''; ?>><?php echo htmlspecialchars($fontInfo['label']); ?></option>
+        <?php endforeach; ?>
+      </select>
+      <small>Fonts other than the system ones are loaded from Google Fonts.</small>
+
+      <div id="themePreview" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin:16px 0;">
+        <div class="theme-preview-panel" data-mode="light" style="padding:16px; border-radius:12px; border:1px solid #d9dee8; background:#f4f7fb; color:#0f172a;">
+          <strong>Day preview</strong>
+          <p style="margin:8px 0;">Sample text with a <a href="#" onclick="return false;" class="theme-preview-link">link</a>.</p>
+          <span class="theme-preview-primary" style="display:inline-block; padding:6px 14px; border-radius:999px; color:#fff; font-weight:700;">Primary</span>
+          <span class="theme-preview-secondary" style="display:inline-block; padding:6px 14px; border-radius:999px; color:#fff; font-weight:700;">Secondary</span>
+          <span class="theme-preview-tertiary" style="display:inline-block; padding:6px 14px; border-radius:999px; color:#111; font-weight:700;">Tertiary</span>
+        </div>
+        <div class="theme-preview-panel" data-mode="dark" style="padding:16px; border-radius:12px; border:1px solid #1e293b; background:#0b1220; color:#f3f6fb;">
+          <strong>Night preview</strong>
+          <p style="margin:8px 0;">Sample text with a <a href="#" onclick="return false;" class="theme-preview-link">link</a>.</p>
+          <span class="theme-preview-primary" style="display:inline-block; padding:6px 14px; border-radius:999px; color:#0b1220; font-weight:700;">Primary</span>
+          <span class="theme-preview-secondary" style="display:inline-block; padding:6px 14px; border-radius:999px; color:#0b1220; font-weight:700;">Secondary</span>
+          <span class="theme-preview-tertiary" style="display:inline-block; padding:6px 14px; border-radius:999px; color:#0b1220; font-weight:700;">Tertiary</span>
+        </div>
+      </div>
+
+      <input type="hidden" name="tab" value="theme">
+      <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
+      <div style="display:flex; gap:12px; flex-wrap:wrap;">
+        <button type="submit">Save Theme</button>
+        <button type="button" id="themeResetBtn" class="secondary">Reset to defaults</button>
+      </div>
+      <small>Changes apply the next time a page loads. "Reset to defaults" fills in the original colours and font; press Save to apply.</small>
+      <div id="themeMsg"></div>
+    </form>
+  </section>
+
+  <script>
+  (function () {
+    const form = document.getElementById('themeForm');
+    if (!form) return;
+    const fontSel = document.getElementById('theme_font');
+    const warn = document.getElementById('themeContrastWarning');
+    const panels = form.querySelectorAll('.theme-preview-panel');
+
+    function luminance(hex) {
+      const v = [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16) / 255).map(c => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+      return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
+    }
+    function contrastWithWhite(hex) { return 1.05 / (luminance(hex) + 0.05); }
+
+    function refresh() {
+      panels.forEach(function (panel) {
+        const sfx = panel.dataset.mode === 'dark' ? '_dark' : '';
+        const p = document.getElementById('theme_primary' + sfx).value;
+        const s = document.getElementById('theme_secondary' + sfx).value;
+        const t = document.getElementById('theme_tertiary' + sfx).value;
+        panel.querySelector('.theme-preview-primary').style.background = p;
+        panel.querySelector('.theme-preview-secondary').style.background = s;
+        panel.querySelector('.theme-preview-tertiary').style.background = t;
+        panel.querySelector('.theme-preview-link').style.color = p;
+        const opt = fontSel.options[fontSel.selectedIndex];
+        panel.style.fontFamily = opt ? opt.dataset.stack : '';
+      });
+      const ratio = contrastWithWhite(document.getElementById('theme_primary').value);
+      warn.style.display = ratio < 3 ? '' : 'none';
+      warn.textContent = ratio < 3 ? 'The day primary colour is quite light for white button text (contrast ' + ratio.toFixed(1) + ':1). Consider a darker colour.' : '';
+    }
+
+    function loadPreviewFont() {
+      const opt = fontSel.options[fontSel.selectedIndex];
+      let link = document.getElementById('themePreviewFont');
+      if (opt && opt.dataset.google) {
+        if (!link) { link = document.createElement('link'); link.id = 'themePreviewFont'; link.rel = 'stylesheet'; document.head.appendChild(link); }
+        link.href = 'https://fonts.googleapis.com/css2?family=' + opt.dataset.google + '&display=swap';
+      } else if (link) { link.remove(); }
+    }
+
+    form.addEventListener('input', refresh);
+    fontSel.addEventListener('change', function () { loadPreviewFont(); refresh(); });
+    document.getElementById('themeResetBtn').addEventListener('click', function () {
+      form.querySelectorAll('input[type="color"]').forEach(function (el) { el.value = el.dataset.default; });
+      fontSel.value = 'default';
+      loadPreviewFont();
+      refresh();
+    });
+    loadPreviewFont();
+    refresh();
+  })();
+  </script>
 
   <!-- CUSTOMER REGISTRATION TAB -->
   <section id="tab-customer_registration" class="tab-panel">
@@ -911,7 +1028,7 @@ setupFieldDependencies('booking_email');
 setupFieldDependencies('booking_phone');
 
 // Form submission handlers for inline messages
-['generalForm', 'customerRegistrationForm', 'bookingForm', 'authenticationForm', 'phpmailerForm', 'changePasswordForm'].forEach(formId => {
+['generalForm', 'customerRegistrationForm', 'bookingForm', 'authenticationForm', 'phpmailerForm', 'changePasswordForm', 'themeForm'].forEach(formId => {
   const form = document.getElementById(formId);
   const msgDiv = document.getElementById(formId.replace('Form', 'Msg'));
   if (!form || !msgDiv || form.__inlineStatusAttached) return;
@@ -1260,7 +1377,7 @@ async function loadSessions() {
     rows.forEach(s => {
       const isCurrent = s.is_current == 1;
       const ua = parseUserAgent(s.user_agent || '');
-      html += '<tr style="' + (isCurrent ? 'background:rgba(36,87,255,0.06);' : '') + '">'
+      html += '<tr style="' + (isCurrent ? 'background:rgba(var(--accent-rgb, 36, 87, 255),0.06);' : '') + '">'
         + '<td style="padding:8px; border-bottom:1px solid #eee;">' + htmlspecialchars (s.ip_address) + '</td>'
         + '<td style="padding:8px; border-bottom:1px solid #eee;"><span title="' + htmlspecialchars (s.user_agent) + '">' + htmlspecialchars (ua) + '</span></td>'
         + '<td style="padding:8px; border-bottom:1px solid #eee;">' + htmlspecialchars (s.created_at) + '</td>'

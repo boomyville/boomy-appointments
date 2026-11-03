@@ -138,7 +138,7 @@ $orgPhone = get_setting('organization_number', '');
       margin: 0;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
       background:
-        radial-gradient(circle at top left, rgba(36,87,255,.18), transparent 28%),
+        radial-gradient(circle at top left, rgba(var(--accent-rgb, 36, 87, 255),.18), transparent 28%),
         radial-gradient(circle at 85% 18%, rgba(245,158,11,.14), transparent 24%),
         var(--bg);
       color: var(--text);
@@ -213,6 +213,7 @@ $orgPhone = get_setting('organization_number', '');
     .success-text { color: var(--success); }
     .danger-text   { color: var(--danger); }
   </style>
+<?php render_theme_head(); ?>
 </head>
 <body>
 <div class="card">

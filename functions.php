@@ -1211,6 +1211,378 @@ function format_appointment_person_name(?array $person): string
     return trim((string) ($person['email'] ?? ''));
 }
 
+// ============================================================
+// Theme: colours (day + night) and font, set in Settings > Theme.
+// Only values that differ from the defaults are stored, so an untouched install looks exactly as before.
+// ============================================================
+
+function theme_defaults(): array
+{
+    return [
+        'theme_primary'        => '#2457ff',
+        'theme_secondary'      => '#10b981',
+        'theme_tertiary'       => '#f59e0b',
+        'theme_primary_dark'   => '#7ca2ff',
+        'theme_secondary_dark' => '#34d399',
+        'theme_tertiary_dark'  => '#fbbf24',
+        'theme_font'           => 'default',
+    ];
+}
+
+// key => label, CSS font stack, and the Google Fonts family spec (null = installed system font)
+function theme_font_options(): array
+{
+    $sys = 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    return [
+        'default'     => ['label' => 'App default (Inter if installed, else system)', 'stack' => 'Inter, ' . $sys, 'google' => null],
+        'system'      => ['label' => 'System UI',                'stack' => $sys . ', Roboto',                                                         'google' => null],
+        'helvetica'   => ['label' => 'Helvetica',                'stack' => '"Helvetica Neue", Helvetica, Arial, sans-serif',                         'google' => null],
+        'trebuchet'   => ['label' => 'Trebuchet MS',             'stack' => '"Trebuchet MS", "Lucida Grande", "Lucida Sans Unicode", Tahoma, sans-serif', 'google' => null],
+        'verdana'     => ['label' => 'Verdana',                  'stack' => 'Verdana, Geneva, sans-serif',                                            'google' => null],
+        'georgia'     => ['label' => 'Georgia (serif)',          'stack' => 'Georgia, "Times New Roman", Times, serif',                               'google' => null],
+        'fira_sans'   => ['label' => 'Fira Sans',                'stack' => '"Fira Sans", ' . $sys,                                                   'google' => 'Fira+Sans:wght@400;500;600;700'],
+        'kreon'       => ['label' => 'Kreon (slab serif)',       'stack' => 'Kreon, Georgia, "Times New Roman", serif',                               'google' => 'Kreon:wght@400;500;600;700'],
+        'inter'       => ['label' => 'Inter',                    'stack' => 'Inter, ' . $sys,                                                         'google' => 'Inter:wght@400;500;600;700'],
+        'roboto'      => ['label' => 'Roboto',                   'stack' => 'Roboto, ' . $sys,                                                        'google' => 'Roboto:wght@400;500;700'],
+        'open_sans'   => ['label' => 'Open Sans',                'stack' => '"Open Sans", ' . $sys,                                                   'google' => 'Open+Sans:wght@400;600;700'],
+        'lato'        => ['label' => 'Lato',                     'stack' => 'Lato, ' . $sys,                                                          'google' => 'Lato:wght@400;700'],
+        'montserrat'  => ['label' => 'Montserrat',               'stack' => 'Montserrat, ' . $sys,                                                    'google' => 'Montserrat:wght@400;500;600;700'],
+        'poppins'     => ['label' => 'Poppins',                  'stack' => 'Poppins, ' . $sys,                                                       'google' => 'Poppins:wght@400;500;600;700'],
+        'nunito'      => ['label' => 'Nunito',                   'stack' => 'Nunito, ' . $sys,                                                        'google' => 'Nunito:wght@400;600;700'],
+        'source_sans' => ['label' => 'Source Sans 3',            'stack' => '"Source Sans 3", ' . $sys,                                               'google' => 'Source+Sans+3:wght@400;600;700'],
+    ];
+}
+
+// '#abc' / '#AABBCC' -> '#aabbcc', anything else -> null
+function theme_normalize_hex(?string $value): ?string
+{
+    $v = strtolower(trim((string) $value));
+    if (preg_match('/^#([0-9a-f])([0-9a-f])([0-9a-f])$/', $v, $m)) {
+        return '#' . $m[1] . $m[1] . $m[2] . $m[2] . $m[3] . $m[3];
+    }
+    return preg_match('/^#[0-9a-f]{6}$/', $v) ? $v : null;
+}
+
+function theme_hex_to_rgb(string $hex): array
+{
+    return [hexdec(substr($hex, 1, 2)), hexdec(substr($hex, 3, 2)), hexdec(substr($hex, 5, 2))];
+}
+
+// Moves $hex toward $target by $ratio (0..1)
+function theme_mix_hex(string $hex, string $target, float $ratio): string
+{
+    $a = theme_hex_to_rgb($hex);
+    $b = theme_hex_to_rgb($target);
+    $out = '#';
+    for ($i = 0; $i < 3; $i++) {
+        $out .= str_pad(dechex((int) round($a[$i] + ($b[$i] - $a[$i]) * $ratio)), 2, '0', STR_PAD_LEFT);
+    }
+    return $out;
+}
+
+// Effective theme: ['values' => all 7 settings (saved or default), 'custom' => keys that differ from default, 'defaults' => ...]
+function get_theme_settings(): array
+{
+    static $cache = null;
+    if ($cache !== null) {
+        return $cache;
+    }
+    $defaults = theme_defaults();
+    $fonts = theme_font_options();
+    $values = $defaults;
+    $custom = [];
+    $saved = [];
+    try {
+        $stmt = get_db()->query("SELECT setting_key, setting_value FROM settings WHERE setting_key LIKE 'theme\\_%'");
+        $saved = $stmt ? $stmt->fetchAll(PDO::FETCH_KEY_PAIR) : [];
+    } catch (Throwable $e) {
+        $saved = [];
+    }
+    foreach ($defaults as $key => $default) {
+        $raw = trim((string) ($saved[$key] ?? ''));
+        if ($key === 'theme_font') {
+            if ($raw !== '' && isset($fonts[$raw]) && $raw !== $default) {
+                $values[$key] = $raw;
+                $custom[$key] = true;
+            }
+        } else {
+            $hex = theme_normalize_hex($raw);
+            if ($hex !== null && $hex !== $default) {
+                $values[$key] = $hex;
+                $custom[$key] = true;
+            }
+        }
+    }
+    return $cache = ['values' => $values, 'custom' => $custom, 'defaults' => $defaults];
+}
+
+// Settings form POST -> values to store. Anything invalid or equal to the default is stored as '' (= use default).
+function sanitize_theme_post(array $data): array
+{
+    $fonts = theme_font_options();
+    $out = [];
+    foreach (theme_defaults() as $key => $default) {
+        $raw = trim((string) ($data[$key] ?? ''));
+        if ($key === 'theme_font') {
+            $out[$key] = ($raw !== $default && isset($fonts[$raw])) ? $raw : '';
+        } else {
+            $hex = theme_normalize_hex($raw);
+            $out[$key] = ($hex !== null && $hex !== $default) ? $hex : '';
+        }
+    }
+    return $out;
+}
+
+function theme_mode_declarations(array $theme, string $mode): string
+{
+    $v = $theme['values'];
+    $c = $theme['custom'];
+    $sfx = $mode === 'dark' ? '_dark' : '';
+    $out = '';
+
+    if (isset($c['theme_primary' . $sfx])) {
+        $p = $v['theme_primary' . $sfx];
+        [$r, $g, $b] = theme_hex_to_rgb($p);
+        $strong = $mode === 'dark' ? theme_mix_hex($p, '#ffffff', 0.26) : theme_mix_hex($p, '#000000', 0.35);
+        $soft = 'rgba(' . $r . ',' . $g . ',' . $b . ',' . ($mode === 'dark' ? '0.16' : '0.12') . ')';
+        $out .= '--accent:' . $p . ';--accent-strong:' . $strong . ';--accent-soft:' . $soft . ';--accent-rgb:' . $r . ',' . $g . ',' . $b . ';--selected:' . $p . ';'
+            . '--pico-primary:' . $p . ';--pico-primary-background:' . $p . ';--pico-primary-border:' . $p . ';'
+            . '--pico-primary-underline:rgba(' . $r . ',' . $g . ',' . $b . ',0.5);'
+            . '--pico-primary-hover:' . $strong . ';--pico-primary-hover-background:' . $strong . ';--pico-primary-hover-border:' . $strong . ';--pico-primary-hover-underline:' . $strong . ';'
+            . '--pico-primary-focus:rgba(' . $r . ',' . $g . ',' . $b . ',0.25);';
+    }
+    if (isset($c['theme_secondary' . $sfx])) {
+        $out .= '--accent-2:' . $v['theme_secondary' . $sfx] . ';';
+    }
+    if (isset($c['theme_tertiary' . $sfx])) {
+        $t = $v['theme_tertiary' . $sfx];
+        $out .= '--accent-3:' . $t . ';--current:' . $t . ';';
+    }
+    return $out;
+}
+
+// The CSS that overrides each page's own variables. Empty string when nothing is customised.
+function build_theme_css(array $theme): string
+{
+    $light = theme_mode_declarations($theme, 'light');
+    $dark = theme_mode_declarations($theme, 'dark');
+    $css = '';
+
+    // Admin pages set data-theme via the toggle; public pages follow the visitor's OS setting.
+    if ($light !== '') {
+        $css .= 'html:root[data-theme="light"]{' . $light . '}';
+        $css .= '@media (prefers-color-scheme: light){html:root:not([data-theme]){' . $light . '}}';
+    }
+    if ($dark !== '') {
+        $css .= 'html:root[data-theme="dark"]{' . $dark . '}';
+        $css .= '@media (prefers-color-scheme: dark){html:root:not([data-theme]){' . $dark . '}}';
+    }
+
+    if (isset($theme['custom']['theme_font'])) {
+        $fonts = theme_font_options();
+        $stack = $fonts[$theme['values']['theme_font']]['stack'] ?? '';
+        if ($stack !== '') {
+            $css .= ':root{--theme-font:' . $stack . ';--font-family:' . $stack . ';--pico-font-family:' . $stack . ';--pico-font-family-sans-serif:' . $stack . ';}';
+            $css .= 'html body,html button,html input,html select,html textarea,html option{font-family:var(--theme-font);}';
+        }
+    }
+    return $css;
+}
+
+// Call once just before </head> on every page (after the page's own <style>).
+function render_theme_head(): void
+{
+    try {
+        $theme = get_theme_settings();
+        if (isset($theme['custom']['theme_font'])) {
+            $google = theme_font_options()[$theme['values']['theme_font']]['google'] ?? null;
+            if ($google) {
+                echo '<link rel="preconnect" href="https://fonts.googleapis.com">' . "\n";
+                echo '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' . "\n";
+                echo '<link rel="stylesheet" href="' . htmlspecialchars('https://fonts.googleapis.com/css2?family=' . $google . '&display=swap', ENT_QUOTES, 'UTF-8') . '">' . "\n";
+            }
+        }
+        $css = build_theme_css($theme);
+        if ($css !== '') {
+            echo '<style id="app-theme">' . $css . '</style>' . "\n";
+        }
+    } catch (Throwable $e) {
+        error_log('render_theme_head failed: ' . $e->getMessage());
+    }
+}
+
+// Emails cannot use CSS variables, so they use the day-mode primary colour directly.
+function theme_email_primary(): string
+{
+    return get_theme_settings()['values']['theme_primary'];
+}
+
+function theme_email_tint(float $alpha): string
+{
+    [$r, $g, $b] = theme_hex_to_rgb(theme_email_primary());
+    return 'rgba(' . $r . ',' . $g . ',' . $b . ',' . $alpha . ')';
+}
+
+// ============================================================
+// Other appointments on the same day for the same email address
+// (listed in the verification and confirmation emails)
+// ============================================================
+
+function describe_same_day_appointment(array $row, DateTimeImmutable $now, DateTimeZone $timezone): array
+{
+    $start = new DateTimeImmutable((string) $row['start_time'], $timezone);
+    $end = new DateTimeImmutable((string) ($row['end_time'] ?? $row['start_time']), $timezone);
+    $status = strtolower(trim((string) ($row['status'] ?? '')));
+    $hashKey = trim((string) ($row['hash_key'] ?? ''));
+    $upcoming = $start > $now;
+
+    $statusLabels = [
+        'unconfirmed' => 'Awaiting email verification',
+        'booked'      => 'Booked',
+        'confirmed'   => 'Confirmed',
+        'present'     => 'Arrived',
+        'completed'   => 'Completed',
+        'no_show'     => 'Missed',
+    ];
+
+    $type = get_appointment_type_by_id((int) ($row['appointment_type_id'] ?? 0));
+    $provider = get_user_by_id((int) ($row['provider_id'] ?? 0));
+    $customerName = trim((string) ($row['full_name'] ?? ''));
+
+    return [
+        'id'            => (int) ($row['id'] ?? 0),
+        'hash_key'      => $hashKey,
+        'status'        => $status,
+        'status_label'  => $statusLabels[$status] ?? ucfirst(str_replace('_', ' ', $status)),
+        'start_time'    => (string) $row['start_time'],
+        'time_label'    => $start->format('g:i A') . ' - ' . $end->format('g:i A'),
+        'customer_name' => $customerName !== '' ? $customerName : 'Customer',
+        'type_name'     => trim((string) ($type['name'] ?? 'Appointment')),
+        'provider_name' => format_appointment_person_name($provider) ?: 'Not recorded',
+        // Appointments awaiting email verification can only be handled from their own verification email
+        'can_confirm'   => $upcoming && $hashKey !== '' && $status === 'booked',
+        'can_delete'    => $upcoming && $hashKey !== '' && in_array($status, ['booked', 'confirmed'], true),
+        'is_current'    => false,
+    ];
+}
+
+// Other (non-cancelled) appointments on the same day booked under the same email address
+function get_same_day_appointments_for_email(array $appointment): array
+{
+    try {
+        $customer = get_customer_by_id((int) ($appointment['customer_id'] ?? 0));
+        $email = strtolower(trim((string) ($customer['email'] ?? '')));
+        $startRaw = trim((string) ($appointment['start_time'] ?? ''));
+        if ($email === '' || $startRaw === '') {
+            return [];
+        }
+
+        $timezone = new DateTimeZone(get_app_timezone_name());
+        $dayStart = (new DateTimeImmutable($startRaw, $timezone))->setTime(0, 0, 0);
+        $dayEnd = $dayStart->modify('+1 day');
+        $now = new DateTimeImmutable('now', $timezone);
+
+        $stmt = get_db()->prepare("SELECT a.id, a.start_time, a.end_time, a.status, a.hash_key, a.provider_id, a.appointment_type_id, c.full_name
+            FROM appointments a
+            JOIN customers c ON c.id = a.customer_id
+            WHERE LOWER(c.email) = ? AND a.start_time >= ? AND a.start_time < ? AND a.id <> ? AND a.status <> 'cancelled'
+            ORDER BY a.start_time ASC, a.id ASC");
+        $stmt->execute([$email, $dayStart->format('Y-m-d H:i:s'), $dayEnd->format('Y-m-d H:i:s'), (int) ($appointment['id'] ?? 0)]);
+
+        $out = [];
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+            $out[] = describe_same_day_appointment($row, $now, $timezone);
+        }
+        return $out;
+    } catch (Throwable $e) {
+        error_log('get_same_day_appointments_for_email failed: ' . $e->getMessage());
+        return [];
+    }
+}
+
+// Builds the "other appointments today" section for an email. Returns ['html', 'plain', 'count'].
+// With $withActions (confirmation email) every actionable appointment gets Confirm / Delete buttons,
+// plus "all" buttons that put every code in one link (confirm_appointment.php?code=HASH1,HASH2,...).
+function build_same_day_appointments_email_block(array $appointment, bool $withActions): array
+{
+    $empty = ['html' => '', 'plain' => '', 'count' => 0];
+    $others = get_same_day_appointments_for_email($appointment);
+    if (!$others) {
+        return $empty;
+    }
+
+    $esc = fn($v): string => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+    $rows = $others;
+
+    if ($withActions) {
+        $timezone = new DateTimeZone(get_app_timezone_name());
+        $customer = get_customer_by_id((int) ($appointment['customer_id'] ?? 0));
+        $current = describe_same_day_appointment(
+            array_merge($appointment, ['full_name' => $customer['full_name'] ?? '']),
+            new DateTimeImmutable('now', $timezone),
+            $timezone
+        );
+        $current['is_current'] = true;
+        $rows[] = $current;
+        usort($rows, fn(array $a, array $b): int => strcmp($a['start_time'], $b['start_time']) ?: ($a['id'] <=> $b['id']));
+    }
+
+    $dayLabel = format_app_datetime((string) $appointment['start_time'], 'l j F Y');
+    $actionable = array_values(array_filter($rows, fn(array $r): bool => $r['can_delete']));
+    $allCodes = implode(',', array_column($actionable, 'hash_key'));
+
+    $btn = 'display:inline-block;padding:7px 14px;border-radius:999px;text-decoration:none;font-weight:700;font-size:13px;margin:2px 4px 2px 0;';
+    $confirmStyle = $btn . 'background:' . theme_email_primary() . ';color:#ffffff;';
+    $deleteStyle = $btn . 'background:#ffffff;color:#b91c1c;border:1px solid #b91c1c;';
+
+    $intro = $withActions
+        ? 'More than one appointment is booked with this email address on ' . $dayLabel . '. You can confirm or delete them individually or all together.'
+        : 'Other appointments are already booked with this email address on ' . $dayLabel . '.';
+
+    $html = '<h3>' . $esc($withActions ? 'Your appointments on ' . $dayLabel : 'Other appointments on ' . $dayLabel) . '</h3>'
+        . '<p>' . $esc($intro) . '</p>'
+        . '<table role="presentation" style="border-collapse:collapse;width:100%;">';
+    $plain = $intro . "\n\n";
+
+    foreach ($rows as $r) {
+        $title = $r['customer_name'] . ($r['is_current'] ? ' (this booking)' : '');
+        $html .= '<tr style="border-top:1px solid #e5e7eb;">'
+            . '<td style="padding:10px 12px 10px 0;vertical-align:top;white-space:nowrap;"><strong>' . $esc($r['time_label']) . '</strong></td>'
+            . '<td style="padding:10px 12px 10px 0;vertical-align:top;"><strong>' . $esc($title) . '</strong><br>'
+            . $esc($r['type_name'] . ' with ' . $r['provider_name']) . '<br>'
+            . '<span style="color:#6b7280;">' . $esc($r['status_label']) . '</span></td>';
+        $plain .= '- ' . $r['time_label'] . ': ' . $title . ' (' . $r['type_name'] . ' with ' . $r['provider_name'] . ') [' . $r['status_label'] . "]\n";
+
+        if ($withActions) {
+            $cells = '';
+            if ($r['can_confirm']) {
+                $url = build_app_url('confirm_appointment.php', ['code' => $r['hash_key']]);
+                $cells .= '<a href="' . $esc($url) . '" style="' . $confirmStyle . '">Confirm</a>';
+                $plain .= '    Confirm ' . $r['customer_name'] . ': ' . $url . "\n";
+            }
+            if ($r['can_delete']) {
+                $url = build_app_url('confirm_appointment.php', ['code' => $r['hash_key']]);
+                $cells .= '<a href="' . $esc($url) . '" style="' . $deleteStyle . '">Delete</a>';
+                $plain .= '    Delete ' . $r['customer_name'] . ': ' . $url . "\n";
+            }
+            $html .= '<td style="padding:10px 0;vertical-align:top;">' . $cells . '</td>';
+        }
+        $html .= '</tr>';
+    }
+    $html .= '</table>';
+
+    if ($withActions && count($actionable) >= 2) {
+        $allUrl = build_app_url('confirm_appointment.php', ['code' => $allCodes]);
+        $html .= '<p style="margin-top:14px;"><strong>All ' . count($actionable) . ' appointments:</strong><br>'
+            . '<a href="' . $esc($allUrl) . '" style="' . $confirmStyle . '">Confirm all ' . count($actionable) . '</a>'
+            . '<a href="' . $esc($allUrl) . '" style="' . $deleteStyle . '">Delete all ' . count($actionable) . '</a></p>'
+            . '<p style="font-size:13px;color:#6b7280;">Both buttons open a page where you review the appointments before anything changes.</p>';
+        $plain .= "\nAll " . count($actionable) . ' appointments (opens a page where you confirm or delete them): ' . $allUrl . "\n";
+    }
+
+    return ['html' => $html, 'plain' => $plain . "\n", 'count' => count($others)];
+}
+
 function send_appointment_confirmation_email(int $appointmentId): array
 {
     if (!email_transport_is_ready()) {
@@ -1264,6 +1636,7 @@ function send_appointment_confirmation_email(int $appointmentId): array
     $providerDisplay = $providerName !== '' ? $providerName : 'Not recorded';
     $customerMobileDisplay = $customerMobile !== '' ? $customerMobile : 'Not recorded';
     $customMessage = trim((string) get_setting('confirmation_email_message', ''));
+    $sameDay = build_same_day_appointments_email_block($appointment, true);
 
     $subject = 'Your appointment has been successfully booked for ' . $siteName;
     $body_html = '<h2>Your appointment has been successfully booked for ' . htmlspecialchars($siteName, ENT_QUOTES, 'UTF-8') . '</h2>'
@@ -1280,8 +1653,9 @@ function send_appointment_confirmation_email(int $appointmentId): array
         . '<li><strong>Customer full name:</strong> ' . htmlspecialchars($customerName !== '' ? $customerName : 'Not recorded', ENT_QUOTES, 'UTF-8') . '</li>'
         . '<li><strong>Mobile number:</strong> ' . htmlspecialchars($customerMobileDisplay, ENT_QUOTES, 'UTF-8') . '</li>'
         . '</ul>'
+        . $sameDay['html']
         . ($customMessage !== '' ? '<p>' . nl2br(htmlspecialchars($customMessage, ENT_QUOTES, 'UTF-8')) . '</p>' : '')
-        . '<p><a href="' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '" style="background-color:#2457ff;color:#ffffff;padding:12px 20px;text-decoration:none;border-radius:999px;display:inline-block;font-weight:700;">Confirm or modify your appointment</a></p>'
+        . '<p><a href="' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '" style="background-color:' . theme_email_primary() . ';color:#ffffff;padding:12px 20px;text-decoration:none;border-radius:999px;display:inline-block;font-weight:700;">Confirm or modify your appointment</a></p>'
         . '<p>Or copy this link: ' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '</p>';
 
     $body_plain = "Your appointment has been successfully booked for {$siteName}\n\n"
@@ -1294,6 +1668,7 @@ function send_appointment_confirmation_email(int $appointmentId): array
         . "Customer details:\n"
         . "Customer full name: " . ($customerName !== '' ? $customerName : 'Not recorded') . "\n"
         . "Mobile number: {$customerMobileDisplay}\n\n"
+        . $sameDay['plain']
         . ($customMessage !== '' ? "{$customMessage}\n\n" : '')
         . "Confirm or modify your appointment: {$appointmentUrl}\n";
 

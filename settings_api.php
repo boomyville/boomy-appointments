@@ -164,6 +164,7 @@ try {
         // Allowed fields array mapping structure
         $allowed = [
             'general' => ['site_name', 'root_url', 'organization_email', 'organization_number', 'date_format'],
+            'theme' => array_keys(theme_defaults()),
             'customer_registration' => [
                 'booking_firstname_display', 'booking_firstname_required', 'booking_firstname_letters_only', 'booking_firstname_min', 'booking_firstname_max',
                 'booking_lastname_display', 'booking_lastname_required', 'booking_lastname_letters_only', 'booking_lastname_min', 'booking_lastname_max',
@@ -435,6 +436,11 @@ try {
             $data['user_questions'] = json_encode(parse_user_questions_text((string) $data['user_questions_text']), JSON_UNESCAPED_UNICODE);
         }
 
+        // Theme: validate colours/font; invalid or default values are stored as '' (= use the default)
+        if ($tab === 'theme') {
+            $data = array_merge($data, sanitize_theme_post($data));
+        }
+
         // Processing Loop
         foreach ($fields_to_save as $k) {
             $isCheckbox = (
@@ -484,6 +490,8 @@ try {
             $message = 'Reminder settings saved successfully';
         } elseif ($tab === 'cron') {
             $message = 'Cron security settings saved successfully';
+        } elseif ($tab === 'theme') {
+            $message = 'Theme saved. Reload any open pages to see it.';
         }
 
 

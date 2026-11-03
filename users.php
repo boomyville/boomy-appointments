@@ -60,7 +60,7 @@ if ($role !== 'admin') {
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--text);
       background:
-        radial-gradient(circle at top left, rgba(36, 87, 255, 0.14), transparent 35%),
+        radial-gradient(circle at top left, rgba(var(--accent-rgb, 36, 87, 255), 0.14), transparent 35%),
         radial-gradient(circle at top right, rgba(16, 185, 129, 0.12), transparent 28%),
         linear-gradient(180deg, var(--bg) 0%, var(--bg) 100%);
     }
@@ -161,8 +161,8 @@ if ($role !== 'admin') {
     }
 
     .search-box input:focus {
-      outline: 3px solid rgba(36, 87, 255, 0.14);
-      border-color: rgba(36, 87, 255, 0.5);
+      outline: 3px solid rgba(var(--accent-rgb, 36, 87, 255), 0.14);
+      border-color: rgba(var(--accent-rgb, 36, 87, 255), 0.5);
     }
 
     .search-box button {
@@ -201,7 +201,7 @@ if ($role !== 'admin') {
     }
 
     .users-table tbody tr:hover {
-      background: rgba(36, 87, 255, 0.03);
+      background: rgba(var(--accent-rgb, 36, 87, 255), 0.03);
     }
 
     .status-badge {
@@ -230,7 +230,7 @@ if ($role !== 'admin') {
       border-radius: 999px;
       font-size: 0.85rem;
       font-weight: 600;
-      background: rgba(36, 87, 255, 0.12);
+      background: rgba(var(--accent-rgb, 36, 87, 255), 0.12);
       color: #1e3a8a;
     }
 
@@ -300,8 +300,8 @@ if ($role !== 'admin') {
     }
 
     .search-row input:focus {
-      outline: 3px solid rgba(36, 87, 255, 0.14);
-      border-color: rgba(36, 87, 255, 0.5);
+      outline: 3px solid rgba(var(--accent-rgb, 36, 87, 255), 0.14);
+      border-color: rgba(var(--accent-rgb, 36, 87, 255), 0.5);
     }
 
     .search-row button {
@@ -470,7 +470,7 @@ if ($role !== 'admin') {
 
     .field input:focus,
     .field select:focus {
-      outline: 3px solid rgba(36, 87, 255, 0.24);
+      outline: 3px solid rgba(var(--accent-rgb, 36, 87, 255), 0.24);
       border-color: var(--accent);
     }
 
@@ -505,8 +505,8 @@ if ($role !== 'admin') {
     }
 
     .alert.info {
-      background: rgba(36, 87, 255, 0.08);
-      border: 1px solid rgba(36, 87, 255, 0.2);
+      background: rgba(var(--accent-rgb, 36, 87, 255), 0.08);
+      border: 1px solid rgba(var(--accent-rgb, 36, 87, 255), 0.2);
       color: var(--text);
     }
 
@@ -522,6 +522,7 @@ if ($role !== 'admin') {
       color: #10b981;
     }
   </style>
+<?php render_theme_head(); ?>
 </head>
 <body>
   <?php $current_page = 'users.php'; include __DIR__ . '/assets/nav.html'; ?>

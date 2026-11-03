@@ -32,14 +32,14 @@ if ($siteName === '') {
       align-items: center;
       position: relative;
       overflow: hidden;
-      background: linear-gradient(-45deg, #f4f7fb, #eef2f7, rgba(36, 87, 255, 0.08), rgba(245, 158, 11, 0.06));
+      background: linear-gradient(-45deg, #f4f7fb, #eef2f7, rgba(var(--accent-rgb, 36, 87, 255), 0.08), rgba(245, 158, 11, 0.06));
       background-size: 400% 400%;
       animation: gradientFlow 15s ease infinite;
     }
 
     @media (prefers-color-scheme: dark) {
       body {
-        background: linear-gradient(-45deg, #0b1220, #0f172a, rgba(36, 87, 255, 0.15), rgba(15, 23, 42, 0.8));
+        background: linear-gradient(-45deg, #0b1220, #0f172a, rgba(var(--accent-rgb, 36, 87, 255), 0.15), rgba(15, 23, 42, 0.8));
         background-size: 400% 400%;
         animation: gradientFlow 15s ease infinite;
       }
@@ -82,8 +82,8 @@ if ($siteName === '') {
       display: inline-flex;
       padding: 6px 16px;
       border-radius: 999px;
-      background: rgba(36, 87, 255, 0.08);
-      color: #2457ff;
+      background: rgba(var(--accent-rgb, 36, 87, 255), 0.08);
+      color: var(--accent, #2457ff);
       font-size: 0.85rem;
       font-weight: 700;
       letter-spacing: 0.05em;
@@ -119,7 +119,7 @@ if ($siteName === '') {
         color: #a8b3c7;
       }
       .splash-title {
-        color: #2457ff;
+        color: var(--accent, #2457ff);
       }
     }
 
@@ -133,16 +133,16 @@ if ($siteName === '') {
       font-size: 1.1rem;
       font-weight: 700;
       border-radius: 999px;
-      background: linear-gradient(135deg, #2457ff, #1639b5);
+      background: linear-gradient(135deg, var(--accent, #2457ff), var(--accent-strong, #1639b5));
       color: #ffffff;
       text-decoration: none;
-      box-shadow: 0 8px 24px rgba(36, 87, 255, 0.25);
+      box-shadow: 0 8px 24px rgba(var(--accent-rgb, 36, 87, 255), 0.25);
       transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
 
     .btn-grand:hover {
       transform: translateY(-2px);
-      box-shadow: 0 12px 32px rgba(36, 87, 255, 0.4);
+      box-shadow: 0 12px 32px rgba(var(--accent-rgb, 36, 87, 255), 0.4);
       color: #ffffff;
     }
 
@@ -176,6 +176,7 @@ if ($siteName === '') {
       }
     }
   </style>
+<?php render_theme_head(); ?>
 </head>
 <body>
 

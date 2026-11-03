@@ -2,3 +2,5 @@ config.php
 adminer.php
 manager.php
 /design
+vendor/
+.phpunit.cache/

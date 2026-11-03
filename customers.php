@@ -51,7 +51,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--text);
       background:
-        radial-gradient(circle at top left, rgba(36, 87, 255, 0.14), transparent 35%),
+        radial-gradient(circle at top left, rgba(var(--accent-rgb, 36, 87, 255), 0.14), transparent 35%),
         radial-gradient(circle at top right, rgba(16, 185, 129, 0.12), transparent 28%),
         linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
     }
@@ -109,7 +109,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
 
     .field label { display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: var(--label); }
     .field input, .field textarea, .field select { width: 100%; border: 1px solid rgba(15, 23, 42, 0.15); border-radius: 14px; padding: 10px 12px; font: inherit; color: var(--text); background: var(--panel); box-sizing: border-box; font-size: 0.92rem; }
-    .field input:focus, .field textarea:focus, .field select:focus { outline: 3px solid rgba(36, 87, 255, 0.14); border-color: rgba(36, 87, 255, 0.5); }
+    .field input:focus, .field textarea:focus, .field select:focus { outline: 3px solid rgba(var(--accent-rgb, 36, 87, 255), 0.14); border-color: rgba(var(--accent-rgb, 36, 87, 255), 0.5); }
 
     #metaModal { width: min(680px, calc(100vw - 24px)); }
     .meta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -182,21 +182,21 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .customers-table thead { background: rgba(15, 23, 42, 0.04); }
     .customers-table th { padding: 12px; text-align: left; font-weight: 700; color: var(--text); border-bottom: 2px solid var(--panel-border); }
     .customers-table td { padding: 10px 12px; border-bottom: 1px solid var(--panel-border); vertical-align: middle; }
-    .customers-table tbody tr:hover { background: rgba(36, 87, 255, 0.03); }
+    .customers-table tbody tr:hover { background: rgba(var(--accent-rgb, 36, 87, 255), 0.03); }
     .customer-name-online { color: #38bdf8; font-weight: 700; }
     .customer-name-mixed { color: #84cc16; font-weight: 700; }
 
     .action-group { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
     .action-group button { padding: 4px 10px; font-size: 0.82rem; margin-bottom: 0; border-radius: 999px; border: 1px solid var(--panel-border); background: rgba(255,255,255,0.7); color: var(--text); cursor: pointer; font: inherit; font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
-    .action-group button:hover { background: rgba(36, 87, 255, 0.07); }
-    .action-group button.info-btn { background: rgba(36, 87, 255, 0.07); border-color: rgba(36, 87, 255, 0.2); color: var(--accent); }
-    .action-group button.info-btn:hover { background: rgba(36, 87, 255, 0.14); }
+    .action-group button:hover { background: rgba(var(--accent-rgb, 36, 87, 255), 0.07); }
+    .action-group button.info-btn { background: rgba(var(--accent-rgb, 36, 87, 255), 0.07); border-color: rgba(var(--accent-rgb, 36, 87, 255), 0.2); color: var(--accent); }
+    .action-group button.info-btn:hover { background: rgba(var(--accent-rgb, 36, 87, 255), 0.14); }
     
     .action-group button.delete-btn { background: rgba(239, 68, 68, 0.05); border-color: rgba(239, 68, 68, 0.15); color: #b91c1c; }
     .action-group button.delete-btn:hover { background: rgba(239, 68, 68, 0.12); }
 
     .alert { padding: 14px 16px; border-radius: 16px; margin-bottom: 16px; }
-    .alert.info    { background: rgba(36, 87, 255, 0.08);  border: 1px solid rgba(36, 87, 255, 0.2);  color: var(--text); }
+    .alert.info    { background: rgba(var(--accent-rgb, 36, 87, 255), 0.08);  border: 1px solid rgba(var(--accent-rgb, 36, 87, 255), 0.2);  color: var(--text); }
     .alert.error   { background: rgba(239, 68, 68, 0.08);  border: 1px solid rgba(239, 68, 68, 0.2);  color: #7f1d1d; }
     .alert.success { background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); color: #065f46; }
 
@@ -310,6 +310,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     html[data-theme="dark"] .action-group button.delete-btn { color: #fca5a5; background: rgba(239, 68, 68, 0.1); }
     html[data-theme="dark"] .danger-panel { background: rgba(239, 68, 68, 0.08); }
   </style>
+<?php render_theme_head(); ?>
 </head>
 <body>
   <?php $current_page = 'customers.php'; include __DIR__ . '/assets/nav.html'; ?>

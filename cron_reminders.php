@@ -159,7 +159,7 @@ $bodyHtml = '
 <div style="font-family:Inter,ui-sans-serif,system-ui,sans-serif;max-width:540px;margin:0 auto;color:#1d2433">
   <h2 style="font-size:1.5rem;margin:0 0 12px;letter-spacing:-0.02em">Appointment reminder</h2>
   <p style="color:#667085;margin:0 0 20px;line-height:1.6">Hi ' . htmlspecialchars($toName, ENT_QUOTES) . ', this is a reminder of your upcoming appointment.</p>
-  <div style="background:rgba(36,87,255,.06);border:1px solid rgba(36,87,255,.18);border-radius:14px;padding:18px;margin-bottom:24px">
+  <div style="background:' . theme_email_tint(0.06) . ';border:1px solid ' . theme_email_tint(0.18) . ';border-radius:14px;padding:18px;margin-bottom:24px">
     <table style="width:100%;border-collapse:collapse">
       <tr><td style="padding:5px 0;color:#667085;font-size:.85rem;width:110px">Appointment</td><td style="font-weight:700;padding:5px 0">' . htmlspecialchars($typeName, ENT_QUOTES) . '</td></tr>
       <tr><td style="padding:5px 0;color:#667085;font-size:.85rem">Provider</td><td style="font-weight:700;padding:5px 0">' . htmlspecialchars($providerName, ENT_QUOTES) . '</td></tr>

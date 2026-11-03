@@ -89,7 +89,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--text);
       background:
-        radial-gradient(circle at top left, rgba(36, 87, 255, 0.14), transparent 35%),
+        radial-gradient(circle at top left, rgba(var(--accent-rgb, 36, 87, 255), 0.14), transparent 35%),
         radial-gradient(circle at top right, rgba(16, 185, 129, 0.12), transparent 28%),
         linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
     }
@@ -199,8 +199,8 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     }
 
     .calendar-provider-filters__row select:focus {
-      outline: 3px solid rgba(36, 87, 255, 0.14);
-      border-color: rgba(36, 87, 255, 0.5);
+      outline: 3px solid rgba(var(--accent-rgb, 36, 87, 255), 0.14);
+      border-color: rgba(var(--accent-rgb, 36, 87, 255), 0.5);
     }
 
     .fc-bg-event.unavail-event {
@@ -288,17 +288,17 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       --fc-border-color: rgba(15, 23, 42, 0.08);
       --fc-page-bg-color: transparent;
       --fc-neutral-bg-color: #fff;
-      --fc-today-bg-color: rgba(36, 87, 255, 0.06);
+      --fc-today-bg-color: rgba(var(--accent-rgb, 36, 87, 255), 0.06);
       --fc-event-text-color: #fff;
       --fc-button-bg-color: #f8fafc;
       --fc-button-border-color: rgba(15, 23, 42, 0.10);
       --fc-button-hover-bg-color: #e2e8f0;
       --fc-button-hover-border-color: rgba(15, 23, 42, 0.14);
-      --fc-button-active-bg-color: #2457ff;
-      --fc-button-active-border-color: #2457ff;
+      --fc-button-active-bg-color: var(--accent, #2457ff);
+      --fc-button-active-border-color: var(--accent, #2457ff);
       --fc-button-text-color: #0f172a;
       --fc-event-border-color: transparent;
-      --fc-list-event-hover-bg-color: rgba(36, 87, 255, 0.06);
+      --fc-list-event-hover-bg-color: rgba(var(--accent-rgb, 36, 87, 255), 0.06);
       font-size: 0.95rem;
     }
 
@@ -312,9 +312,9 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       font-weight: 700;
       padding: 4px 8px;
       border-radius: 8px;
-      background: rgba(36, 87, 255, 0.12);
+      background: rgba(var(--accent-rgb, 36, 87, 255), 0.12);
       color: var(--accent);
-      border: 1px solid rgba(36, 87, 255, 0.25);
+      border: 1px solid rgba(var(--accent-rgb, 36, 87, 255), 0.25);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -327,12 +327,12 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     }
 
     html[data-theme="dark"] .daily-note-pill {
-      background: rgba(36, 87, 255, 0.2);
+      background: rgba(var(--accent-rgb, 36, 87, 255), 0.2);
     }
 
     .fc .fc-daygrid-day.fc-day-today,
     .fc .fc-timegrid-col.fc-day-today {
-      background: rgba(36, 87, 255, 0.10) !important;
+      background: rgba(var(--accent-rgb, 36, 87, 255), 0.10) !important;
     }
 
     .fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
@@ -343,7 +343,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       min-height: 1.6rem;
       padding: 0 0.4rem;
       border-radius: 999px;
-      background: #2457ff;
+      background: var(--accent, #2457ff);
       color: #fff;
       font-weight: 800;
     }
@@ -453,7 +453,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
 
     .fc .fc-daygrid-block-event,
     .fc .fc-daygrid-dot-event {
-      background-color: var(--fc-event-bg-color, #2457ff) !important;
+      background-color: var(--fc-event-bg-color, var(--accent, #2457ff)) !important;
       border: none !important;
     }
 
@@ -550,12 +550,12 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     }
 
     .fc .server-today {
-      background: rgba(36, 87, 255, 0.12) !important;
+      background: rgba(var(--accent-rgb, 36, 87, 255), 0.12) !important;
     }
 
     .fc .server-today .fc-col-header-cell-cushion,
     .fc .server-today .fc-daygrid-day-number {
-      background: rgba(36, 87, 255, 0.18);
+      background: rgba(var(--accent-rgb, 36, 87, 255), 0.18);
       border-radius: 999px;
       color: var(--text);
       font-weight: 800;
@@ -665,7 +665,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       padding: 10px 12px;
       border-radius: 14px;
       border: 1px solid var(--panel-border);
-      background: rgba(36, 87, 255, 0.06);
+      background: rgba(var(--accent-rgb, 36, 87, 255), 0.06);
       color: var(--text);
       font-size: 0.88rem;
       line-height: 1.45;
@@ -758,8 +758,8 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .field input:focus,
     .field select:focus,
     .field textarea:focus {
-      outline: 3px solid rgba(36, 87, 255, 0.14);
-      border-color: rgba(36, 87, 255, 0.5);
+      outline: 3px solid rgba(var(--accent-rgb, 36, 87, 255), 0.14);
+      border-color: rgba(var(--accent-rgb, 36, 87, 255), 0.5);
     }
 
     .booking-note {
@@ -1045,7 +1045,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     }
 
     .booking-card__footer button:hover {
-      background: rgba(36, 87, 255, 0.08);
+      background: rgba(var(--accent-rgb, 36, 87, 255), 0.08);
     }
 
     .booking-mode-toggle,
@@ -1067,7 +1067,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
 
     .booking-mode-toggle.is-active,
     .booking-mode-toggle-secondary.is-active {
-      background: rgba(36, 87, 255, 0.10);
+      background: rgba(var(--accent-rgb, 36, 87, 255), 0.10);
     }
 
     .booking-customer-tabs {
@@ -1093,8 +1093,8 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     }
 
     .booking-customer-tab.is-active {
-      background: rgba(36, 87, 255, 0.10);
-      border-color: rgba(36, 87, 255, 0.35);
+      background: rgba(var(--accent-rgb, 36, 87, 255), 0.10);
+      border-color: rgba(var(--accent-rgb, 36, 87, 255), 0.35);
     }
 
     .booking-customer-panel {
@@ -1121,12 +1121,12 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     }
 
     .customer-search-result:hover {
-      background: rgba(36, 87, 255, 0.06);
+      background: rgba(var(--accent-rgb, 36, 87, 255), 0.06);
     }
 
     .customer-search-result.is-selected {
-      background: rgba(36, 87, 255, 0.10);
-      border-color: rgba(36, 87, 255, 0.45);
+      background: rgba(var(--accent-rgb, 36, 87, 255), 0.10);
+      border-color: rgba(var(--accent-rgb, 36, 87, 255), 0.45);
     }
 
     .customer-search-result strong {
@@ -1227,6 +1227,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       }
     }
   </style>
+<?php render_theme_head(); ?>
 </head>
 <body>
   <input type="hidden" name="csrf_token" value="<?php echo htmlspecialchars(csrf_token()); ?>">
@@ -2677,7 +2678,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
           title: '🆕 Creating Draft...',
           start: roundedStart,
           end: fixedEnd,
-          color: '#2457ff',
+          color: (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '').trim() || '#2457ff',
           editable: true,
           extendedProps: {
             isDraftPlaceholder: true,
