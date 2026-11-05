@@ -68,14 +68,14 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       background: rgba(255, 255, 255, 0.8);
       color: var(--text);
       text-decoration: none;
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       padding: 10px 14px;
       font: inherit;
       cursor: pointer;
       box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
     }
 
-    .panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 28px; box-shadow: var(--shadow); backdrop-filter: blur(10px); overflow: hidden; margin-bottom: 20px; }
+    .panel { background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--r-l, 28px); box-shadow: var(--shadow); backdrop-filter: blur(10px); overflow: hidden; margin-bottom: 20px; }
     .panel-header { padding: 18px 20px; border-bottom: 1px solid var(--panel-border); }
     .panel-header small { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; }
     .panel-body { padding: 18px; overflow-x: auto;  -webkit-overflow-scrolling: touch; }
@@ -85,7 +85,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       width: min(640px, calc(100vw - 24px));
       border: 0;
       padding: 0;
-      border-radius: 28px;
+      border-radius: var(--r-l, 28px);
       box-shadow: 0 28px 80px rgba(15, 23, 42, 0.22);
       background: transparent;
       margin: auto;
@@ -93,12 +93,12 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       inset: 0;
     }
     .modal-dialog::backdrop { background: rgba(15, 23, 42, 0.5); backdrop-filter: blur(4px); }
-    .modal-card { position: relative; width: 100%; background: var(--panel); border: 1px solid var(--panel-border); color: var(--text); border-radius: 28px; overflow: hidden; }
+    .modal-card { position: relative; width: 100%; background: var(--panel); border: 1px solid var(--panel-border); color: var(--text); border-radius: var(--r-l, 28px); overflow: hidden; }
     .modal-card__head { padding: 16px 18px; background: transparent; color: var(--text); border-bottom: 1px solid var(--panel-border); display: flex; align-items: center; justify-content: space-between; }
     .modal-card__head h2 { margin: 0; font-size: 1.15rem; letter-spacing: -0.02em; }
     .modal-card__body { padding: 16px 18px 18px; display: grid; gap: 12px; }
     .modal-card__footer { display: flex; justify-content: flex-end; gap: 12px; padding: 0 18px 18px; }
-    .modal-card__footer button { border: 0; border-radius: 999px; padding: 9px 14px; background: rgba(226, 232, 240, 0.9); color: var(--text); font: inherit; font-weight: 700; cursor: pointer; }
+    .modal-card__footer button { border: 0; border-radius: var(--r-pill, 999px); padding: 9px 14px; background: rgba(226, 232, 240, 0.9); color: var(--text); font: inherit; font-weight: 700; cursor: pointer; }
     .modal-card__footer button.primary { background: var(--accent); color: #fff; }
     .modal-card__footer button.danger { background: #dc2626; color: #fff; }
     .modal-card__footer button.danger:hover { background: #b91c1c; }
@@ -108,7 +108,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     @media (max-width: 640px) { #customerForm { grid-template-columns: 1fr; } }
 
     .field label { display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: var(--label); }
-    .field input, .field textarea, .field select { width: 100%; border: 1px solid rgba(15, 23, 42, 0.15); border-radius: 14px; padding: 10px 12px; font: inherit; color: var(--text); background: var(--panel); box-sizing: border-box; font-size: 0.92rem; }
+    .field input, .field textarea, .field select { width: 100%; border: 1px solid rgba(15, 23, 42, 0.15); border-radius: var(--r-m, 14px); padding: 10px 12px; font: inherit; color: var(--text); background: var(--panel); box-sizing: border-box; font-size: 0.92rem; }
     .field input:focus, .field textarea:focus, .field select:focus { outline: 3px solid rgba(var(--accent-rgb, 36, 87, 255), 0.14); border-color: rgba(var(--accent-rgb, 36, 87, 255), 0.5); }
 
     #metaModal { width: min(680px, calc(100vw - 24px)); }
@@ -117,7 +117,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
 
     .meta-item {
       padding: 12px 14px;
-      border-radius: 16px;
+      border-radius: var(--r-m, 16px);
       border: 1px solid var(--panel-border);
       background: rgba(15, 23, 42, 0.03);
       min-width: 0;
@@ -134,7 +134,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       align-items: center;
       gap: 4px;
       padding: 3px 9px;
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       font-size: 0.75rem;
       font-weight: 700;
       white-space: nowrap;
@@ -159,7 +159,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       align-items: flex-start;
       gap: 10px;
       padding: 11px 13px;
-      border-radius: 14px;
+      border-radius: var(--r-m, 14px);
       border: 1px solid var(--panel-border);
       background: rgba(15, 23, 42, 0.02);
     }
@@ -187,7 +187,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .customer-name-mixed { color: #84cc16; font-weight: 700; }
 
     .action-group { display: flex; gap: 6px; align-items: center; flex-wrap: nowrap; }
-    .action-group button { padding: 4px 10px; font-size: 0.82rem; margin-bottom: 0; border-radius: 999px; border: 1px solid var(--panel-border); background: rgba(255,255,255,0.7); color: var(--text); cursor: pointer; font: inherit; font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
+    .action-group button { padding: 4px 10px; font-size: 0.82rem; margin-bottom: 0; border-radius: var(--r-pill, 999px); border: 1px solid var(--panel-border); background: rgba(255,255,255,0.7); color: var(--text); cursor: pointer; font: inherit; font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
     .action-group button:hover { background: rgba(var(--accent-rgb, 36, 87, 255), 0.07); }
     .action-group button.info-btn { background: rgba(var(--accent-rgb, 36, 87, 255), 0.07); border-color: rgba(var(--accent-rgb, 36, 87, 255), 0.2); color: var(--accent); }
     .action-group button.info-btn:hover { background: rgba(var(--accent-rgb, 36, 87, 255), 0.14); }
@@ -195,13 +195,13 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .action-group button.delete-btn { background: rgba(239, 68, 68, 0.05); border-color: rgba(239, 68, 68, 0.15); color: #b91c1c; }
     .action-group button.delete-btn:hover { background: rgba(239, 68, 68, 0.12); }
 
-    .alert { padding: 14px 16px; border-radius: 16px; margin-bottom: 16px; }
+    .alert { padding: 14px 16px; border-radius: var(--r-m, 16px); margin-bottom: 16px; }
     .alert.info    { background: rgba(var(--accent-rgb, 36, 87, 255), 0.08);  border: 1px solid rgba(var(--accent-rgb, 36, 87, 255), 0.2);  color: var(--text); }
     .alert.error   { background: rgba(239, 68, 68, 0.08);  border: 1px solid rgba(239, 68, 68, 0.2);  color: #7f1d1d; }
     .alert.success { background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); color: #065f46; }
 
-    .override-note { background: var(--panel); border: 1px solid var(--panel-border); border-left: 3px solid rgba(245, 158, 11, 0.6); padding: 12px 14px; border-radius: 16px; margin: 10px 0; font-size: 0.9rem; color: var(--text); }
-    .danger-panel { background: rgba(239, 68, 68, 0.04); border: 1px solid rgba(239, 68, 68, 0.18); border-left: 4px solid #dc2626; padding: 16px; border-radius: 16px; margin: 4px 0; }
+    .override-note { background: var(--panel); border: 1px solid var(--panel-border); border-left: 3px solid rgba(245, 158, 11, 0.6); padding: 12px 14px; border-radius: var(--r-m, 16px); margin: 10px 0; font-size: 0.9rem; color: var(--text); }
+    .danger-panel { background: rgba(239, 68, 68, 0.04); border: 1px solid rgba(239, 68, 68, 0.18); border-left: 4px solid #dc2626; padding: 16px; border-radius: var(--r-m, 16px); margin: 4px 0; }
 
 
 /* ── Responsive Table Adjustments ── */
@@ -238,7 +238,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       /* Format table rows into discrete floating visual profiles */
       .customers-table tbody tr {
         border: 1px solid var(--panel-border);
-        border-radius: 20px;
+        border-radius: var(--r-l, 20px);
         margin-bottom: 16px;
         padding: 14px 16px;
         background: rgba(255, 255, 255, 0.6);
@@ -465,7 +465,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     <div class="modal-card">
       <div class="modal-card__head" style="display:flex; align-items:center; justify-content:space-between;">
         <h2 id="metaModalTitle">Customer Info</h2>
-        <button type="button" id="metaModalClose" style="background:none; border:none; cursor:pointer; font-size:1.2rem; color:var(--muted); padding:4px 8px; border-radius:8px; flex-shrink:0; width:28px; height:28px; display:flex; align-items:center; justify-content:center; margin-left:auto;">✕</button>
+        <button type="button" id="metaModalClose" style="background:none; border:none; cursor:pointer; font-size:1.2rem; color:var(--muted); padding:4px 8px; border-radius:var(--r-s, 8px); flex-shrink:0; width:28px; height:28px; display:flex; align-items:center; justify-content:center; margin-left:auto;">✕</button>
       </div>
       <div class="modal-card__body" id="metaModalBody" style="max-height:70vh; overflow-y:auto;">
         <div style="text-align:center; color:var(--muted); padding:20px;">Loading…</div>

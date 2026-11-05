@@ -136,7 +136,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       background: rgba(255, 255, 255, 0.8);
       color: var(--text);
       text-decoration: none;
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       padding: 10px 14px;
       font: inherit;
       cursor: pointer;
@@ -146,7 +146,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .panel {
       background: var(--panel);
       border: 1px solid var(--panel-border);
-      border-radius: 28px;
+      border-radius: var(--r-l, 28px);
       box-shadow: var(--shadow);
       backdrop-filter: blur(10px);
       overflow: hidden;
@@ -189,11 +189,11 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .calendar-provider-filters__row select {
       width: 100%;
       border: 1px solid rgba(15, 23, 42, 0.15);
-      border-radius: 14px;
+      border-radius: var(--r-m, 14px);
       padding: 10px 12px;
       font: inherit;
       color: var(--text);
-      background: #fff;
+      background: var(--theme-surface, #fff);
       box-sizing: border-box;
       font-size: 0.92rem;
     }
@@ -254,7 +254,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       gap: 10px;
       padding: 10px 14px;
       border: 1px solid var(--panel-border);
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       background: rgba(255, 255, 255, 0.55);
       color: var(--muted);
       font-weight: 700;
@@ -311,7 +311,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       font-size: 0.72rem;
       font-weight: 700;
       padding: 4px 8px;
-      border-radius: 8px;
+      border-radius: var(--r-s, 8px);
       background: rgba(var(--accent-rgb, 36, 87, 255), 0.12);
       color: var(--accent);
       border: 1px solid rgba(var(--accent-rgb, 36, 87, 255), 0.25);
@@ -342,7 +342,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       min-width: 1.6rem;
       min-height: 1.6rem;
       padding: 0 0.4rem;
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       background: var(--accent, #2457ff);
       color: #fff;
       font-weight: 800;
@@ -556,7 +556,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .fc .server-today .fc-col-header-cell-cushion,
     .fc .server-today .fc-daygrid-day-number {
       background: rgba(var(--accent-rgb, 36, 87, 255), 0.18);
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       color: var(--text);
       font-weight: 800;
       padding: 0.15rem 0.55rem;
@@ -569,7 +569,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     }
 
     .fc .fc-button {
-      border-radius: 999px !important;
+      border-radius: var(--r-pill, 999px) !important;
       padding: 0.55rem 0.9rem;
       box-shadow: none;
     }
@@ -578,7 +578,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       width: min(640px, calc(100vw - 24px));
       border: 0;
       padding: 0;
-      border-radius: 28px;
+      border-radius: var(--r-l, 28px);
       box-shadow: 0 28px 80px rgba(15, 23, 42, 0.18);
       background: transparent;
       margin: auto;
@@ -610,7 +610,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       background: var(--panel);
       border: 1px solid var(--panel-border);
       color: var(--text);
-      border-radius: 28px;
+      border-radius: var(--r-l, 28px);
       overflow: hidden;
     }
 
@@ -663,7 +663,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .booking-modal-alert {
       display: none;
       padding: 10px 12px;
-      border-radius: 14px;
+      border-radius: var(--r-m, 14px);
       border: 1px solid var(--panel-border);
       background: rgba(var(--accent-rgb, 36, 87, 255), 0.06);
       color: var(--text);
@@ -723,11 +723,11 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .field textarea {
       width: 100%;
       border: 1px solid rgba(15, 23, 42, 0.15);
-      border-radius: 14px;
+      border-radius: var(--r-m, 14px);
       padding: 10px 12px;
       font: inherit;
       color: var(--text);
-      background: #fff;
+      background: var(--theme-surface, #fff);
       box-sizing: border-box;
       font-size: 0.92rem;
     }
@@ -774,7 +774,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       gap: 8px;
       padding: 10px 12px;
       border: 1px dashed var(--panel-border);
-      border-radius: 18px;
+      border-radius: var(--r-l, 18px);
       background: var(--panel);
     }
 
@@ -806,12 +806,12 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .meta-item .meta-inline-inputs input {
       width: 100%;
       border: 1px solid rgba(15, 23, 42, 0.15);
-      border-radius: 12px;
+      border-radius: var(--r-m, 12px);
       padding: 7px 10px;
       font: inherit;
       font-size: 0.86rem;
       color: var(--text);
-      background: #fff;
+      background: var(--theme-surface, #fff);
       box-sizing: border-box;
     }
 
@@ -830,7 +830,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
 
     .booking-card__footer button {
       border: 1px solid var(--panel-border);
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       padding: 8px 12px;
       background: rgba(255, 255, 255, 0.06);
       color: var(--text);
@@ -953,7 +953,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       width: min(520px, calc(100vw - 24px));
       border: 0;
       padding: 0;
-      border-radius: 28px;
+      border-radius: var(--r-l, 28px);
       box-shadow: 0 28px 80px rgba(15, 23, 42, 0.22);
       background: transparent;
       margin: auto;
@@ -970,7 +970,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       background: var(--panel);
       border: 1px solid var(--panel-border);
       color: var(--text);
-      border-radius: 28px;
+      border-radius: var(--r-l, 28px);
       overflow: hidden;
     }
 
@@ -1010,7 +1010,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
 
     .booking-warning-card__footer button {
       border: 1px solid var(--panel-border);
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       padding: 9px 14px;
       background: rgba(255, 255, 255, 0.06);
       color: var(--text);
@@ -1053,7 +1053,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       border: 1px solid var(--panel-border);
       color: var(--text);
       padding: 8px 12px;
-      border-radius: 8px;
+      border-radius: var(--r-s, 8px);
       font-size: 0.9rem;
       cursor: pointer;
       font-weight: 600;
@@ -1081,7 +1081,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       border: 1px solid var(--panel-border);
       color: var(--text);
       padding: 8px 12px;
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       font-size: 0.9rem;
       cursor: pointer;
       font-weight: 700;
@@ -1114,7 +1114,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       width: 100%;
       border: 1px solid var(--panel-border);
       background: rgba(255, 255, 255, 0.75);
-      border-radius: 16px;
+      border-radius: var(--r-m, 16px);
       padding: 12px 14px;
       text-align: left;
       cursor: pointer;
@@ -1145,7 +1145,7 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
     .customer-search-state,
     .selected-customer-card {
       border: 1px solid var(--panel-border);
-      border-radius: 16px;
+      border-radius: var(--r-m, 16px);
       background: var(--panel);
       padding: 12px 14px;
     }
@@ -2997,11 +2997,11 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       btn.title = (isUnavail ? 'Remove unavailability for ' : 'Mark unavailable: ') + providerLabel;
 
       if (half === 'left') {
-        btn.style.cssText = 'width:50%;border-radius:8px 0 0 8px;border-right:0;';
+        btn.style.cssText = 'width:50%;border-radius:var(--r-s, 8px) 0 0 var(--r-s, 8px);border-right:0;';
       } else if (half === 'right') {
-        btn.style.cssText = 'width:50%;border-radius:0 8px 8px 0;';
+        btn.style.cssText = 'width:50%;border-radius:0 var(--r-s, 8px) var(--r-s, 8px) 0;';
       } else {
-        btn.style.cssText = 'width:100%;border-radius:8px;';
+        btn.style.cssText = 'width:100%;border-radius:var(--r-s, 8px);';
       }
 
       btn.addEventListener('click', async function(e) {

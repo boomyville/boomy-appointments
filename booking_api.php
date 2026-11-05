@@ -437,7 +437,7 @@ function booking_send_verification_email(array $appointment, array $provider, ar
         . '<li><strong>Start time:</strong> ' . htmlspecialchars($startDate, ENT_QUOTES, 'UTF-8') . '</li>'
         . '</ul>'
         . $sameDay['html']
-        . '<p><a href="' . htmlspecialchars($verifyUrl, ENT_QUOTES, 'UTF-8') . '" style="background:' . theme_email_primary() . ';color:#fff;display:inline-block;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:700;">Verify customer details</a></p>';
+        . '<p><a href="' . htmlspecialchars($verifyUrl, ENT_QUOTES, 'UTF-8') . '" style="background:' . theme_email_primary() . ';color:#fff;display:inline-block;padding:12px 20px;border-radius:' . theme_email_radius('pill', '999px') . ';text-decoration:none;font-weight:700;">Verify customer details</a></p>';
 
     $bodyPlain = "Appointment confirmation required for {$siteName}\n\n{$reasonLine}\n\nAppointment type: {$appointmentTypeName}\nProvider: {$providerName}\nStart time: {$startDate}\n\n" . $sameDay['plain'] . "Verify customer details: {$verifyUrl}\n";
 

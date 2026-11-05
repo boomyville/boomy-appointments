@@ -166,7 +166,7 @@ $statusLabel = $appointment ? str_replace('_', ' ', (string) ($appointment['stat
     }
 
     article {
-      border-radius: 24px;
+      border-radius: var(--r-l, 24px);
       box-shadow: 0 24px 60px rgba(15, 23, 42, 0.10);
       border: 1px solid rgba(15, 23, 42, 0.08);
     }
@@ -176,7 +176,7 @@ $statusLabel = $appointment ? str_replace('_', ' ', (string) ($appointment['stat
       align-items: center;
       gap: 10px;
       padding: 10px 14px;
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       font-weight: 700;
       margin-bottom: 1rem;
     }
@@ -196,7 +196,7 @@ $statusLabel = $appointment ? str_replace('_', ' ', (string) ($appointment['stat
       gap: 0.9rem;
       margin: 1.25rem 0;
       padding: 1rem;
-      border-radius: 18px;
+      border-radius: var(--r-l, 18px);
       background: rgba(var(--accent-rgb, 36, 87, 255), 0.04);
       border: 1px solid rgba(var(--accent-rgb, 36, 87, 255), 0.10);
     }

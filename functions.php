@@ -973,11 +973,12 @@ function send_password_reset_email(string $email, string $code): bool
     $reset_url = build_app_url('reset_password.php', ['code' => $code]);
     
     $subject = "Password Reset - $app_name";
+    $emailRadius = theme_email_radius('s', '4px');
     $body_html = "
         <h2>Password Reset Request</h2>
         <p>Hi {$user['full_name']},</p>
         <p>You requested to reset your password. Click the link below to create a new password:</p>
-        <p><a href=\"{$reset_url}\" style=\"background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;\">Reset Password</a></p>
+        <p><a href=\"{$reset_url}\" style=\"background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: {$emailRadius}; display: inline-block;\">Reset Password</a></p>
         <p>Or copy this link: {$reset_url}</p>
         <p>This link expires in 60 minutes.</p>
         <p>If you didn't request this, you can ignore this email.</p>
@@ -1010,11 +1011,12 @@ function send_account_confirmation_email(string $email, string $code): bool
     $app_name = APP_NAME ?? 'Boomy Appointments';
     $confirm_url = build_app_url('confirm_account.php', ['code' => $code]);
     $subject = "Confirm your account - $app_name";
+    $emailRadius = theme_email_radius('s', '4px');
     $body_html = "
         <h2>Confirm Your Account</h2>
         <p>Hi {$user['full_name']},</p>
         <p>Please confirm your account by clicking the button below:</p>
-        <p><a href=\"{$confirm_url}\" style=\"background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;\">Confirm Account</a></p>
+        <p><a href=\"{$confirm_url}\" style=\"background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: {$emailRadius}; display: inline-block;\">Confirm Account</a></p>
         <p>Or copy this link: {$confirm_url}</p>
         <p>If you didn't sign up, ignore this email.</p>
         <p>Best regards,<br>$app_name</p>
@@ -1219,13 +1221,25 @@ function format_appointment_person_name(?array $person): string
 function theme_defaults(): array
 {
     return [
-        'theme_primary'        => '#2457ff',
-        'theme_secondary'      => '#10b981',
-        'theme_tertiary'       => '#f59e0b',
-        'theme_primary_dark'   => '#7ca2ff',
-        'theme_secondary_dark' => '#34d399',
-        'theme_tertiary_dark'  => '#fbbf24',
-        'theme_font'           => 'default',
+        // colours: day
+        'theme_primary'         => '#2457ff',
+        'theme_secondary'       => '#10b981',
+        'theme_tertiary'        => '#f59e0b',
+        'theme_background'      => '#f4f7fb',
+        'theme_surface'         => '#ffffff',
+        // colours: night
+        'theme_primary_dark'    => '#7ca2ff',
+        'theme_secondary_dark'  => '#34d399',
+        'theme_tertiary_dark'   => '#fbbf24',
+        'theme_background_dark' => '#0b1220',
+        'theme_surface_dark'    => '#111827',
+        // font
+        'theme_font'            => 'default',
+        // corners: theme_radius is a percentage (0-50); '' means "keep the app's own corner sizes".
+        // min/max are pixel limits so tiny controls never go square-ish and big panels never get huge curves.
+        'theme_radius'          => '',
+        'theme_radius_min'      => '4',
+        'theme_radius_max'      => '32',
     ];
 }
 
@@ -1281,6 +1295,24 @@ function theme_mix_hex(string $hex, string $target, float $ratio): string
 }
 
 // Effective theme: ['values' => all 7 settings (saved or default), 'custom' => keys that differ from default, 'defaults' => ...]
+// Integer within [min, max], or null when the value is not a plain integer in range
+function theme_normalize_int($value, int $min, int $max): ?int
+{
+    $v = trim((string) $value);
+    if ($v === '' || !preg_match('/^\d{1,3}$/', $v)) {
+        return null;
+    }
+    $n = (int) $v;
+    return ($n >= $min && $n <= $max) ? $n : null;
+}
+
+// Allowed ranges for the corner settings
+function theme_radius_limits(): array
+{
+    return ['theme_radius' => [0, 50], 'theme_radius_min' => [0, 32], 'theme_radius_max' => [4, 80]];
+}
+
+// Effective theme: ['values' => all settings (saved or default), 'custom' => keys that differ from default, 'defaults' => ...]
 function get_theme_settings(): array
 {
     static $cache = null;
@@ -1289,6 +1321,7 @@ function get_theme_settings(): array
     }
     $defaults = theme_defaults();
     $fonts = theme_font_options();
+    $limits = theme_radius_limits();
     $values = $defaults;
     $custom = [];
     $saved = [];
@@ -1298,11 +1331,25 @@ function get_theme_settings(): array
     } catch (Throwable $e) {
         $saved = [];
     }
+
+    $radiusOn = false;
     foreach ($defaults as $key => $default) {
         $raw = trim((string) ($saved[$key] ?? ''));
         if ($key === 'theme_font') {
             if ($raw !== '' && isset($fonts[$raw]) && $raw !== $default) {
                 $values[$key] = $raw;
+                $custom[$key] = true;
+            }
+        } elseif (isset($limits[$key])) {
+            $n = theme_normalize_int($raw, $limits[$key][0], $limits[$key][1]);
+            if ($key === 'theme_radius') {
+                if ($n !== null) {
+                    $values[$key] = (string) $n;
+                    $custom[$key] = true;
+                    $radiusOn = true;
+                }
+            } elseif ($n !== null && (string) $n !== $default) {
+                $values[$key] = (string) $n;
                 $custom[$key] = true;
             }
         } else {
@@ -1313,6 +1360,12 @@ function get_theme_settings(): array
             }
         }
     }
+    if (!$radiusOn) {
+        // min/max only mean something while a custom radius is active
+        $values['theme_radius_min'] = $defaults['theme_radius_min'];
+        $values['theme_radius_max'] = $defaults['theme_radius_max'];
+        unset($custom['theme_radius_min'], $custom['theme_radius_max']);
+    }
     return $cache = ['values' => $values, 'custom' => $custom, 'defaults' => $defaults];
 }
 
@@ -1320,14 +1373,30 @@ function get_theme_settings(): array
 function sanitize_theme_post(array $data): array
 {
     $fonts = theme_font_options();
+    $limits = theme_radius_limits();
     $out = [];
     foreach (theme_defaults() as $key => $default) {
         $raw = trim((string) ($data[$key] ?? ''));
         if ($key === 'theme_font') {
             $out[$key] = ($raw !== $default && isset($fonts[$raw])) ? $raw : '';
+        } elseif (isset($limits[$key])) {
+            $n = theme_normalize_int($raw, $limits[$key][0], $limits[$key][1]);
+            $out[$key] = $n === null ? '' : (string) $n;
         } else {
             $hex = theme_normalize_hex($raw);
             $out[$key] = ($hex !== null && $hex !== $default) ? $hex : '';
+        }
+    }
+    // Without a radius the min/max are meaningless, so do not keep them
+    if ($out['theme_radius'] === '') {
+        $out['theme_radius_min'] = '';
+        $out['theme_radius_max'] = '';
+    } else {
+        $defaults = theme_defaults();
+        foreach (['theme_radius_min', 'theme_radius_max'] as $k) {
+            if ($out[$k] === $defaults[$k]) {
+                $out[$k] = '';
+            }
         }
     }
     return $out;
@@ -1358,7 +1427,45 @@ function theme_mode_declarations(array $theme, string $mode): string
         $t = $v['theme_tertiary' . $sfx];
         $out .= '--accent-3:' . $t . ';--current:' . $t . ';';
     }
+    // Page background. --theme-bg is only defined when customised, so rules written as var(--theme-bg, <original>) keep their look otherwise.
+    if (isset($c['theme_background' . $sfx])) {
+        $bg = $v['theme_background' . $sfx];
+        $out .= '--bg:' . $bg . ';--theme-bg:' . $bg . ';';
+    }
+    // Cards, panels, dialogs and form fields. --panel is the translucent card colour the pages use; --panel-strong the solid one.
+    if (isset($c['theme_surface' . $sfx])) {
+        $s = $v['theme_surface' . $sfx];
+        [$r, $g, $b] = theme_hex_to_rgb($s);
+        $out .= '--panel:rgba(' . $r . ',' . $g . ',' . $b . ',0.92);--panel-strong:' . $s . ';--theme-surface:' . $s . ';--input-bg:' . $s . ';';
+    }
     return $out;
+}
+
+// CSS value for one corner size: a percentage of the element, never below $min px and never above $max px.
+// $factor scales the three tiers (small controls 0.5, normal 1, large panels 1.5).
+function theme_radius_value(int $pct, int $min, int $max, float $factor): string
+{
+    $fmt = static fn(float $n): string => rtrim(rtrim(number_format($n, 1, '.', ''), '0'), '.');
+    $p = min(50.0, round($pct * $factor, 1));
+    $lo = (int) round($min * $factor);
+    $hi = max($lo, (int) round($max * $factor));
+    return 'min(' . $hi . 'px,max(' . $lo . 'px,' . $fmt($p) . '%))';
+}
+
+// The --r-* variables every border-radius in the app falls back from. Empty when corners are not customised.
+function theme_radius_declarations(array $theme): string
+{
+    if (!isset($theme['custom']['theme_radius'])) {
+        return '';
+    }
+    $pct = (int) $theme['values']['theme_radius'];
+    $min = (int) $theme['values']['theme_radius_min'];
+    $max = (int) $theme['values']['theme_radius_max'];
+    return '--r-s:' . theme_radius_value($pct, $min, $max, 0.5) . ';'
+        . '--r-m:' . theme_radius_value($pct, $min, $max, 1.0) . ';'
+        . '--r-l:' . theme_radius_value($pct, $min, $max, 1.5) . ';'
+        . '--r-pill:' . theme_radius_value($pct, $min, $max, 1.0) . ';'
+        . '--pico-border-radius:var(--r-m);';
 }
 
 // The CSS that overrides each page's own variables. Empty string when nothing is customised.
@@ -1376,6 +1483,11 @@ function build_theme_css(array $theme): string
     if ($dark !== '') {
         $css .= 'html:root[data-theme="dark"]{' . $dark . '}';
         $css .= '@media (prefers-color-scheme: dark){html:root:not([data-theme]){' . $dark . '}}';
+    }
+
+    $radius = theme_radius_declarations($theme);
+    if ($radius !== '') {
+        $css .= 'html:root{' . $radius . '}';
     }
 
     if (isset($theme['custom']['theme_font'])) {
@@ -1415,6 +1527,29 @@ function render_theme_head(): void
 function theme_email_primary(): string
 {
     return get_theme_settings()['values']['theme_primary'];
+}
+
+// Pixel radius for HTML emails. $tier is 's', 'm', 'l' or 'pill'; $default is what the email used before theming.
+// Pure: takes the theme array so it can be tested without a database.
+function theme_email_radius_for(array $theme, string $tier, string $default): string
+{
+    if (!isset($theme['custom']['theme_radius'])) {
+        return $default;
+    }
+    $pct = (int) $theme['values']['theme_radius'];
+    $min = (int) $theme['values']['theme_radius_min'];
+    $max = (int) $theme['values']['theme_radius_max'];
+    $factor = ['s' => 0.5, 'm' => 1.0, 'l' => 1.5, 'pill' => 1.0][$tier] ?? 1.0;
+    $reference = ['s' => 40, 'm' => 90, 'l' => 200, 'pill' => 44][$tier] ?? 44;   // typical element height in px
+    $lo = (int) round($min * $factor);
+    $hi = max($lo, (int) round($max * $factor));
+    $px = (int) round($pct * $factor / 100 * $reference);
+    return max($lo, min($hi, $px)) . 'px';
+}
+
+function theme_email_radius(string $tier, string $default): string
+{
+    return theme_email_radius_for(get_theme_settings(), $tier, $default);
 }
 
 function theme_email_tint(float $alpha): string
@@ -1531,7 +1666,7 @@ function build_same_day_appointments_email_block(array $appointment, bool $withA
     $actionable = array_values(array_filter($rows, fn(array $r): bool => $r['can_delete']));
     $allCodes = implode(',', array_column($actionable, 'hash_key'));
 
-    $btn = 'display:inline-block;padding:7px 14px;border-radius:999px;text-decoration:none;font-weight:700;font-size:13px;margin:2px 4px 2px 0;';
+    $btn = 'display:inline-block;padding:7px 14px;border-radius:' . theme_email_radius('pill', '999px') . ';text-decoration:none;font-weight:700;font-size:13px;margin:2px 4px 2px 0;';
     $confirmStyle = $btn . 'background:' . theme_email_primary() . ';color:#ffffff;';
     $deleteStyle = $btn . 'background:#ffffff;color:#b91c1c;border:1px solid #b91c1c;';
 
@@ -1655,7 +1790,7 @@ function send_appointment_confirmation_email(int $appointmentId): array
         . '</ul>'
         . $sameDay['html']
         . ($customMessage !== '' ? '<p>' . nl2br(htmlspecialchars($customMessage, ENT_QUOTES, 'UTF-8')) . '</p>' : '')
-        . '<p><a href="' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '" style="background-color:' . theme_email_primary() . ';color:#ffffff;padding:12px 20px;text-decoration:none;border-radius:999px;display:inline-block;font-weight:700;">Confirm or modify your appointment</a></p>'
+        . '<p><a href="' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '" style="background-color:' . theme_email_primary() . ';color:#ffffff;padding:12px 20px;text-decoration:none;border-radius:' . theme_email_radius('pill', '999px') . ';display:inline-block;font-weight:700;">Confirm or modify your appointment</a></p>'
         . '<p>Or copy this link: ' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '</p>';
 
     $body_plain = "Your appointment has been successfully booked for {$siteName}\n\n"

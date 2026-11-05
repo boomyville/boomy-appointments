@@ -87,7 +87,7 @@ if (!empty($providers)) {
       border: 1px solid var(--panel-border);
       background: rgba(255, 255, 255, 0.8);
       color: var(--text);
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       padding: 10px 14px;
       font: inherit;
       cursor: pointer;
@@ -97,7 +97,7 @@ if (!empty($providers)) {
     .panel {
       background: var(--panel);
       border: 1px solid var(--panel-border);
-      border-radius: 28px;
+      border-radius: var(--r-l, 28px);
       box-shadow: var(--shadow);
       backdrop-filter: blur(10px);
       overflow: hidden;
@@ -155,7 +155,7 @@ if (!empty($providers)) {
       padding: 2px 8px;
       font-size: 0.75rem;
       font-weight: 700;
-      border-radius: 6px;
+      border-radius: var(--r-s, 6px);
       text-transform: uppercase;
     }
 
@@ -166,7 +166,7 @@ if (!empty($providers)) {
       width: min(600px, calc(100vw - 24px));
       border: 0;
       padding: 0;
-      border-radius: 28px;
+      border-radius: var(--r-l, 28px);
       box-shadow: 0 28px 80px rgba(15, 23, 42, 0.22);
       background: transparent;
       margin: auto;
@@ -185,7 +185,7 @@ if (!empty($providers)) {
       background: var(--panel);
       border: 1px solid var(--panel-border);
       color: var(--text);
-      border-radius: 28px;
+      border-radius: var(--r-l, 28px);
       overflow: hidden;
     }
 
@@ -212,11 +212,11 @@ if (!empty($providers)) {
     .field input, .field select {
       width: 100%;
       border: 1px solid rgba(15, 23, 42, 0.15);
-      border-radius: 14px;
+      border-radius: var(--r-m, 14px);
       padding: 10px 12px;
       font: inherit;
       color: var(--text);
-      background: #fff;
+      background: var(--theme-surface, #fff);
       box-sizing: border-box;
     }
 
@@ -236,7 +236,7 @@ if (!empty($providers)) {
 
     .modal-card__footer button {
       border: 0;
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       padding: 9px 14px;
       font-weight: 700;
       cursor: pointer;
@@ -246,7 +246,7 @@ if (!empty($providers)) {
 
     .alert {
       padding: 12px;
-      border-radius: 14px;
+      border-radius: var(--r-m, 14px);
       font-size: 0.9rem;
       margin-bottom: 12px;
       display: none;

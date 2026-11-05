@@ -89,7 +89,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
     gap: 18px;
     padding: 28px;
     border: 1px solid var(--border);
-    border-radius: 28px;
+    border-radius: var(--r-l, 28px);
     background: linear-gradient(135deg, rgba(var(--accent-rgb, 36, 87, 255), 0.08), var(--hero-bg-blend));
     box-shadow: var(--shadow);
     position: relative;
@@ -113,7 +113,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       gap: 8px;
       width: fit-content;
       padding: 8px 12px;
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       background: var(--panel);
       border: 1px solid var(--border);
       color: var(--muted);
@@ -147,7 +147,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       border: 1px solid var(--border);
       background: var(--panel);
       color: var(--muted);
-      border-radius: 18px;
+      border-radius: var(--r-l, 18px);
       padding: 14px 16px;
       text-align: left;
       box-shadow: var(--shadow-soft);
@@ -181,7 +181,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
     .panel {
       display: none;
       border: 1px solid var(--border);
-      border-radius: 28px;
+      border-radius: var(--r-l, 28px);
       background: var(--panel);
       box-shadow: var(--shadow);
       padding: 24px;
@@ -240,7 +240,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       border: 1px solid var(--border);
       background: var(--panel-strong);
       color: var(--text);
-      border-radius: 16px;
+      border-radius: var(--r-m, 16px);
       padding: 13px 14px;
       outline: none;
       transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
@@ -268,7 +268,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       border: 1px solid var(--border);
       background: var(--panel-strong);
       color: var(--text);
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       padding: 12px 18px;
       cursor: pointer;
       font-weight: 650;
@@ -304,7 +304,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
     .customer-card,
     .verify-card {
       border: 1px solid var(--border);
-      border-radius: 24px;
+      border-radius: var(--r-l, 24px);
       background: var(--panel-strong);
       box-shadow: var(--shadow-soft);
     }
@@ -351,7 +351,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       border: 0;
       background: transparent;
       color: var(--text);
-      border-radius: 14px;
+      border-radius: var(--r-m, 14px);
       cursor: pointer;
       font-weight: 650;
       padding: 0;
@@ -395,7 +395,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
     .day-mark {
       position: absolute;
       inset: 0;
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       background: rgba(6, 118, 71, 0.12);
       border: 1.5px solid rgba(6, 118, 71, 0.35);
       pointer-events: none;
@@ -414,7 +414,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       border: 1px solid var(--border);
       background: linear-gradient(180deg, var(--panel-strong), var(--panel));
       color: var(--text);
-      border-radius: 16px;
+      border-radius: var(--r-m, 16px);
       padding: 12px 14px;
       text-align: left;
       cursor: pointer;
@@ -443,7 +443,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       border: 1px solid var(--border);
       background: transparent;
       color: var(--muted);
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       padding: 10px 16px;
       cursor: pointer;
       font-weight: 650;
@@ -476,7 +476,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
 
     .summary-item {
       padding: 14px;
-      border-radius: 18px;
+      border-radius: var(--r-l, 18px);
       background: color-mix(in srgb, var(--slot-soft) 60%, transparent);
       border: 1px solid var(--border);
     }
@@ -493,7 +493,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
     .summary-item strong { display: block; font-size: 1rem; line-height: 1.4; }
     .notice {
       padding: 14px 16px;
-      border-radius: 18px;
+      border-radius: var(--r-l, 18px);
       border: 1px solid var(--border);
       background: color-mix(in srgb, var(--accent) 10%, var(--panel-strong));
       color: var(--text);
@@ -516,7 +516,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
 
     .result-card {
       border: 1px solid var(--border);
-      border-radius: 18px;
+      border-radius: var(--r-l, 18px);
       padding: 14px;
       background: var(--panel-strong);
     }
@@ -539,7 +539,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
     .modal-card {
       width: min(720px, 100%);
       border: 1px solid var(--border);
-      border-radius: 24px;
+      border-radius: var(--r-l, 24px);
       background: var(--panel-strong);
       box-shadow: var(--shadow);
       padding: 20px;
@@ -555,7 +555,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
       max-width: min(420px, calc(100vw - 36px));
       background: var(--panel-strong);
       border: 1px solid var(--border);
-      border-radius: 18px;
+      border-radius: var(--r-l, 18px);
       box-shadow: var(--shadow);
       padding: 14px 16px;
       display: none;
@@ -581,7 +581,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
 
   @media (max-width: 640px) {
     .booking-shell { width: min(100% - 20px, 100%); padding: 14px 0 28px; }
-    .hero, .panel { border-radius: 22px; padding: 18px; }
+    .hero, .panel { border-radius: var(--r-l, 22px); padding: 18px; }
     .panel-head { align-items: flex-start; flex-direction: column; }
     .weekday-row, .day-grid { gap: 6px; }
     .day-cell { min-height: 40px; }
@@ -616,7 +616,7 @@ $disableOnlineBooking = (int) get_setting('disable_online_booking', '0');
 
     background: var(--panel-strong);
     border: 1px solid var(--border);
-    border-radius: 999px;
+    border-radius: var(--r-pill, 999px);
     box-shadow: var(--shadow);
 
     z-index: 1000;
