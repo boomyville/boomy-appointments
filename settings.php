@@ -145,6 +145,8 @@ $reminder_email_message = get_setting('reminder_email_message', '');
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
     .field-group { margin-bottom: 20px; border: 1px solid #ccc; padding: 12px; border-radius: var(--r-s, 4px); }
+    html[data-theme="light"] main, html[data-theme="dark"] main,
+    html[data-theme="light"] .field-group, html[data-theme="dark"] .field-group { background: transparent; }
     .field-group legend { font-weight: bold; font-size: 1.1em; margin-bottom: 10px; }
     .field-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .success-msg { color: green; margin-top: 8px; }
