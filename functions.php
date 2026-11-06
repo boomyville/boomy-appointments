@@ -1620,7 +1620,7 @@ function get_same_day_appointments_for_email(array $appointment): array
         $stmt = get_db()->prepare("SELECT a.id, a.start_time, a.end_time, a.status, a.hash_key, a.provider_id, a.appointment_type_id, c.full_name
             FROM appointments a
             JOIN customers c ON c.id = a.customer_id
-            WHERE LOWER(c.email) = ? AND a.start_time >= ? AND a.start_time < ? AND a.id <> ? AND a.status <> 'cancelled'
+            WHERE LOWER(TRIM(c.email)) = ? AND a.start_time >= ? AND a.start_time < ? AND a.id <> ? AND LOWER(TRIM(a.status)) <> 'cancelled'
             ORDER BY a.start_time ASC, a.id ASC");
         $stmt->execute([$email, $dayStart->format('Y-m-d H:i:s'), $dayEnd->format('Y-m-d H:i:s'), (int) ($appointment['id'] ?? 0)]);
 
