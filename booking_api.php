@@ -91,9 +91,9 @@ function booking_validate_day_slots(
     int $providerId,
     DateTimeImmutable $date,
     int $appointmentTypeId,
-    array $prefetchedAppointments = [],  // ← new
-    array $prefetchedRecurring = [],     // ← new
-    array $prefetchedSingle = []         // ← new
+    array $prefetchedAppointments = [], 
+    array $prefetchedRecurring = [],    
+    array $prefetchedSingle = []        
 ): array {
     $durationMinutes = booking_get_appointment_duration($appointmentTypeId);
     if ($durationMinutes === null) return [];
@@ -141,6 +141,9 @@ function booking_validate_day_slots(
 
     $slots = [];
     $cursor = $dayStart;
+    $serverNow = booking_server_now();
+    $bookingDeadlineHours = max(0, (int) get_setting('booking_deadline_hours', '24'));
+    $earliestBookableTime = $serverNow->modify('+' . $bookingDeadlineHours . ' hours');
 
     while ($cursor <= $lastStart) {
         if ($cursor < $earliestBookableTime) {
