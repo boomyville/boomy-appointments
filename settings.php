@@ -95,7 +95,7 @@ $smtp_host = get_setting('smtp_host', 'smtp.gmail.com');
 $smtp_port = (int) get_setting('smtp_port', '587');
 $smtp_encryption = get_setting('smtp_encryption', 'tls');
 $smtp_username = get_setting('smtp_username', '');
-$smtp_password = get_setting('smtp_password', '');
+$smtp_password_set = trim((string) get_setting('smtp_password', '')) !== '';
 $mail_from_address = get_setting('mail_from_address', '');
 $mail_from_name = get_setting('mail_from_name', APP_NAME ?? 'Boomy Appointments');
 $notify_admin_on_booking = (int) get_setting('notify_admin_on_booking', '0');
@@ -116,7 +116,7 @@ $reminder_enabled     = (int) get_setting('reminder_enabled', '0');
 $reminder_days_before = (int) get_setting('reminder_days_before', '1');
 $reminder_time        = get_setting('reminder_time', '09:00');
 $cron_key             = get_setting('cron_key', '');
-$smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && !empty($smtp_password));
+$smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && $smtp_password_set);
 
 $booking_step1_message = get_setting('booking_step1_message', '');
 $booking_step4_message = get_setting('booking_step4_message', '');
@@ -859,7 +859,7 @@ $reminder_email_message = get_setting('reminder_email_message', '');
       <input id="smtp_username" name="smtp_username" type="text" value="<?php echo htmlspecialchars($smtp_username); ?>" placeholder="your-email@gmail.com" required>
 
       <label for="smtp_password">Password (use app password for Gmail)</label>
-      <input id="smtp_password" name="smtp_password" type="password" value="<?php echo htmlspecialchars($smtp_password); ?>" placeholder="••••••••">
+      <input id="smtp_password" name="smtp_password" type="password" value="" autocomplete="new-password" placeholder="<?php echo $smtp_password_set ? 'Password saved - leave blank to keep it' : '••••••••'; ?>">
 
       <label for="mail_from_address">From Email Address</label>
       <input id="mail_from_address" name="mail_from_address" type="email" value="<?php echo htmlspecialchars($mail_from_address); ?>" placeholder="noreply@example.com" required>

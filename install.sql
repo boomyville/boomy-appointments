@@ -68,6 +68,17 @@ CREATE TABLE `login_attempts` (
   KEY `idx_login_attempts_time` (`attempted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 2D. RATE LIMITS (public endpoint / password reset throttling; created on demand by rate_limit_hit() too)
+CREATE TABLE `rate_limits` (
+  `id` BIGINT UNSIGNED AUTO_INCREMENT,
+  `bucket` VARCHAR(40) NOT NULL,
+  `key_hash` CHAR(64) NOT NULL,
+  `hit_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_rate_limits_lookup` (`bucket`, `key_hash`, `hit_at`),
+  KEY `idx_rate_limits_time` (`hit_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 3. APPOINTMENT TYPES
 CREATE TABLE `appointment_types` (
   `id` INT UNSIGNED AUTO_INCREMENT,

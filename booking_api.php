@@ -313,6 +313,27 @@ function booking_find_exact_customer_matches(string $email, string $mobile): arr
     return get_customers_by_exact_contact($email, $mobile);
 }
 
+/**
+ * What an unauthenticated visitor is allowed to learn about a customer profile: just enough to pick it.
+ * Date of birth, gender and sign-up date stay server-side.
+ */
+function booking_public_customer_view(array $customer): array
+{
+    return [
+        'id'        => (int) ($customer['id'] ?? 0),
+        'full_name' => (string) ($customer['full_name'] ?? ''),
+    ];
+}
+
+/** Per-IP throttle for the public endpoints. Sends 429 and exits when the limit is hit. */
+function booking_throttle(string $bucket, int $maxHits, int $windowSeconds): void
+{
+    if (!rate_limit_hit($bucket, get_client_ip(), $maxHits, $windowSeconds)) {
+        header('Retry-After: ' . $windowSeconds);
+        booking_api_response(['error' => 'Too many requests. Please wait a few minutes and try again.'], 429);
+    }
+}
+
 function booking_compose_customer_name(array $data): string
 {
     $parts = [];
@@ -341,15 +362,7 @@ function booking_resolve_customer_name(array $data, string $email = ''): string
 }
 function booking_extract_client_meta(array $data): array
 {
-    $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] 
-        ?? $_SERVER['HTTP_X_REAL_IP'] 
-        ?? $_SERVER['REMOTE_ADDR'] 
-        ?? null;
-
-    // X-Forwarded-For can be a comma-separated list; take the first
-    if ($ip && str_contains($ip, ',')) {
-        $ip = trim(explode(',', $ip)[0]);
-    }
+    $ip = get_client_ip();
 
     return [
         'last_ip'         => $ip ? substr($ip, 0, 45) : null,
@@ -479,7 +492,7 @@ try {
 
    if ($action === 'init' && $method === 'GET') {
         $appointmentTypes = get_appointment_types(true, true);
-        $stmt = get_db()->query("SELECT id, email, full_name, role, is_active, bookable FROM users WHERE role IN ('provider','admin') AND is_active = 1 AND bookable = 1 ORDER BY full_name ASC");
+        $stmt = get_db()->query("SELECT id, full_name, role, is_active, bookable FROM users WHERE role IN ('provider','admin') AND is_active = 1 AND bookable = 1 ORDER BY full_name ASC");
         $providers = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
         $settings = get_booking_calendar_settings();
 
@@ -616,6 +629,7 @@ if ($action === 'month' && $method === 'GET') {
         $data = json_decode(file_get_contents('php://input'), true) ?? [];
         $token = (string) ($data['csrf_token'] ?? '');
         if (!verify_csrf_token($token)) booking_api_response(['error' => 'csrf'], 400);
+        booking_throttle('book_cust_check', 10, 600);
 
         $mode = strtolower(trim((string) ($data['customer_mode'] ?? 'new')));
         $email = trim((string) ($data['customer_email'] ?? ''));
@@ -623,7 +637,7 @@ if ($action === 'month' && $method === 'GET') {
 
         if ($email === '' || $mobile === '') booking_api_response(['error' => 'email and mobile are required'], 422);
   if (!booking_validate_email($email)) booking_api_response(['error' => 'invalid email'], 422);
-         $matches = booking_find_exact_customer_matches($email, $mobile);
+         $matches = array_map('booking_public_customer_view', booking_find_exact_customer_matches($email, $mobile));
         $matchCount = count($matches);
 
         if ($mode === 'existing') {
@@ -634,7 +648,7 @@ if ($action === 'month' && $method === 'GET') {
                 'selected_customer' => $matchCount === 1 ? $matches[0] : null,
             ]);
         }
-        $matches = booking_find_exact_customer_matches($email, $mobile);
+        $matches = array_map('booking_public_customer_view', booking_find_exact_customer_matches($email, $mobile));
         $matchCount = count($matches);
         booking_api_response([
             'ok' => true,
@@ -664,6 +678,7 @@ if ($action === 'month' && $method === 'GET') {
         $data = json_decode(file_get_contents('php://input'), true) ?? [];
         $token = (string) ($data['csrf_token'] ?? '');
         if (!verify_csrf_token($token)) booking_api_response(['error' => 'csrf'], 400);
+        booking_throttle('book_create', 10, 3600);
 
         $providerId = (int) ($data['provider_id'] ?? 0);
         $appointmentTypeId = (int) ($data['appointment_type_id'] ?? 0);
@@ -766,7 +781,7 @@ if ($action === 'month' && $method === 'GET') {
 
             booking_api_response([
                 'ok' => true, 'pending' => true, 'requires_verification' => true, 'appointment' => $appointment,
-                'verification_email_sent' => $emailSent, 'verify_url' => build_app_url('verify_appointment.php', ['token' => $verificationCode]),
+                'verification_email_sent' => $emailSent,
                 'message' => 'Appointment request received. Please check your email to complete booking.',
             ]);
         }
@@ -810,6 +825,7 @@ update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
         $data = json_decode(file_get_contents('php://input'), true) ?? [];
         $token = (string) ($data['csrf_token'] ?? '');
         if (!verify_csrf_token($token)) booking_api_response(['error' => 'csrf'], 400);
+        booking_throttle('book_verify', 20, 600);
 
         $appointmentToken = trim((string) ($data['token'] ?? ''));
         if ($appointmentToken === '') booking_api_response(['error' => 'token is required'], 422);
@@ -844,6 +860,16 @@ update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
             if (!$newCustomerId) booking_api_response(['error' => 'Failed to build customer profile'], 500);
             $customerIdToAssign = (int) $newCustomerId;
         } else if (is_numeric($customerOption)) {
+            // Only the profiles that share this booking's email + mobile may be chosen. Without this check
+            // anyone holding a verify token could attach the appointment to any customer id.
+            $allowedIds = array_map('intval', array_column(
+                booking_find_exact_customer_matches((string) ($originalCustomer['email'] ?? ''), (string) ($originalCustomer['mobile'] ?? '')),
+                'id'
+            ));
+            $allowedIds[] = $originalCustomerId;
+            if (!in_array((int) $customerOption, $allowedIds, true)) {
+                booking_api_response(['error' => 'Selected profile is not valid for this booking'], 403);
+            }
             $customerIdToAssign = (int) $customerOption;
         }
 

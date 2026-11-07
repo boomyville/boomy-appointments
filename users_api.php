@@ -1,20 +1,9 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/functions.php';
-init_session();
 header('Content-Type: application/json; charset=utf-8');
-if (empty($_SESSION['user'])) {
-    http_response_code(401);
-    echo json_encode(['error' => 'unauthenticated']);
-    exit;
-}
-$user = $_SESSION['user'];
+$user = require_api_user('admin');
 $role = $user['role'] ?? '';
-if ($role !== 'admin') {
-    http_response_code(403);
-    echo json_encode(['error' => 'permission denied']);
-    exit;
-}
 try {
     $action = $_GET['action'] ?? 'search';
 
@@ -97,6 +86,12 @@ try {
                 $phone, $role_new, $is_active, $bookable, $user_id,
             ]);
 
+            // Deactivating or changing the role of an account must take effect immediately,
+            // not whenever its existing sessions happen to expire.
+            if ((int) $is_active === 0 || (string) ($existing['role'] ?? '') !== (string) $role_new) {
+                invalidate_all_user_sessions($user_id, $user_id === (int) ($_SESSION['user']['id'] ?? 0) ? session_id() : null);
+            }
+
             echo json_encode(['message' => 'User updated successfully.']);
             exit;
         }
@@ -105,6 +100,13 @@ try {
         if (!email_is_configured()) {
             http_response_code(400);
             echo json_encode(['error' => 'Email is not configured. Cannot create user.']);
+            exit;
+        }
+
+        // Setup links carry a secret, so they must point at the configured Root URL, never at a Host header
+        if (trim((string) get_setting('root_url', '')) === '') {
+            http_response_code(400);
+            echo json_encode(['error' => 'Set the Root URL in Settings > General before creating users.']);
             exit;
         }
 
@@ -140,7 +142,7 @@ try {
         // Generate password reset link so the new user can set their own password
         $reset_code = create_verification_token($new_user_id, 'password_reset', 1440); // 24h
         send_password_reset_email($email, $reset_code);
-        $reset_link = build_app_url('reset_password.php', ['code' => $reset_code]);
+        $reset_link = build_app_url('reset_password.php', ['code' => $reset_code], true);
 
         echo json_encode([
             'message'    => 'User created successfully. A password reset link has been sent.',
