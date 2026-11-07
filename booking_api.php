@@ -143,7 +143,7 @@ function booking_validate_day_slots(
     $cursor = $dayStart;
 
     while ($cursor <= $lastStart) {
-        if ($cursor < $serverNow) {
+        if ($cursor < $earliestBookableTime) {
             $cursor = booking_add_minutes($cursor, $durationMinutes);
             continue;
         }
@@ -217,6 +217,8 @@ function booking_build_month_view(int $providerId, int $appointmentTypeId, DateT
     $weekStartDay = (int) ($bookingSettings['week_start_day'] ?? 0);
     $monthEnd = $monthStart->modify('first day of next month')->setTime(0, 0, 0);
     $serverNow = booking_server_now();
+    $bookingDeadlineHours = max(0, (int) get_setting('booking_deadline_hours', '24'));
+    $earliestBookableTime = $serverNow->modify('+' . $bookingDeadlineHours . ' hours');
     $todayStart = $serverNow->setTime(0, 0, 0);
 
     $maxAdvanceDate = booking_max_advance_date();
@@ -689,6 +691,15 @@ if ($action === 'month' && $method === 'GET') {
 
         $startDate = booking_parse_date($startTime);
         if (!$startDate) booking_api_response(['error' => 'invalid start time'], 422);
+
+        $bookingDeadlineHours = max(0, (int) get_setting('booking_deadline_hours', '24'));
+        $earliestBookableTime = booking_server_now()->modify('+' . $bookingDeadlineHours . ' hours');
+        if ($startDate < $earliestBookableTime) {
+            booking_api_response([
+                'error' => 'This appointment must be booked at least ' . $bookingDeadlineHours . ' hours in advance',
+                'code' => 'insufficient_booking_notice',
+            ], 422);
+        }
 
         $durationMinutes = max(1, (int) ($appointmentType['duration_minutes'] ?? 30));
         $endDate = booking_add_minutes($startDate, $durationMinutes);
