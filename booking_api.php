@@ -920,10 +920,11 @@ if ($action === 'check_metadata_limit' && $method === 'POST') {
               FROM appointments a
               INNER JOIN customers c ON a.customer_id = c.id
               WHERE a.status IN ('booked', 'confirmed', 'unconfirmed')
+                AND a.end_time >= ?
               AND c.last_ip = ?";
 
     $stmt = $db->prepare($query);
-    $stmt->execute([$clientIp]);
+    $stmt->execute([booking_server_now()->format('Y-m-d H:i:s'), $clientIp]);
     $ipMatches = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // 5. Weight-matching loop logic
@@ -942,11 +943,12 @@ if ($action === 'check_metadata_limit' && $method === 'POST') {
 
     // 6. Return comprehensive debug payload so you can see your data rows
     booking_api_response([
-        'is_blocked'       => ($matchCount >= $limit),
-        'match_count'      => $matchCount,
-        'limit'            => $limit,
-        'your_current_ip'  => $clientIp,
-        'database_records' => $ipMatches
+        'is_blocked'       => ($matchCount >= $limit)
+        // Debug information
+        // 'match_count'      => $matchCount,
+        // 'limit'            => $limit,
+        // 'your_current_ip'  => $clientIp,
+        // 'database_records' => $ipMatches
     ]);
     exit;
 }
