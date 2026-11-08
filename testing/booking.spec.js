@@ -90,10 +90,46 @@ test('customer can book, confirm by email, and admin can sign in', async ({ page
     await expect(page.locator('#providerSelect')).toBeVisible();
     await expect(page.locator('#appointmentTypeSelect option')).not.toHaveCount(0);
     await expect(page.locator('#providerSelect option')).not.toHaveCount(0);
+
+    page.on('pageerror', error => {
+        console.log('BROWSER ERROR:', error.message);
+    });
+
+    page.on('response', async response => {
+        if (response.url().includes('booking_api.php?action=month')) {
+            console.log('MONTH API STATUS:', response.status());
+            console.log('MONTH API URL:', response.url());
+
+            try {
+                const data = await response.json();
+                console.log('MONTH API RESPONSE:', JSON.stringify(data));
+            } catch {
+                console.log('MONTH API RESPONSE: Not JSON');
+            }
+        }
+    });
+
     await page.locator('#step1Continue').click();
 
     // Step 2: select the first available date and time.
-    const availableDate = page.locator('#monthsContainer [data-date].is-available').first();
+    await expect(page.locator('#monthsContainer .month-card')).toBeVisible({
+        timeout: 30_000
+    });
+
+    console.log(
+        'CALENDAR CONTENT:',
+        await page.locator('#monthsContainer').innerText()
+    );
+
+    console.log(
+        'AVAILABLE DATES:',
+        await page.locator('#monthsContainer [data-date].is-available').count()
+    );
+
+    const availableDate = page.locator(
+        '#monthsContainer [data-date].is-available'
+    ).first();
+
     await expect(availableDate).toBeVisible({ timeout: 30_000 });
     await availableDate.click();
 
