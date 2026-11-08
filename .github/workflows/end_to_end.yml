@@ -2,6 +2,11 @@ name: Playwright End-to-End Tests
 
 on:
   workflow_dispatch:
+    inputs:
+      delete_test_data:
+        description: 'Delete the "Playwright E2E" test customers and appointments after the run'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -10,7 +15,7 @@ permissions:
 jobs:
   end_to_end:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -32,6 +37,8 @@ jobs:
           E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
           E2E_ADMIN_USERNAME: ${{ secrets.E2E_ADMIN_USERNAME }}
           E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+          # true/false from the "delete_test_data" input above (see testing/global-teardown.js)
+          E2E_CLEANUP: ${{ inputs.delete_test_data }}
           # Optional: enables the "provider cannot read mail settings" security test
           E2E_PROVIDER_USERNAME: ${{ secrets.E2E_PROVIDER_USERNAME }}
           E2E_PROVIDER_PASSWORD: ${{ secrets.E2E_PROVIDER_PASSWORD }}
