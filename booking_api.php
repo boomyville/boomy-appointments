@@ -447,17 +447,18 @@ function booking_send_verification_email(array $appointment, array $provider, ar
     $sameDay = build_same_day_appointments_email_block($appointment, false);
 
     $subject = 'Appointment confirmation required for ' . $siteName;
-    $bodyHtml = '<h2>Appointment confirmation required</h2>'
+    $bodyHtml = '<h2>Your new appointment is awaiting verification</h2>'
         . '<p>' . htmlspecialchars($reasonLine, ENT_QUOTES, 'UTF-8') . '</p>'
+        . '<h3>Appointment to verify</h3>'
         . '<ul>'
         . '<li><strong>Appointment type:</strong> ' . htmlspecialchars($appointmentTypeName, ENT_QUOTES, 'UTF-8') . '</li>'
         . '<li><strong>Provider:</strong> ' . htmlspecialchars($providerName, ENT_QUOTES, 'UTF-8') . '</li>'
         . '<li><strong>Start time:</strong> ' . htmlspecialchars($startDate, ENT_QUOTES, 'UTF-8') . '</li>'
         . '</ul>'
         . $sameDay['html']
-        . '<p><a href="' . htmlspecialchars($verifyUrl, ENT_QUOTES, 'UTF-8') . '" style="background:' . theme_email_primary() . ';color:#fff;display:inline-block;padding:12px 20px;border-radius:' . theme_email_radius('pill', '999px') . ';text-decoration:none;font-weight:700;">Verify customer details</a></p>';
+        . '<p><a href="' . htmlspecialchars($verifyUrl, ENT_QUOTES, 'UTF-8') . '" style="background:' . theme_email_primary() . ';color:#fff;display:inline-block;padding:12px 20px;border-radius:' . theme_email_radius('pill', '999px') . ';text-decoration:none;font-weight:700;">Verify and complete this booking</a></p>';
 
-    $bodyPlain = "Appointment confirmation required for {$siteName}\n\n{$reasonLine}\n\nAppointment type: {$appointmentTypeName}\nProvider: {$providerName}\nStart time: {$startDate}\n\n" . $sameDay['plain'] . "Verify customer details: {$verifyUrl}\n";
+    $bodyPlain = "Your new appointment is awaiting verification - {$siteName}\n\n{$reasonLine}\n\nAPPOINTMENT TO VERIFY\nAppointment type: {$appointmentTypeName}\nProvider: {$providerName}\nStart time: {$startDate}\n\n" . $sameDay['plain'] . "Verify and complete this booking: {$verifyUrl}\n";
 
     $customer = get_customer_by_id((int) ($appointment['customer_id'] ?? 0));
     $recipient = trim((string) ($customer['email'] ?? ''));
