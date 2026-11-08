@@ -109,6 +109,21 @@ test('customer can book, confirm by email, and admin can sign in', async ({ page
         }
     });
 
+    // Wait until booking page JavaScript has completed initialisation.
+    await expect(page.locator('#toast')).toContainText('Ready', {
+        timeout: 30_000
+    });
+
+    console.log('Booking page initialisation complete.');
+
+    console.log('Selected appointment type:',
+        await page.locator('#appointmentTypeSelect').inputValue()
+    );
+
+    console.log('Selected provider:',
+        await page.locator('#providerSelect').inputValue()
+    );
+
     await page.locator('#step1Continue').click();
 
     // Step 2: select the first available date and time.
