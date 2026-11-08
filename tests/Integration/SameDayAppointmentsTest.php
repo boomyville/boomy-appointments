@@ -112,7 +112,7 @@ final class SameDayAppointmentsTest extends DatabaseTestCase
 
         $this->assertSame(1, $block['count']);
         $this->assertStringContainsString('Mark Smith', $block['html']);
-        $this->assertStringNotContainsString('Jay Smith', $block['html'], 'the appointment being verified is not listed against itself');
+        $this->assertStringContainsString('Jay Smith (this booking)', $block['html']);
         $this->assertStringNotContainsString('confirm_appointment.php', $block['html']);
         $this->assertStringNotContainsString('confirm_appointment.php', $block['plain']);
     }
