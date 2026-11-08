@@ -190,10 +190,6 @@ test('customer can book, confirm by email, and admin can sign in', async ({ page
 
     // Step 4a: open the verification email link and confirm the customer.
     const verifyUrl = await waitForEmailLink(inbox, 'verify_appointment');
-        page.on('dialog', async dialog => {
-      console.log('VERIFY PAGE DIALOG:', dialog.message());
-      await dialog.dismiss();
-    });
     const verifyResponse = page
       .waitForResponse(
         r => r.url().includes('booking_api.php?action=verify') && r.request().method() === 'POST',
