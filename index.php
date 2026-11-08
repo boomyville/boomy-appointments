@@ -32,14 +32,14 @@ if ($siteName === '') {
       align-items: center;
       position: relative;
       overflow: hidden;
-      background: linear-gradient(-45deg, #f4f7fb, #eef2f7, rgba(var(--accent-rgb, 36, 87, 255), 0.08), rgba(245, 158, 11, 0.06));
+      background: linear-gradient(-45deg, var(--theme-bg, #f4f7fb), var(--theme-bg, #eef2f7), rgba(var(--accent-rgb, 36, 87, 255), 0.08), rgba(245, 158, 11, 0.06));
       background-size: 400% 400%;
       animation: gradientFlow 15s ease infinite;
     }
 
     @media (prefers-color-scheme: dark) {
       body {
-        background: linear-gradient(-45deg, #0b1220, #0f172a, rgba(var(--accent-rgb, 36, 87, 255), 0.15), rgba(15, 23, 42, 0.8));
+        background: linear-gradient(-45deg, var(--theme-bg, #0b1220), var(--theme-bg, #0f172a), rgba(var(--accent-rgb, 36, 87, 255), 0.15), rgba(15, 23, 42, 0.8));
         background-size: 400% 400%;
         animation: gradientFlow 15s ease infinite;
       }
@@ -56,7 +56,7 @@ if ($siteName === '') {
       width: min(580px, calc(100% - 32px));
       padding: 40px;
       border: 1px solid rgba(18, 27, 43, 0.12);
-      border-radius: 28px;
+      border-radius: var(--r-l, 28px);
       background: rgba(255, 255, 255, 0.92);
       box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
       backdrop-filter: blur(18px);
@@ -81,7 +81,7 @@ if ($siteName === '') {
     .splash-eyebrow {
       display: inline-flex;
       padding: 6px 16px;
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       background: rgba(var(--accent-rgb, 36, 87, 255), 0.08);
       color: var(--accent, #2457ff);
       font-size: 0.85rem;
@@ -132,7 +132,7 @@ if ($siteName === '') {
       padding: 16px 32px;
       font-size: 1.1rem;
       font-weight: 700;
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       background: linear-gradient(135deg, var(--accent, #2457ff), var(--accent-strong, #1639b5));
       color: #ffffff;
       text-decoration: none;

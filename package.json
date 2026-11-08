@@ -1,0 +1,10 @@
+{
+  "name": "boomy-appointments-e2e",
+  "private": true,
+  "scripts": {
+    "test:end_to_end": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.1"
+  }
+}

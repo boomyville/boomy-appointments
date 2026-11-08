@@ -9,6 +9,7 @@ init_session();
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Login - <?php echo htmlspecialchars(APP_NAME); ?></title>
   <link rel="stylesheet" href="assets/css/pico.min.css" id="pico-css" onerror="this.onerror=null; this.href='https://unpkg.com/@picocss/pico@2.*/css/pico.min.css';">
+  <link rel="stylesheet" href="assets/css/theme.css">
 <?php render_theme_head(); ?>
 </head>
 <body>
@@ -76,17 +77,12 @@ if (forgotForm) {
     window.addEventListener('api:success', (evt) => {
       if (evt.detail.form === forgotForm) {
         const json = evt.detail.json || {};
-        if (json.bypass && json.reset_link) {
-          msgDiv.innerHTML = '<p style="color: orange; margin-top: 8px;">⚠️ Email not configured — use this link to reset your password:</p>' +
-            '<p><a href="' + json.reset_link + '" target="_blank">Open reset link</a></p>';
-        } else {
-          msgDiv.innerHTML = '<p style="color: green; margin-top: 8px;">✓ Check your email for the reset link</p>';
-          setTimeout(() => {
-            closeForgotPasswordModal();
-            document.getElementById('forgotEmail').value = '';
-            msgDiv.innerHTML = '';
-          }, 3000);
-        }
+        msgDiv.innerHTML = '<p style="color: green; margin-top: 8px;">✓ If that account exists, a reset link has been emailed</p>';
+        setTimeout(() => {
+          closeForgotPasswordModal();
+          document.getElementById('forgotEmail').value = '';
+          msgDiv.innerHTML = '';
+        }, 3000);
       }
     });
 

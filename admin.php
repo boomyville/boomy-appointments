@@ -408,7 +408,7 @@ $nextAppointmentType = $nextAppointment['type_name'] ?? 'Appointment';
     .dashboard-section-heading p { margin:0; color:var(--muted); }
     .dashboard-section-heading a { color:var(--accent); font-weight:600; white-space:nowrap; }
     .dashboard-today-grid { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:10px; }
-    .dashboard-today-stat { min-height:88px; padding:14px; border:1px solid var(--panel-border); border-radius:10px; background:rgba(var(--accent-rgb, 36, 87, 255),0.04); }
+    .dashboard-today-stat { min-height:88px; padding:14px; border:1px solid var(--panel-border); border-radius:var(--r-m, 10px); background:rgba(var(--accent-rgb, 36, 87, 255),0.04); }
     .dashboard-today-stat strong { display:block; font-size:1.55rem; line-height:1.1; color:var(--text); }
     .dashboard-today-stat span { display:block; margin-top:8px; color:var(--muted); font-size:.88rem; }
     .dashboard-today-stat-primary { background:rgba(var(--accent-rgb, 36, 87, 255),0.1); border-color:rgba(var(--accent-rgb, 36, 87, 255),0.25); }
@@ -424,23 +424,23 @@ $nextAppointmentType = $nextAppointment['type_name'] ?? 'Appointment';
     .dashboard-upcoming-list .dashboard-upcoming-name { font-weight:600; color:var(--text); }
     .dashboard-upcoming-list .dashboard-upcoming-type { font-size:.88rem; color:var(--muted); }
     .dashboard-upcoming-list .dashboard-upcoming-flag { font-size:.78rem; font-weight:600; color:#b45309; }
-    .dashboard-upcoming-list .dashboard-upcoming-badge { padding:1px 8px; border-radius:99px; background:var(--accent); color:#fff; font-size:.7rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+    .dashboard-upcoming-list .dashboard-upcoming-badge { padding:1px 8px; border-radius:var(--r-pill, 99px); background:var(--accent); color:#fff; font-size:.7rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
     @media (max-width: 720px) {
       .dashboard-today-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
       .dashboard-today-stat-primary { grid-column:span 2; }
     }
     .week-modal { display:none; position:fixed; inset:0; z-index:1000; padding:24px; background:rgba(15,23,42,.58); overflow:auto; }
     .week-modal.is-open { display:flex; align-items:flex-start; justify-content:center; }
-    .week-modal-dialog { width:min(860px, 100%); margin:2vh auto; padding:18px; border:1px solid var(--panel-border); border-radius:12px; background:#fff; color:#0f172a; box-shadow:0 24px 70px rgba(15,23,42,.25); }
+    .week-modal-dialog { width:min(860px, 100%); margin:2vh auto; padding:18px; border:1px solid var(--panel-border); border-radius:var(--r-m, 12px); background:#fff; color:#0f172a; box-shadow:0 24px 70px rgba(15,23,42,.25); }
     .week-modal-header { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:16px; }
     .week-modal-header h2 { margin:0 0 4px; }
     .week-modal-header p { margin:0; color:var(--muted); }
     .week-modal-close { margin:0; padding:6px 10px; }
     .week-stat-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; margin-bottom:16px; }
-    .week-stat { padding:10px 12px; border:1px solid var(--panel-border); border-radius:8px; background:rgba(var(--accent-rgb, 36, 87, 255),.04); }
+    .week-stat { padding:10px 12px; border:1px solid var(--panel-border); border-radius:var(--r-s, 8px); background:rgba(var(--accent-rgb, 36, 87, 255),.04); }
     .week-stat strong { display:block; font-size:1.25rem; color:var(--text); }
     .week-stat span { display:block; margin-top:4px; color:var(--muted); font-size:.8rem; }
-    .week-chart { padding:14px 12px 8px; border:1px solid var(--panel-border); border-radius:8px; background:rgba(var(--accent-rgb, 36, 87, 255),.025); }
+    .week-chart { padding:14px 12px 8px; border:1px solid var(--panel-border); border-radius:var(--r-s, 8px); background:rgba(var(--accent-rgb, 36, 87, 255),.025); }
     .week-chart-legend { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:10px; color:var(--muted); font-size:.78rem; }
     .week-chart-legend span { display:inline-flex; align-items:center; gap:6px; }
     .week-chart-key { width:10px; height:10px; border-radius:50%; }
@@ -450,44 +450,44 @@ $nextAppointmentType = $nextAppointment['type_name'] ?? 'Appointment';
     .week-chart-bars { display:grid; grid-template-columns:repeat(7, minmax(0, 1fr)); gap:8px; align-items:end; min-height:170px; }
     .week-chart-day { display:flex; flex-direction:column; justify-content:flex-end; min-width:0; height:170px; }
     .week-chart-columns { display:flex; align-items:end; justify-content:center; gap:2px; height:140px; }
-    .week-chart-bar { width:clamp(8px, 2vw, 18px); min-height:2px; border-radius:4px 4px 0 0; }
+    .week-chart-bar { width:clamp(8px, 2vw, 18px); min-height:2px; border-radius:var(--r-s, 4px) var(--r-s, 4px) 0 0; }
     .week-chart-bar-current { background:var(--accent, #2457ff); }
     .week-chart-bar-previous { background:#94a3b8; }
     .week-chart-bar-average { background:#f59e0b; }
     .week-chart-day-label { margin-top:8px; text-align:center; color:var(--muted); font-size:.8rem; }
     .week-chart-day-total { margin-top:3px; text-align:center; color:var(--text); font-size:.75rem; }
     .week-detail-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px; }
-    .week-detail-card { padding:12px; border:1px solid var(--panel-border); border-radius:8px; }
+    .week-detail-card { padding:12px; border:1px solid var(--panel-border); border-radius:var(--r-s, 8px); }
     .week-detail-card h3 { margin:0 0 12px; font-size:1rem; }
     .week-detail-card table { width:100%; margin:0; }
     .week-detail-card td { padding:6px 0; border-bottom:1px solid var(--panel-border); }
     .week-detail-card td:last-child { text-align:right; font-weight:700; }
     .week-modal-note { margin:16px 0 0; color:var(--muted); font-size:.84rem; }
-    html[data-theme="dark"] .week-modal-dialog { background:#111827; color:#e5e7eb; border-color:#334155; }
+    html[data-theme="dark"] .week-modal-dialog { background:var(--theme-surface, #111827); color:#e5e7eb; border-color:#334155; }
     html[data-theme="dark"] .week-stat,
     html[data-theme="dark"] .week-chart,
-    html[data-theme="dark"] .week-detail-card { background:#0b1220; border-color:#334155; }
+    html[data-theme="dark"] .week-detail-card { background:var(--theme-bg, #0b1220); border-color:#334155; }
     html[data-theme="dark"] .week-stat strong,
     html[data-theme="dark"] .week-detail-card td:last-child { color:#f8fafc; }
     html[data-theme="dark"] .week-detail-card td { border-color:#334155; }
     .customer-stat-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; margin-bottom:14px; }
-    .customer-stat { padding:10px 12px; border:1px solid var(--panel-border); border-radius:8px; background:rgba(var(--accent-rgb, 36, 87, 255),.04); }
+    .customer-stat { padding:10px 12px; border:1px solid var(--panel-border); border-radius:var(--r-s, 8px); background:rgba(var(--accent-rgb, 36, 87, 255),.04); }
     .customer-stat strong { display:block; font-size:1.25rem; color:var(--text); }
     .customer-stat span { display:block; margin-top:4px; color:var(--muted); font-size:.8rem; }
     .customer-chart-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; }
-    .customer-chart-card { padding:12px; border:1px solid var(--panel-border); border-radius:8px; background:rgba(var(--accent-rgb, 36, 87, 255),.025); }
+    .customer-chart-card { padding:12px; border:1px solid var(--panel-border); border-radius:var(--r-s, 8px); background:rgba(var(--accent-rgb, 36, 87, 255),.025); }
     .customer-chart-card h3 { margin:0 0 10px; font-size:.95rem; }
     .customer-chart-content { display:flex; align-items:center; gap:14px; }
     .customer-pie { flex:0 0 92px; width:92px; height:92px; border-radius:50%; }
     .customer-age-bars { width:100%; }
     .customer-age-row { display:grid; grid-template-columns:58px 1fr 28px; align-items:center; gap:7px; margin:6px 0; color:var(--muted); font-size:.75rem; }
-    .customer-age-track { height:8px; overflow:hidden; border-radius:999px; background:rgba(100,116,139,.2); }
-    .customer-age-fill { display:block; height:100%; min-width:2px; border-radius:999px; }
+    .customer-age-track { height:8px; overflow:hidden; border-radius:var(--r-pill, 999px); background:rgba(100,116,139,.2); }
+    .customer-age-fill { display:block; height:100%; min-width:2px; border-radius:var(--r-pill, 999px); }
     .customer-chart-legend { min-width:0; list-style:none; padding:0; margin:0; font-size:.78rem; color:var(--muted); }
     .customer-chart-legend li { display:flex; align-items:center; gap:6px; margin:4px 0; white-space:nowrap; }
     .customer-chart-swatch { width:9px; height:9px; border-radius:50%; flex:0 0 9px; }
     html[data-theme="dark"] .customer-stat,
-    html[data-theme="dark"] .customer-chart-card { background:#0b1220; border-color:#334155; }
+    html[data-theme="dark"] .customer-chart-card { background:var(--theme-bg, #0b1220); border-color:#334155; }
     html[data-theme="dark"] .customer-stat strong { color:#f8fafc; }
     @media (max-width: 720px) {
       .week-modal { padding:10px; }
@@ -548,7 +548,7 @@ $nextAppointmentType = $nextAppointment['type_name'] ?? 'Appointment';
           <h2>Today at a glance</h2>
           <p><?php echo htmlspecialchars($todayStart->format('l, j F Y')); ?></p>
         </div>
-        <a href="calendar.php">Open calendar</a>
+        <a href="calendar.php">Open calendar</a> <a href="booking.php">Open Online Booking</a>
       </div>
 
       <div class="dashboard-today-grid">
@@ -601,27 +601,27 @@ $nextAppointmentType = $nextAppointment['type_name'] ?? 'Appointment';
     <div class="admin-panel">
       <h2>Quick Actions</h2>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px;">
-        <a href="users.php" style="display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px; border:1px solid var(--panel-border); background:rgba(var(--accent-rgb, 36, 87, 255),0.06); border-radius:12px; text-decoration:none; color:var(--accent); font-weight:600; transition:all 0.2s ease;">
+        <a href="users.php" style="display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px; border:1px solid var(--panel-border); background:rgba(var(--accent-rgb, 36, 87, 255),0.06); border-radius:var(--r-m, 12px); text-decoration:none; color:var(--accent); font-weight:600; transition:all 0.2s ease;">
           <span style="font-size:1.6rem;">👥</span>
           <span>Users</span>
         </a>
-        <a href="customers.php" style="display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px; border:1px solid var(--panel-border); background:rgba(var(--accent-rgb, 36, 87, 255),0.06); border-radius:12px; text-decoration:none; color:var(--accent); font-weight:600; transition:all 0.2s ease;">
+        <a href="customers.php" style="display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px; border:1px solid var(--panel-border); background:rgba(var(--accent-rgb, 36, 87, 255),0.06); border-radius:var(--r-m, 12px); text-decoration:none; color:var(--accent); font-weight:600; transition:all 0.2s ease;">
           <span style="font-size:1.6rem;">👤</span>
           <span>Customers</span>
         </a>
-        <a href="calendar.php" style="display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px; border:1px solid var(--panel-border); background:rgba(var(--accent-rgb, 36, 87, 255),0.06); border-radius:12px; text-decoration:none; color:var(--accent); font-weight:600; transition:all 0.2s ease;">
+        <a href="calendar.php" style="display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px; border:1px solid var(--panel-border); background:rgba(var(--accent-rgb, 36, 87, 255),0.06); border-radius:var(--r-m, 12px); text-decoration:none; color:var(--accent); font-weight:600; transition:all 0.2s ease;">
           <span style="font-size:1.6rem;">📅</span>
           <span>Calendar</span>
         </a>
-        <a href="settings.php" style="display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px; border:1px solid var(--panel-border); background:rgba(var(--accent-rgb, 36, 87, 255),0.06); border-radius:12px; text-decoration:none; color:var(--accent); font-weight:600; transition:all 0.2s ease;">
+        <a href="settings.php" style="display:flex; flex-direction:column; align-items:center; gap:6px; padding:16px; border:1px solid var(--panel-border); background:rgba(var(--accent-rgb, 36, 87, 255),0.06); border-radius:var(--r-m, 12px); text-decoration:none; color:var(--accent); font-weight:600; transition:all 0.2s ease;">
           <span style="font-size:1.6rem;">⚙️</span>
           <span>Settings</span>
         </a>
-        <button type="button" id="weekAtGlanceButton" aria-haspopup="dialog" style="display:flex; width:100%; height:100%; margin:0; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:16px; border:1px solid var(--panel-border); background:rgba(var(--accent-rgb, 36, 87, 255),0.06); border-radius:12px; color:var(--accent); font:inherit; font-weight:600; cursor:pointer; appearance:none; transition:all 0.2s ease;">
+        <button type="button" id="weekAtGlanceButton" aria-haspopup="dialog" style="display:flex; width:100%; height:100%; margin:0; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:16px; border:1px solid var(--panel-border); background:rgba(var(--accent-rgb, 36, 87, 255),0.06); border-radius:var(--r-m, 12px); color:var(--accent); font:inherit; font-weight:600; cursor:pointer; appearance:none; transition:all 0.2s ease;">
           <span style="font-size:1.6rem;">📊</span>
           <span>Week at a glance</span>
         </button>
-        <button type="button" id="customerStatsButton" aria-haspopup="dialog" style="display:flex; width:100%; height:100%; margin:0; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:16px; border:1px solid var(--panel-border); background:rgba(var(--accent-rgb, 36, 87, 255),0.06); border-radius:12px; color:var(--accent); font:inherit; font-weight:600; cursor:pointer; appearance:none; transition:all 0.2s ease;">
+        <button type="button" id="customerStatsButton" aria-haspopup="dialog" style="display:flex; width:100%; height:100%; margin:0; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:16px; border:1px solid var(--panel-border); background:rgba(var(--accent-rgb, 36, 87, 255),0.06); border-radius:var(--r-m, 12px); color:var(--accent); font:inherit; font-weight:600; cursor:pointer; appearance:none; transition:all 0.2s ease;">
           <span style="font-size:1.6rem;">👥</span>
           <span>Customer statistics</span>
         </button>

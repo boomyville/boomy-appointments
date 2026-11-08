@@ -1,17 +1,10 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/functions.php';
-init_session();
 header('Content-Type: application/json; charset=utf-8');
 
-// Only allow logged-in users to fetch appointments
-if (empty($_SESSION['user'])) {
-    http_response_code(401);
-    echo json_encode(['error' => 'unauthenticated']);
-    exit;
-}
-
-$user = $_SESSION['user'];
+// Only allow users with a live (not revoked / expired) session
+$user = require_api_user();
 $role = $user['role'] ?? '';
 $isStaff = $role === 'admin' || $role === 'provider';
 

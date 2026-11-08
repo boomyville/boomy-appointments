@@ -71,7 +71,7 @@ if ($siteName === '') {
     .hero,
     .card {
       border: 1px solid var(--border);
-      border-radius: 28px;
+      border-radius: var(--r-l, 28px);
       background: var(--panel);
       box-shadow: var(--shadow);
       padding: 24px;
@@ -99,7 +99,7 @@ if ($siteName === '') {
 
     .notice {
       padding: 14px 16px;
-      border-radius: 18px;
+      border-radius: var(--r-l, 18px);
       border: 1px solid var(--border);
       background: color-mix(in srgb, var(--accent) 10%, var(--panel-strong));
       color: var(--text);
@@ -134,7 +134,7 @@ if ($siteName === '') {
     .summary-item,
     .match-item {
       padding: 14px;
-      border-radius: 18px;
+      border-radius: var(--r-l, 18px);
       background: color-mix(in srgb, rgba(var(--accent-rgb, 36, 87, 255), 0.08) 45%, var(--panel-strong));
       border: 1px solid var(--border);
     }
@@ -176,7 +176,7 @@ if ($siteName === '') {
       border: 1px solid var(--border);
       background: var(--panel-strong);
       color: var(--text);
-      border-radius: 16px;
+      border-radius: var(--r-m, 16px);
       padding: 13px 14px;
       outline: none;
     }
@@ -199,7 +199,7 @@ if ($siteName === '') {
       border: 1px solid var(--border);
       background: var(--panel-strong);
       color: var(--text);
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       padding: 12px 18px;
       cursor: pointer;
       font-weight: 650;
@@ -246,11 +246,11 @@ if ($siteName === '') {
             <div class="field" style="grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 14px;">
               <div>
                 <label for="newFirstName" style="display: block; font-weight: 650; margin-bottom: 8px;">First name *</label>
-                <input id="newFirstName" type="text" placeholder="First name" style="width: 100%; border: 1px solid var(--border); background: var(--panel-strong); color: var(--text); border-radius: 16px; padding: 13px 14px; outline: none;" disabled>
+                <input id="newFirstName" type="text" placeholder="First name" style="width: 100%; border: 1px solid var(--border); background: var(--panel-strong); color: var(--text); border-radius: var(--r-m, 16px); padding: 13px 14px; outline: none;" disabled>
               </div>
               <div>
                 <label for="newLastName" style="display: block; font-weight: 650; margin-bottom: 8px;">Last name *</label>
-                <input id="newLastName" type="text" placeholder="Last name" style="width: 100%; border: 1px solid var(--border); background: var(--panel-strong); color: var(--text); border-radius: 16px; padding: 13px 14px; outline: none;" disabled>
+                <input id="newLastName" type="text" placeholder="Last name" style="width: 100%; border: 1px solid var(--border); background: var(--panel-strong); color: var(--text); border-radius: var(--r-m, 16px); padding: 13px 14px; outline: none;" disabled>
               </div>
             </div>
           </aside>

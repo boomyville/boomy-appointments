@@ -106,7 +106,7 @@ if ($role !== 'admin') {
       background: var(--panel);
       color: var(--text);
       text-decoration: none;
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       padding: 10px 14px;
       font: inherit;
       cursor: pointer;
@@ -116,7 +116,7 @@ if ($role !== 'admin') {
     .panel {
       background: var(--panel);
       border: 1px solid var(--panel-border);
-      border-radius: 28px;
+      border-radius: var(--r-l, 28px);
       box-shadow: var(--shadow);
       backdrop-filter: blur(10px);
       overflow: hidden;
@@ -153,7 +153,7 @@ if ($role !== 'admin') {
       flex: 1;
       min-width: 200px;
       border: 1px solid var(--panel-border);
-      border-radius: 16px;
+      border-radius: var(--r-m, 16px);
       padding: 13px 14px;
       font: inherit;
       color: var(--input-text) !important;
@@ -169,7 +169,7 @@ if ($role !== 'admin') {
       border: 1px solid var(--panel-border);
       background: var(--panel);
       color: var(--text);
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       padding: 10px 14px;
       font: inherit;
       font-weight: 700;
@@ -209,7 +209,7 @@ if ($role !== 'admin') {
       align-items: center;
       gap: 6px;
       padding: 4px 10px;
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       font-size: 0.85rem;
       font-weight: 600;
     }
@@ -227,7 +227,7 @@ if ($role !== 'admin') {
     .role-badge {
       display: inline-block;
       padding: 4px 10px;
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       font-size: 0.85rem;
       font-weight: 600;
       background: rgba(var(--accent-rgb, 36, 87, 255), 0.12);
@@ -246,7 +246,7 @@ if ($role !== 'admin') {
       border: 1px solid var(--panel-border);
       background: var(--panel);
       color: var(--text);
-      border-radius: 6px;
+      border-radius: var(--r-s, 6px);
       padding: 8px 12px;
       font: inherit;
       font-weight: 600;
@@ -287,7 +287,7 @@ if ($role !== 'admin') {
       flex: 1;
       min-width: 220px;
       border: 1px solid var(--panel-border);
-      border-radius: 16px;
+      border-radius: var(--r-m, 16px);
       padding: 13px 14px;
       font: inherit;
       color: var(--input-text) !important;
@@ -308,7 +308,7 @@ if ($role !== 'admin') {
       border: 1px solid var(--panel-border);
       background: var(--panel);
       color: var(--text);
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       padding: 10px 14px;
       font: inherit;
       font-weight: 700;
@@ -324,7 +324,7 @@ if ($role !== 'admin') {
       border: 1px solid var(--panel-border);
       background: var(--panel);
       color: var(--text);
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       padding: 8px 12px;
       font: inherit;
       font-weight: 700;
@@ -343,7 +343,7 @@ if ($role !== 'admin') {
       align-items: center;
       gap: 6px;
       padding: 4px 10px;
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       font-size: 0.85rem;
       font-weight: 600;
     }
@@ -362,7 +362,7 @@ if ($role !== 'admin') {
       width: min(720px, calc(100vw - 24px));
       border: 0;
       padding: 0;
-      border-radius: 28px;
+      border-radius: var(--r-l, 28px);
       box-shadow: 0 28px 80px rgba(15, 23, 42, 0.22);
       background: transparent;
       margin: auto;
@@ -381,7 +381,7 @@ if ($role !== 'admin') {
       background: var(--panel);
       border: 1px solid var(--panel-border);
       color: var(--text);
-      border-radius: 28px;
+      border-radius: var(--r-l, 28px);
       overflow: hidden;
       margin: 0;
     }
@@ -454,7 +454,7 @@ if ($role !== 'admin') {
     .field select {
       width: 100%;
       border: 1px solid var(--panel-border);
-      border-radius: 14px;
+      border-radius: var(--r-m, 14px);
       padding: 12px;
       font: inherit;
       color: var(--input-text) !important;
@@ -483,7 +483,7 @@ if ($role !== 'admin') {
 
     .modal-card__footer button {
       border: 1px solid var(--panel-border);
-      border-radius: 999px;
+      border-radius: var(--r-pill, 999px);
       padding: 10px 20px;
       background: rgba(226, 232, 240, 0.9);
       color: #0f172a;
@@ -500,7 +500,7 @@ if ($role !== 'admin') {
 
     .alert {
       padding: 14px 16px;
-      border-radius: 16px;
+      border-radius: var(--r-m, 16px);
       margin-bottom: 16px;
     }
 
@@ -613,7 +613,7 @@ if ($role !== 'admin') {
 
           <div class="field">
             <label for="phone">Phone</label>
-            <input id="phone" name="phone" type="tel" placeholder="(555) 123-4567" required />
+            <input id="phone" name="phone" type="tel" placeholder="0400 000 000" required />
           </div>
 
           <div class="field">

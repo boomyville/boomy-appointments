@@ -95,7 +95,7 @@ $smtp_host = get_setting('smtp_host', 'smtp.gmail.com');
 $smtp_port = (int) get_setting('smtp_port', '587');
 $smtp_encryption = get_setting('smtp_encryption', 'tls');
 $smtp_username = get_setting('smtp_username', '');
-$smtp_password = get_setting('smtp_password', '');
+$smtp_password_set = trim((string) get_setting('smtp_password', '')) !== '';
 $mail_from_address = get_setting('mail_from_address', '');
 $mail_from_name = get_setting('mail_from_name', APP_NAME ?? 'Boomy Appointments');
 $notify_admin_on_booking = (int) get_setting('notify_admin_on_booking', '0');
@@ -116,7 +116,7 @@ $reminder_enabled     = (int) get_setting('reminder_enabled', '0');
 $reminder_days_before = (int) get_setting('reminder_days_before', '1');
 $reminder_time        = get_setting('reminder_time', '09:00');
 $cron_key             = get_setting('cron_key', '');
-$smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && !empty($smtp_password));
+$smtp_ready = (!empty($smtp_host) && !empty($smtp_username) && $smtp_password_set);
 
 $booking_step1_message = get_setting('booking_step1_message', '');
 $booking_step4_message = get_setting('booking_step4_message', '');
@@ -144,7 +144,9 @@ $reminder_email_message = get_setting('reminder_email_message', '');
     .tab.active { font-weight:700; text-decoration: underline; }
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
-    .field-group { margin-bottom: 20px; border: 1px solid #ccc; padding: 12px; border-radius: 4px; }
+    .field-group { margin-bottom: 20px; border: 1px solid #ccc; padding: 12px; border-radius: var(--r-s, 4px); }
+    html[data-theme="light"] main, html[data-theme="dark"] main,
+    html[data-theme="light"] .field-group, html[data-theme="dark"] .field-group { background: transparent; }
     .field-group legend { font-weight: bold; font-size: 1.1em; margin-bottom: 10px; }
     .field-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .success-msg { color: green; margin-top: 8px; }
@@ -226,13 +228,19 @@ $reminder_email_message = get_setting('reminder_email_message', '');
   <!-- THEME TAB -->
   <section id="tab-theme" class="tab-panel">
     <form id="themeForm" data-api data-no-reload="true" action="settings_api.php?action=save" method="post">
-      <p>Choose the colours and font used across the public booking pages, emails and the admin area. Night colours are used when dark mode is on. A colour left at its default keeps the original look.</p>
+      <p>Choose the colours, font and corner roundness used across the public booking pages, emails and the admin area. Night colours are used when dark mode is on. Anything left at its default keeps the original look.</p>
 
       <div style="overflow-x:auto;">
         <table style="width:auto; min-width:360px;">
           <thead><tr><th></th><th>Day</th><th>Night</th></tr></thead>
           <tbody>
-            <?php foreach (['primary' => ['Primary', 'buttons, links and highlights'], 'secondary' => ['Secondary', 'supporting accents'], 'tertiary' => ['Tertiary', 'the "today / current" highlight']] as $themeKey => $themeInfo): ?>
+            <?php foreach ([
+              'primary'    => ['Primary', 'buttons, links and highlights'],
+              'secondary'  => ['Secondary', 'supporting accents'],
+              'tertiary'   => ['Tertiary', 'the "today / current" highlight'],
+              'background' => ['Page background', 'behind everything'],
+              'surface'    => ['Cards &amp; panels', 'cards, dialogs and form fields'],
+            ] as $themeKey => $themeInfo): ?>
               <tr>
                 <td><strong><?php echo $themeInfo[0]; ?></strong><br><small><?php echo $themeInfo[1]; ?></small></td>
                 <td><input type="color" id="theme_<?php echo $themeKey; ?>" name="theme_<?php echo $themeKey; ?>" value="<?php echo htmlspecialchars($themeValues['theme_' . $themeKey]); ?>" data-default="<?php echo htmlspecialchars($themeDefaults['theme_' . $themeKey]); ?>"></td>
@@ -252,20 +260,41 @@ $reminder_email_message = get_setting('reminder_email_message', '');
       </select>
       <small>Fonts other than the system ones are loaded from Google Fonts.</small>
 
-      <div id="themePreview" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin:16px 0;">
-        <div class="theme-preview-panel" data-mode="light" style="padding:16px; border-radius:12px; border:1px solid #d9dee8; background:#f4f7fb; color:#0f172a;">
-          <strong>Day preview</strong>
-          <p style="margin:8px 0;">Sample text with a <a href="#" onclick="return false;" class="theme-preview-link">link</a>.</p>
-          <span class="theme-preview-primary" style="display:inline-block; padding:6px 14px; border-radius:999px; color:#fff; font-weight:700;">Primary</span>
-          <span class="theme-preview-secondary" style="display:inline-block; padding:6px 14px; border-radius:999px; color:#fff; font-weight:700;">Secondary</span>
-          <span class="theme-preview-tertiary" style="display:inline-block; padding:6px 14px; border-radius:999px; color:#111; font-weight:700;">Tertiary</span>
+      <h3 style="margin-top:20px;">Corners</h3>
+      <label style="display:flex; gap:8px; align-items:center;">
+        <input type="checkbox" id="theme_radius_custom" style="width:auto; margin:0;"<?php echo isset($themeData['custom']['theme_radius']) ? ' checked' : ''; ?>>
+        <span>Customise corner roundness (otherwise each element keeps its original corners)</span>
+      </label>
+      <div id="themeRadiusFields">
+        <label for="theme_radius">Roundness: <strong><output id="themeRadiusOut"></output>%</strong> of each element's size</label>
+        <input type="range" id="theme_radius" name="theme_radius" min="0" max="50" step="1" value="<?php echo isset($themeData['custom']['theme_radius']) ? (int) $themeValues['theme_radius'] : 10; ?>" data-default="10">
+        <label for="theme_radius_min">Minimum corner: <strong><output id="themeRadiusMinOut"></output> px</strong></label>
+        <input type="range" id="theme_radius_min" name="theme_radius_min" min="0" max="32" step="1" value="<?php echo (int) $themeValues['theme_radius_min']; ?>" data-default="<?php echo (int) $themeDefaults['theme_radius_min']; ?>">
+        <label for="theme_radius_max">Maximum corner: <strong><output id="themeRadiusMaxOut"></output> px</strong></label>
+        <input type="range" id="theme_radius_max" name="theme_radius_max" min="4" max="80" step="1" value="<?php echo (int) $themeValues['theme_radius_max']; ?>" data-default="<?php echo (int) $themeDefaults['theme_radius_max']; ?>">
+        <small>The percentage follows the size of each element, so buttons stay compact and big panels get larger curves. The minimum stops small items looking square, and the maximum stops wide panels getting huge, stretched corners. Small controls use half of these values and large panels one and a half times.</small>
+      </div>
+
+      <div id="themePreview" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin:16px 0;">
+        <div class="theme-preview-panel" data-mode="light" style="padding:16px; border:1px solid #d9dee8; border-radius:var(--r-l, 18px); background:#f4f7fb; color:#0f172a;">
+          <div class="theme-preview-card" style="padding:12px; border-radius:var(--r-m, 12px); background:#ffffff; border:1px solid rgba(15,23,42,0.1);">
+            <strong>Day preview</strong>
+            <p style="margin:8px 0;">Sample text with a <a href="#" onclick="return false;" class="theme-preview-link">link</a>.</p>
+            <input type="text" class="theme-preview-input" value="A form field" readonly style="width:100%; margin:0 0 10px; border-radius:var(--r-s, 8px); background:#ffffff; color:#0f172a; border:1px solid rgba(15,23,42,0.2); padding:6px 10px;">
+            <span class="theme-preview-primary" style="display:inline-block; padding:6px 14px; border-radius:var(--r-pill, 999px); color:#fff; font-weight:700;">Primary</span>
+            <span class="theme-preview-secondary" style="display:inline-block; padding:6px 14px; border-radius:var(--r-pill, 999px); color:#fff; font-weight:700;">Secondary</span>
+            <span class="theme-preview-tertiary" style="display:inline-block; padding:6px 14px; border-radius:var(--r-pill, 999px); color:#111; font-weight:700;">Tertiary</span>
+          </div>
         </div>
-        <div class="theme-preview-panel" data-mode="dark" style="padding:16px; border-radius:12px; border:1px solid #1e293b; background:#0b1220; color:#f3f6fb;">
-          <strong>Night preview</strong>
-          <p style="margin:8px 0;">Sample text with a <a href="#" onclick="return false;" class="theme-preview-link">link</a>.</p>
-          <span class="theme-preview-primary" style="display:inline-block; padding:6px 14px; border-radius:999px; color:#0b1220; font-weight:700;">Primary</span>
-          <span class="theme-preview-secondary" style="display:inline-block; padding:6px 14px; border-radius:999px; color:#0b1220; font-weight:700;">Secondary</span>
-          <span class="theme-preview-tertiary" style="display:inline-block; padding:6px 14px; border-radius:999px; color:#0b1220; font-weight:700;">Tertiary</span>
+        <div class="theme-preview-panel" data-mode="dark" style="padding:16px; border:1px solid #1e293b; border-radius:var(--r-l, 18px); background:#0b1220; color:#e5e7eb;">
+          <div class="theme-preview-card" style="padding:12px; border-radius:var(--r-m, 12px); background:#111827; border:1px solid rgba(255,255,255,0.1);">
+            <strong>Night preview</strong>
+            <p style="margin:8px 0;">Sample text with a <a href="#" onclick="return false;" class="theme-preview-link">link</a>.</p>
+            <input type="text" class="theme-preview-input" value="A form field" readonly style="width:100%; margin:0 0 10px; border-radius:var(--r-s, 8px); background:#111827; color:#e5e7eb; border:1px solid rgba(255,255,255,0.2); padding:6px 10px;">
+            <span class="theme-preview-primary" style="display:inline-block; padding:6px 14px; border-radius:var(--r-pill, 999px); color:#0b1220; font-weight:700;">Primary</span>
+            <span class="theme-preview-secondary" style="display:inline-block; padding:6px 14px; border-radius:var(--r-pill, 999px); color:#0b1220; font-weight:700;">Secondary</span>
+            <span class="theme-preview-tertiary" style="display:inline-block; padding:6px 14px; border-radius:var(--r-pill, 999px); color:#0b1220; font-weight:700;">Tertiary</span>
+          </div>
         </div>
       </div>
 
@@ -275,7 +304,7 @@ $reminder_email_message = get_setting('reminder_email_message', '');
         <button type="submit">Save Theme</button>
         <button type="button" id="themeResetBtn" class="secondary">Reset to defaults</button>
       </div>
-      <small>Changes apply the next time a page loads. "Reset to defaults" fills in the original colours and font; press Save to apply.</small>
+      <small>Changes apply the next time a page loads. "Reset to defaults" fills in the original colours, font and corners; press Save to apply.</small>
       <div id="themeMsg"></div>
     </form>
   </section>
@@ -287,29 +316,63 @@ $reminder_email_message = get_setting('reminder_email_message', '');
     const fontSel = document.getElementById('theme_font');
     const warn = document.getElementById('themeContrastWarning');
     const panels = form.querySelectorAll('.theme-preview-panel');
+    const radiusOn = document.getElementById('theme_radius_custom');
+    const radiusFields = document.getElementById('themeRadiusFields');
+    const radiusInputs = ['theme_radius', 'theme_radius_min', 'theme_radius_max'].map(id => document.getElementById(id));
+    const TEXT = { light: '#0f172a', dark: '#e5e7eb' };   // the app's default text colours
 
-    function luminance(hex) {
+    function lum(hex) {
       const v = [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16) / 255).map(c => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
       return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2];
     }
-    function contrastWithWhite(hex) { return 1.05 / (luminance(hex) + 0.05); }
+    function contrast(a, b) { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+
+    // Same maths as theme_radius_value() in functions.php
+    function radiusValue(pct, min, max, f) {
+      const p = Math.min(50, Math.round(pct * f * 10) / 10);
+      const lo = Math.round(min * f);
+      const hi = Math.max(lo, Math.round(max * f));
+      return 'min(' + hi + 'px,max(' + lo + 'px,' + p + '%))';
+    }
 
     function refresh() {
+      const messages = [];
+      const on = radiusOn.checked;
+      radiusFields.style.opacity = on ? '1' : '0.5';
+      radiusInputs.forEach(function (el) { el.disabled = !on; });
+      document.getElementById('themeRadiusOut').textContent = radiusInputs[0].value;
+      document.getElementById('themeRadiusMinOut').textContent = radiusInputs[1].value;
+      document.getElementById('themeRadiusMaxOut').textContent = radiusInputs[2].value;
+      const pct = +radiusInputs[0].value, min = +radiusInputs[1].value, max = +radiusInputs[2].value;
+
       panels.forEach(function (panel) {
-        const sfx = panel.dataset.mode === 'dark' ? '_dark' : '';
-        const p = document.getElementById('theme_primary' + sfx).value;
-        const s = document.getElementById('theme_secondary' + sfx).value;
-        const t = document.getElementById('theme_tertiary' + sfx).value;
-        panel.querySelector('.theme-preview-primary').style.background = p;
-        panel.querySelector('.theme-preview-secondary').style.background = s;
-        panel.querySelector('.theme-preview-tertiary').style.background = t;
-        panel.querySelector('.theme-preview-link').style.color = p;
+        const mode = panel.dataset.mode, sfx = mode === 'dark' ? '_dark' : '';
+        const val = id => document.getElementById(id + sfx).value;
+        const bg = val('theme_background'), surface = val('theme_surface');
+        panel.style.background = bg;
+        panel.querySelector('.theme-preview-card').style.background = surface;
+        panel.querySelector('.theme-preview-input').style.background = surface;
+        panel.querySelector('.theme-preview-primary').style.background = val('theme_primary');
+        panel.querySelector('.theme-preview-secondary').style.background = val('theme_secondary');
+        panel.querySelector('.theme-preview-tertiary').style.background = val('theme_tertiary');
+        panel.querySelector('.theme-preview-link').style.color = val('theme_primary');
         const opt = fontSel.options[fontSel.selectedIndex];
         panel.style.fontFamily = opt ? opt.dataset.stack : '';
+        if (on) {
+          panel.style.setProperty('--r-s', radiusValue(pct, min, max, 0.5));
+          panel.style.setProperty('--r-m', radiusValue(pct, min, max, 1));
+          panel.style.setProperty('--r-l', radiusValue(pct, min, max, 1.5));
+          panel.style.setProperty('--r-pill', radiusValue(pct, min, max, 1));
+        } else {
+          ['--r-s', '--r-m', '--r-l', '--r-pill'].forEach(function (p) { panel.style.removeProperty(p); });
+        }
+        const label = mode === 'dark' ? 'Night' : 'Day';
+        if (contrast(bg, TEXT[mode]) < 4.5) messages.push(label + ' page background makes the normal text hard to read (contrast ' + contrast(bg, TEXT[mode]).toFixed(1) + ':1).');
+        if (contrast(surface, TEXT[mode]) < 4.5) messages.push(label + ' card colour makes the normal text hard to read (contrast ' + contrast(surface, TEXT[mode]).toFixed(1) + ':1).');
       });
-      const ratio = contrastWithWhite(document.getElementById('theme_primary').value);
-      warn.style.display = ratio < 3 ? '' : 'none';
-      warn.textContent = ratio < 3 ? 'The day primary colour is quite light for white button text (contrast ' + ratio.toFixed(1) + ':1). Consider a darker colour.' : '';
+      if (contrast(document.getElementById('theme_primary').value, '#ffffff') < 3) messages.push('The day primary colour is quite light for white button text (contrast ' + contrast(document.getElementById('theme_primary').value, '#ffffff').toFixed(1) + ':1).');
+      warn.style.display = messages.length ? '' : 'none';
+      warn.innerHTML = messages.join('<br>');
     }
 
     function loadPreviewFont() {
@@ -322,9 +385,12 @@ $reminder_email_message = get_setting('reminder_email_message', '');
     }
 
     form.addEventListener('input', refresh);
+    radiusOn.addEventListener('change', refresh);
     fontSel.addEventListener('change', function () { loadPreviewFont(); refresh(); });
     document.getElementById('themeResetBtn').addEventListener('click', function () {
       form.querySelectorAll('input[type="color"]').forEach(function (el) { el.value = el.dataset.default; });
+      radiusInputs.forEach(function (el) { el.value = el.dataset.default; });
+      radiusOn.checked = false;
       fontSel.value = 'default';
       loadPreviewFont();
       refresh();
@@ -793,7 +859,7 @@ $reminder_email_message = get_setting('reminder_email_message', '');
       <input id="smtp_username" name="smtp_username" type="text" value="<?php echo htmlspecialchars($smtp_username); ?>" placeholder="your-email@gmail.com" required>
 
       <label for="smtp_password">Password (use app password for Gmail)</label>
-      <input id="smtp_password" name="smtp_password" type="password" value="<?php echo htmlspecialchars($smtp_password); ?>" placeholder="••••••••">
+      <input id="smtp_password" name="smtp_password" type="password" value="" autocomplete="new-password" placeholder="<?php echo $smtp_password_set ? 'Password saved - leave blank to keep it' : '••••••••'; ?>">
 
       <label for="mail_from_address">From Email Address</label>
       <input id="mail_from_address" name="mail_from_address" type="email" value="<?php echo htmlspecialchars($mail_from_address); ?>" placeholder="noreply@example.com" required>
@@ -1084,7 +1150,7 @@ async function testEmailConfiguration(e) {
       msgDiv.innerHTML = '<p class="success-msg">✓ Test email sent successfully to ' + (data.sent_to || 'admin') + '</p>';
       // If diagnostics were returned, show them under the success message
       if (data.debug && Array.isArray(data.debug)) {
-        let debugHtml = '<div style="background: #f0fff4; border-left: 4px solid #28a745; padding: 12px; margin-top: 12px; border-radius: 4px;">';
+        let debugHtml = '<div style="background: #f0fff4; border-left: 4px solid #28a745; padding: 12px; margin-top: 12px; border-radius: var(--r-s, 4px);">';
         debugHtml += '<p style="color: #155724; margin: 0 0 8px 0; font-weight: bold;">Diagnostics:</p>';
         debugHtml += '<pre style="margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 0.9em; color: #0b3a23;">';
         data.debug.forEach(line => {
@@ -1096,7 +1162,7 @@ async function testEmailConfiguration(e) {
       setTimeout(() => msgDiv.innerHTML = '', 10000);
     } else if (data.debug && Array.isArray(data.debug)) {
       // Show debug messages
-      let debugHtml = '<div style="background: #f5f5f5; border-left: 4px solid #dc3545; padding: 12px; margin-top: 12px; border-radius: 4px;">';
+      let debugHtml = '<div style="background: #f5f5f5; border-left: 4px solid #dc3545; padding: 12px; margin-top: 12px; border-radius: var(--r-s, 4px);">';
       debugHtml += '<p style="color: #dc3545; margin: 0 0 8px 0; font-weight: bold;">Debug Information:</p>';
       debugHtml += '<pre style="margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 0.9em; color: #333;">';
       data.debug.forEach(line => {

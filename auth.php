@@ -76,7 +76,12 @@ try {
         $id = create_user_with_active($email, $password, $full_name, 'admin', 1, $first_name ?: null, $last_name ?: null, $phone ?: null);
         $user = get_user_by_email($email);
         session_regenerate_id(true);
-        $_SESSION['user'] = $user;
+        $_SESSION['user'] = [
+            'id' => (int)$user['id'],
+            'email' => $user['email'],
+            'full_name' => $user['full_name'],
+            'role' => $user['role']
+        ];
         create_session_record((int)$user['id']);
         echo json_encode(['ok' => true, 'redirect' => 'admin.php']);
         exit;
@@ -124,7 +129,12 @@ try {
         $user = get_user_by_email($email);
         session_regenerate_id(true);
         create_session_record((int)$user['id']);
-        $_SESSION['user'] = $user;
+        $_SESSION['user'] = [
+            'id' => (int)$user['id'],
+            'email' => $user['email'],
+            'full_name' => $user['full_name'],
+            'role' => $user['role']
+        ];
         echo json_encode(['ok' => true, 'redirect' => 'admin.php']);
         exit;
     }
@@ -146,6 +156,13 @@ try {
             insert_login_attempt($email, false);
             http_response_code(422);
             echo json_encode(['error' => $emailValidation]);
+            exit;
+        }
+
+        if (login_attempts_exceeded($email)) {
+            header('Retry-After: 900');
+            http_response_code(429);
+            echo json_encode(['error' => 'Too many failed login attempts. Please wait 15 minutes and try again.']);
             exit;
         }
 
@@ -203,39 +220,37 @@ try {
             exit;
         }
 
-        // Check if user exists
-        $user = get_user_by_email($email);
-        if (!$user) {
-            // Don't reveal if email exists (security best practice)
-            echo json_encode(['ok' => true, 'message' => 'If an account exists with this email, a password reset link will be sent']);
+        if (!rate_limit_hit('forgot_ip', get_client_ip(), 5, 900) || !rate_limit_hit('forgot_email', $email, 3, 3600)) {
+            header('Retry-After: 900');
+            http_response_code(429);
+            echo json_encode(['error' => 'Too many reset requests. Please try again later.']);
             exit;
         }
+
+        // Always answer identically (unknown email, non-admin, mail not configured, send failure) so this
+        // endpoint cannot be used to discover accounts or to learn how the server is set up. The reset
+        // link is only ever delivered by email, never returned in the response.
+        $generic = ['ok' => true, 'message' => 'If an account exists with this email, a password reset link will be sent'];
+
+        $user = get_user_by_email($email);
 
         // Only allow password resets for admin accounts
-        if (($user['role'] ?? '') !== 'admin') {
-            // For security, return the same generic message but do not create a token
-            echo json_encode(['ok' => true, 'message' => 'If an account exists with this email, a password reset link will be sent']);
+        if (!$user || ($user['role'] ?? '') !== 'admin') {
+            echo json_encode($generic);
             exit;
         }
 
-        // If email not configured, create token and return a bypass link for immediate reset
         if (!email_is_configured()) {
-            $code = create_verification_token((int)$user['id'], 'password_reset');
-            $reset_link = build_app_url('reset_password.php', ['code' => $code]);
-            echo json_encode(['ok' => true, 'bypass' => true, 'reset_link' => $reset_link]);
+            error_log('forgot_password: email is not configured, reset link not sent. Reset the password from the command line instead.');
+            echo json_encode($generic);
             exit;
         }
 
-        // Create verification token and send email
         $code = create_verification_token((int)$user['id'], 'password_reset');
-        $email_sent = send_password_reset_email($email, $code);
-
-        if ($email_sent) {
-            echo json_encode(['ok' => true, 'message' => 'Password reset link sent to your email']);
-        } else {
-            http_response_code(500);
-            echo json_encode(['error' => 'Failed to send reset email']);
+        if (!send_password_reset_email($email, $code)) {
+            error_log('forgot_password: failed to send reset email');
         }
+        echo json_encode($generic);
         exit;
     }
 
@@ -303,6 +318,9 @@ try {
         // Delete verification token
         delete_verification_token($code);
 
+        // A reset means the old password may be compromised: log out every existing session.
+        invalidate_all_user_sessions((int) $user_id);
+
         echo json_encode(['ok' => true, 'message' => 'Password updated successfully', 'redirect' => 'login.php']);
         exit;
     }
@@ -310,6 +328,7 @@ try {
     http_response_code(400);
     echo json_encode(['error' => 'unknown action']);
 } catch (Throwable $e) {
+    error_log('auth.php: ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['error' => $e->getMessage()]);
+    echo json_encode(['error' => 'Server error']);
 }

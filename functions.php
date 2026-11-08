@@ -697,11 +697,22 @@ function get_app_timezone_name(): string
     return 'UTC';
 }
 
-function get_app_root_url(): string
+/**
+ * Base URL of the app.
+ *
+ * $requireConfigured: set for links that carry secrets (password reset, account confirmation). When the
+ * "root_url" setting is empty the URL would be built from the Host header, which an attacker controls, so
+ * a poisoned reset email could leak the token. In that mode we refuse instead of guessing.
+ */
+function get_app_root_url(bool $requireConfigured = false): string
 {
     $configured = trim((string) get_setting('root_url', ''));
     if ($configured !== '') {
         return rtrim($configured, '/');
+    }
+
+    if ($requireConfigured) {
+        throw new RuntimeException('The Root URL setting must be configured before links containing secrets can be generated.');
     }
 
     $scheme = 'http';
@@ -711,7 +722,8 @@ function get_app_root_url(): string
     }
 
     $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''), '/');
-    if ($host === '') {
+    // Only accept a plain hostname / IPv4 / [IPv6] with optional port; anything else is header junk.
+    if ($host === '' || !preg_match('/^(?:[A-Za-z0-9.\-]+|\[[0-9A-Fa-f:]+\])(?::\d{1,5})?$/', $host)) {
         $host = 'localhost';
     }
 
@@ -726,9 +738,9 @@ function get_app_root_url(): string
     return rtrim($root_url, '/');
 }
 
-function build_app_url(string $path, array $query = []): string
+function build_app_url(string $path, array $query = [], bool $requireConfiguredRoot = false): string
 {
-    $url = get_app_root_url() . '/' . ltrim($path, '/');
+    $url = get_app_root_url($requireConfiguredRoot) . '/' . ltrim($path, '/');
     if (!empty($query)) {
         $url .= '?' . http_build_query($query);
     }
@@ -750,27 +762,158 @@ function get_email_domain_whitelist(): array
     return array_filter(array_map('trim', explode("\n", $setting)));
 }
 
-// Get the client's IP address (tries common proxy headers)
-function get_client_ip(): string
+/**
+ * True if $ip falls inside $cidr (or equals it when no prefix is given). IPv4 and IPv6.
+ */
+function ip_matches_cidr(string $ip, string $cidr): bool
 {
-    $ip = '';
-    if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
-        $ip = $_SERVER['HTTP_CLIENT_IP'];
-    } elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-        // may contain comma-separated list of IPs; take the first public one
-        $list = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
-        $list = array_map('trim', $list);
-        // return the last (closest to client) or first? use first non-private
-        foreach ($list as $candidate) {
-            if (filter_var($candidate, FILTER_VALIDATE_IP)) {
-                $ip = $candidate;
-                break;
+    $cidr = trim($cidr);
+    if ($cidr === '') {
+        return false;
+    }
+    [$subnet, $bits] = array_pad(explode('/', $cidr, 2), 2, null);
+    $ipBin  = @inet_pton($ip);
+    $subBin = @inet_pton((string) $subnet);
+    if ($ipBin === false || $subBin === false || strlen($ipBin) !== strlen($subBin)) {
+        return false;
+    }
+    $max   = strlen($ipBin) * 8;
+    $bits  = $bits === null ? $max : max(0, min($max, (int) $bits));
+    $bytes = intdiv($bits, 8);
+    $rem   = $bits % 8;
+    if ($bytes > 0 && substr($ipBin, 0, $bytes) !== substr($subBin, 0, $bytes)) {
+        return false;
+    }
+    if ($rem === 0) {
+        return true;
+    }
+    $mask = (0xFF << (8 - $rem)) & 0xFF;
+    return (ord($ipBin[$bytes]) & $mask) === (ord($subBin[$bytes]) & $mask);
+}
+
+/**
+ * Is this address a reverse proxy we may believe X-Forwarded-For from?
+ * Define TRUSTED_PROXIES in config.php (array of IPs / CIDRs) to be explicit. Without it, loopback and
+ * private ranges (Docker networks, LAN reverse proxies such as SWAG) are trusted, public addresses are not.
+ */
+function is_trusted_proxy_ip(string $ip): bool
+{
+    if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+        return false;
+    }
+    if (defined('TRUSTED_PROXIES') && is_array(TRUSTED_PROXIES)) {
+        foreach (TRUSTED_PROXIES as $entry) {
+            if (ip_matches_cidr($ip, (string) $entry)) {
+                return true;
             }
         }
-    } elseif (!empty($_SERVER['REMOTE_ADDR'])) {
-        $ip = $_SERVER['REMOTE_ADDR'];
+        return false;
     }
-    return (string)$ip;
+    return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
+}
+
+/**
+ * The client's IP address. REMOTE_ADDR is the only value a client cannot forge, so forwarded headers
+ * (X-Forwarded-For / X-Real-IP) are only honoured when the direct peer is a trusted proxy, and then the
+ * right-most address that is not itself a trusted proxy wins (left-most entries are client-supplied).
+ * HTTP_CLIENT_IP is never trusted.
+ */
+function get_client_ip(): string
+{
+    $remote = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+    if ($remote === '' || !is_trusted_proxy_ip($remote)) {
+        return substr($remote, 0, 45);
+    }
+
+    $xff = (string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? '');
+    if ($xff !== '') {
+        $chain = array_values(array_filter(
+            array_map('trim', explode(',', $xff)),
+            static fn($c) => filter_var($c, FILTER_VALIDATE_IP) !== false
+        ));
+        for ($i = count($chain) - 1; $i >= 0; $i--) {
+            if (!is_trusted_proxy_ip($chain[$i])) {
+                return substr($chain[$i], 0, 45);
+            }
+        }
+        if ($chain) {
+            return substr($chain[0], 0, 45);
+        }
+    }
+
+    $real = trim((string) ($_SERVER['HTTP_X_REAL_IP'] ?? ''));
+    if ($real !== '' && filter_var($real, FILTER_VALIDATE_IP)) {
+        return substr($real, 0, 45);
+    }
+
+    return substr($remote, 0, 45);
+}
+
+/**
+ * Generic fixed-window rate limiter backed by the rate_limits table.
+ * Returns true when the hit is allowed (and records it), false when the limit is exceeded.
+ * Fails open if the database is unavailable so a hiccup cannot lock everybody out.
+ */
+function rate_limit_hit(string $bucket, string $key, int $maxHits, int $windowSeconds): bool
+{
+    try {
+        $db = get_db();
+        static $ensured = false;
+        if (!$ensured) {
+            $db->exec("CREATE TABLE IF NOT EXISTS rate_limits (
+                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                bucket VARCHAR(40) NOT NULL,
+                key_hash CHAR(64) NOT NULL,
+                hit_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_rate_limits_lookup (bucket, key_hash, hit_at),
+                KEY idx_rate_limits_time (hit_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $ensured = true;
+        }
+
+        $keyHash = hash('sha256', strtolower($key));
+        $count = $db->prepare('SELECT COUNT(*) FROM rate_limits WHERE bucket = ? AND key_hash = ? AND hit_at > (NOW() - INTERVAL ? SECOND)');
+        $count->execute([$bucket, $keyHash, $windowSeconds]);
+        if ((int) $count->fetchColumn() >= $maxHits) {
+            return false;
+        }
+
+        $db->prepare('INSERT INTO rate_limits (bucket, key_hash) VALUES (?, ?)')->execute([$bucket, $keyHash]);
+
+        if (random_int(1, 50) === 1) {
+            $db->exec('DELETE FROM rate_limits WHERE hit_at < (NOW() - INTERVAL 1 DAY)');
+        }
+        return true;
+    } catch (Throwable $e) {
+        error_log('rate_limit_hit failed: ' . $e->getMessage());
+        return true;
+    }
+}
+
+/**
+ * Too many failed logins? Limits: 5 failures per IP+email and 20 failures per IP in 15 minutes.
+ * Keyed on IP so a stranger cannot lock the real admin out of their own account.
+ */
+function login_attempts_exceeded(string $email): bool
+{
+    try {
+        $db = get_db();
+        $ip = get_client_ip();
+        $window = '(NOW() - INTERVAL 15 MINUTE)';
+
+        $stmt = $db->prepare("SELECT COUNT(*) FROM login_attempts WHERE success = 0 AND ip_address = ? AND username = ? AND attempted_at > $window");
+        $stmt->execute([$ip, $email]);
+        if ((int) $stmt->fetchColumn() >= 5) {
+            return true;
+        }
+
+        $stmt = $db->prepare("SELECT COUNT(*) FROM login_attempts WHERE success = 0 AND ip_address = ? AND attempted_at > $window");
+        $stmt->execute([$ip]);
+        return (int) $stmt->fetchColumn() >= 20;
+    } catch (Throwable $e) {
+        error_log('login_attempts_exceeded failed: ' . $e->getMessage());
+        return false;
+    }
 }
 
 // Insert a login attempt record
@@ -970,14 +1113,20 @@ function send_password_reset_email(string $email, string $code): bool
     if (!$user) return false;
     
     $app_name = APP_NAME ?? 'Boomy Appointments';
-    $reset_url = build_app_url('reset_password.php', ['code' => $code]);
+    try {
+        $reset_url = build_app_url('reset_password.php', ['code' => $code], true);
+    } catch (RuntimeException $e) {
+        error_log('send_password_reset_email: ' . $e->getMessage());
+        return false;
+    }
     
     $subject = "Password Reset - $app_name";
+    $emailRadius = theme_email_radius('s', '4px');
     $body_html = "
         <h2>Password Reset Request</h2>
         <p>Hi {$user['full_name']},</p>
         <p>You requested to reset your password. Click the link below to create a new password:</p>
-        <p><a href=\"{$reset_url}\" style=\"background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;\">Reset Password</a></p>
+        <p><a href=\"{$reset_url}\" style=\"background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: {$emailRadius}; display: inline-block;\">Reset Password</a></p>
         <p>Or copy this link: {$reset_url}</p>
         <p>This link expires in 60 minutes.</p>
         <p>If you didn't request this, you can ignore this email.</p>
@@ -1008,13 +1157,19 @@ function send_account_confirmation_email(string $email, string $code): bool
     $user = get_user_by_email($email);
     if (!$user) return false;
     $app_name = APP_NAME ?? 'Boomy Appointments';
-    $confirm_url = build_app_url('confirm_account.php', ['code' => $code]);
+    try {
+        $confirm_url = build_app_url('confirm_account.php', ['code' => $code], true);
+    } catch (RuntimeException $e) {
+        error_log('send_account_confirmation_email: ' . $e->getMessage());
+        return false;
+    }
     $subject = "Confirm your account - $app_name";
+    $emailRadius = theme_email_radius('s', '4px');
     $body_html = "
         <h2>Confirm Your Account</h2>
         <p>Hi {$user['full_name']},</p>
         <p>Please confirm your account by clicking the button below:</p>
-        <p><a href=\"{$confirm_url}\" style=\"background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 4px; display: inline-block;\">Confirm Account</a></p>
+        <p><a href=\"{$confirm_url}\" style=\"background-color: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: {$emailRadius}; display: inline-block;\">Confirm Account</a></p>
         <p>Or copy this link: {$confirm_url}</p>
         <p>If you didn't sign up, ignore this email.</p>
         <p>Best regards,<br>$app_name</p>
@@ -1219,13 +1374,25 @@ function format_appointment_person_name(?array $person): string
 function theme_defaults(): array
 {
     return [
-        'theme_primary'        => '#2457ff',
-        'theme_secondary'      => '#10b981',
-        'theme_tertiary'       => '#f59e0b',
-        'theme_primary_dark'   => '#7ca2ff',
-        'theme_secondary_dark' => '#34d399',
-        'theme_tertiary_dark'  => '#fbbf24',
-        'theme_font'           => 'default',
+        // colours: day
+        'theme_primary'         => '#2457ff',
+        'theme_secondary'       => '#10b981',
+        'theme_tertiary'        => '#f59e0b',
+        'theme_background'      => '#f4f7fb',
+        'theme_surface'         => '#ffffff',
+        // colours: night
+        'theme_primary_dark'    => '#7ca2ff',
+        'theme_secondary_dark'  => '#34d399',
+        'theme_tertiary_dark'   => '#fbbf24',
+        'theme_background_dark' => '#0b1220',
+        'theme_surface_dark'    => '#111827',
+        // font
+        'theme_font'            => 'default',
+        // corners: theme_radius is a percentage (0-50); '' means "keep the app's own corner sizes".
+        // min/max are pixel limits so tiny controls never go square-ish and big panels never get huge curves.
+        'theme_radius'          => '',
+        'theme_radius_min'      => '4',
+        'theme_radius_max'      => '32',
     ];
 }
 
@@ -1281,6 +1448,24 @@ function theme_mix_hex(string $hex, string $target, float $ratio): string
 }
 
 // Effective theme: ['values' => all 7 settings (saved or default), 'custom' => keys that differ from default, 'defaults' => ...]
+// Integer within [min, max], or null when the value is not a plain integer in range
+function theme_normalize_int($value, int $min, int $max): ?int
+{
+    $v = trim((string) $value);
+    if ($v === '' || !preg_match('/^\d{1,3}$/', $v)) {
+        return null;
+    }
+    $n = (int) $v;
+    return ($n >= $min && $n <= $max) ? $n : null;
+}
+
+// Allowed ranges for the corner settings
+function theme_radius_limits(): array
+{
+    return ['theme_radius' => [0, 50], 'theme_radius_min' => [0, 32], 'theme_radius_max' => [4, 80]];
+}
+
+// Effective theme: ['values' => all settings (saved or default), 'custom' => keys that differ from default, 'defaults' => ...]
 function get_theme_settings(): array
 {
     static $cache = null;
@@ -1289,6 +1474,7 @@ function get_theme_settings(): array
     }
     $defaults = theme_defaults();
     $fonts = theme_font_options();
+    $limits = theme_radius_limits();
     $values = $defaults;
     $custom = [];
     $saved = [];
@@ -1298,11 +1484,25 @@ function get_theme_settings(): array
     } catch (Throwable $e) {
         $saved = [];
     }
+
+    $radiusOn = false;
     foreach ($defaults as $key => $default) {
         $raw = trim((string) ($saved[$key] ?? ''));
         if ($key === 'theme_font') {
             if ($raw !== '' && isset($fonts[$raw]) && $raw !== $default) {
                 $values[$key] = $raw;
+                $custom[$key] = true;
+            }
+        } elseif (isset($limits[$key])) {
+            $n = theme_normalize_int($raw, $limits[$key][0], $limits[$key][1]);
+            if ($key === 'theme_radius') {
+                if ($n !== null) {
+                    $values[$key] = (string) $n;
+                    $custom[$key] = true;
+                    $radiusOn = true;
+                }
+            } elseif ($n !== null && (string) $n !== $default) {
+                $values[$key] = (string) $n;
                 $custom[$key] = true;
             }
         } else {
@@ -1313,6 +1513,12 @@ function get_theme_settings(): array
             }
         }
     }
+    if (!$radiusOn) {
+        // min/max only mean something while a custom radius is active
+        $values['theme_radius_min'] = $defaults['theme_radius_min'];
+        $values['theme_radius_max'] = $defaults['theme_radius_max'];
+        unset($custom['theme_radius_min'], $custom['theme_radius_max']);
+    }
     return $cache = ['values' => $values, 'custom' => $custom, 'defaults' => $defaults];
 }
 
@@ -1320,14 +1526,30 @@ function get_theme_settings(): array
 function sanitize_theme_post(array $data): array
 {
     $fonts = theme_font_options();
+    $limits = theme_radius_limits();
     $out = [];
     foreach (theme_defaults() as $key => $default) {
         $raw = trim((string) ($data[$key] ?? ''));
         if ($key === 'theme_font') {
             $out[$key] = ($raw !== $default && isset($fonts[$raw])) ? $raw : '';
+        } elseif (isset($limits[$key])) {
+            $n = theme_normalize_int($raw, $limits[$key][0], $limits[$key][1]);
+            $out[$key] = $n === null ? '' : (string) $n;
         } else {
             $hex = theme_normalize_hex($raw);
             $out[$key] = ($hex !== null && $hex !== $default) ? $hex : '';
+        }
+    }
+    // Without a radius the min/max are meaningless, so do not keep them
+    if ($out['theme_radius'] === '') {
+        $out['theme_radius_min'] = '';
+        $out['theme_radius_max'] = '';
+    } else {
+        $defaults = theme_defaults();
+        foreach (['theme_radius_min', 'theme_radius_max'] as $k) {
+            if ($out[$k] === $defaults[$k]) {
+                $out[$k] = '';
+            }
         }
     }
     return $out;
@@ -1358,7 +1580,45 @@ function theme_mode_declarations(array $theme, string $mode): string
         $t = $v['theme_tertiary' . $sfx];
         $out .= '--accent-3:' . $t . ';--current:' . $t . ';';
     }
+    // Page background. --theme-bg is only defined when customised, so rules written as var(--theme-bg, <original>) keep their look otherwise.
+    if (isset($c['theme_background' . $sfx])) {
+        $bg = $v['theme_background' . $sfx];
+        $out .= '--bg:' . $bg . ';--theme-bg:' . $bg . ';';
+    }
+    // Cards, panels, dialogs and form fields. --panel is the translucent card colour the pages use; --panel-strong the solid one.
+    if (isset($c['theme_surface' . $sfx])) {
+        $s = $v['theme_surface' . $sfx];
+        [$r, $g, $b] = theme_hex_to_rgb($s);
+        $out .= '--panel:rgba(' . $r . ',' . $g . ',' . $b . ',0.92);--panel-strong:' . $s . ';--theme-surface:' . $s . ';--input-bg:' . $s . ';';
+    }
     return $out;
+}
+
+// CSS value for one corner size: a percentage of the element, never below $min px and never above $max px.
+// $factor scales the three tiers (small controls 0.5, normal 1, large panels 1.5).
+function theme_radius_value(int $pct, int $min, int $max, float $factor): string
+{
+    $fmt = static fn(float $n): string => rtrim(rtrim(number_format($n, 1, '.', ''), '0'), '.');
+    $p = min(50.0, round($pct * $factor, 1));
+    $lo = (int) round($min * $factor);
+    $hi = max($lo, (int) round($max * $factor));
+    return 'min(' . $hi . 'px,max(' . $lo . 'px,' . $fmt($p) . '%))';
+}
+
+// The --r-* variables every border-radius in the app falls back from. Empty when corners are not customised.
+function theme_radius_declarations(array $theme): string
+{
+    if (!isset($theme['custom']['theme_radius'])) {
+        return '';
+    }
+    $pct = (int) $theme['values']['theme_radius'];
+    $min = (int) $theme['values']['theme_radius_min'];
+    $max = (int) $theme['values']['theme_radius_max'];
+    return '--r-s:' . theme_radius_value($pct, $min, $max, 0.5) . ';'
+        . '--r-m:' . theme_radius_value($pct, $min, $max, 1.0) . ';'
+        . '--r-l:' . theme_radius_value($pct, $min, $max, 1.5) . ';'
+        . '--r-pill:' . theme_radius_value($pct, $min, $max, 1.0) . ';'
+        . '--pico-border-radius:var(--r-m);';
 }
 
 // The CSS that overrides each page's own variables. Empty string when nothing is customised.
@@ -1376,6 +1636,11 @@ function build_theme_css(array $theme): string
     if ($dark !== '') {
         $css .= 'html:root[data-theme="dark"]{' . $dark . '}';
         $css .= '@media (prefers-color-scheme: dark){html:root:not([data-theme]){' . $dark . '}}';
+    }
+
+    $radius = theme_radius_declarations($theme);
+    if ($radius !== '') {
+        $css .= 'html:root{' . $radius . '}';
     }
 
     if (isset($theme['custom']['theme_font'])) {
@@ -1415,6 +1680,29 @@ function render_theme_head(): void
 function theme_email_primary(): string
 {
     return get_theme_settings()['values']['theme_primary'];
+}
+
+// Pixel radius for HTML emails. $tier is 's', 'm', 'l' or 'pill'; $default is what the email used before theming.
+// Pure: takes the theme array so it can be tested without a database.
+function theme_email_radius_for(array $theme, string $tier, string $default): string
+{
+    if (!isset($theme['custom']['theme_radius'])) {
+        return $default;
+    }
+    $pct = (int) $theme['values']['theme_radius'];
+    $min = (int) $theme['values']['theme_radius_min'];
+    $max = (int) $theme['values']['theme_radius_max'];
+    $factor = ['s' => 0.5, 'm' => 1.0, 'l' => 1.5, 'pill' => 1.0][$tier] ?? 1.0;
+    $reference = ['s' => 40, 'm' => 90, 'l' => 200, 'pill' => 44][$tier] ?? 44;   // typical element height in px
+    $lo = (int) round($min * $factor);
+    $hi = max($lo, (int) round($max * $factor));
+    $px = (int) round($pct * $factor / 100 * $reference);
+    return max($lo, min($hi, $px)) . 'px';
+}
+
+function theme_email_radius(string $tier, string $default): string
+{
+    return theme_email_radius_for(get_theme_settings(), $tier, $default);
 }
 
 function theme_email_tint(float $alpha): string
@@ -1485,7 +1773,7 @@ function get_same_day_appointments_for_email(array $appointment): array
         $stmt = get_db()->prepare("SELECT a.id, a.start_time, a.end_time, a.status, a.hash_key, a.provider_id, a.appointment_type_id, c.full_name
             FROM appointments a
             JOIN customers c ON c.id = a.customer_id
-            WHERE LOWER(c.email) = ? AND a.start_time >= ? AND a.start_time < ? AND a.id <> ? AND a.status <> 'cancelled'
+            WHERE LOWER(TRIM(c.email)) = ? AND a.start_time >= ? AND a.start_time < ? AND a.id <> ? AND LOWER(TRIM(a.status)) <> 'cancelled'
             ORDER BY a.start_time ASC, a.id ASC");
         $stmt->execute([$email, $dayStart->format('Y-m-d H:i:s'), $dayEnd->format('Y-m-d H:i:s'), (int) ($appointment['id'] ?? 0)]);
 
@@ -1531,7 +1819,7 @@ function build_same_day_appointments_email_block(array $appointment, bool $withA
     $actionable = array_values(array_filter($rows, fn(array $r): bool => $r['can_delete']));
     $allCodes = implode(',', array_column($actionable, 'hash_key'));
 
-    $btn = 'display:inline-block;padding:7px 14px;border-radius:999px;text-decoration:none;font-weight:700;font-size:13px;margin:2px 4px 2px 0;';
+    $btn = 'display:inline-block;padding:7px 14px;border-radius:' . theme_email_radius('pill', '999px') . ';text-decoration:none;font-weight:700;font-size:13px;margin:2px 4px 2px 0;';
     $confirmStyle = $btn . 'background:' . theme_email_primary() . ';color:#ffffff;';
     $deleteStyle = $btn . 'background:#ffffff;color:#b91c1c;border:1px solid #b91c1c;';
 
@@ -1655,7 +1943,7 @@ function send_appointment_confirmation_email(int $appointmentId): array
         . '</ul>'
         . $sameDay['html']
         . ($customMessage !== '' ? '<p>' . nl2br(htmlspecialchars($customMessage, ENT_QUOTES, 'UTF-8')) . '</p>' : '')
-        . '<p><a href="' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '" style="background-color:' . theme_email_primary() . ';color:#ffffff;padding:12px 20px;text-decoration:none;border-radius:999px;display:inline-block;font-weight:700;">Confirm or modify your appointment</a></p>'
+        . '<p><a href="' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '" style="background-color:' . theme_email_primary() . ';color:#ffffff;padding:12px 20px;text-decoration:none;border-radius:' . theme_email_radius('pill', '999px') . ';display:inline-block;font-weight:700;">Confirm or modify your appointment</a></p>'
         . '<p>Or copy this link: ' . htmlspecialchars($appointmentUrl, ENT_QUOTES, 'UTF-8') . '</p>';
 
     $body_plain = "Your appointment has been successfully booked for {$siteName}\n\n"
@@ -2909,14 +3197,7 @@ function get_session_lifetime_hours(): int
 
 function get_client_ip_for_session(): string
 {
-    $ip = $_SERVER['HTTP_X_FORWARDED_FOR']
-        ?? $_SERVER['HTTP_X_REAL_IP']
-        ?? $_SERVER['REMOTE_ADDR']
-        ?? '';
-    if (str_contains($ip, ',')) {
-        $ip = trim(explode(',', $ip)[0]);
-    }
-    return substr($ip, 0, 45);
+    return get_client_ip();
 }
 
 function get_client_ua_for_session(): string
@@ -3002,11 +3283,48 @@ function invalidate_session_record(string $sessionId): void
     $stmt->execute([$sessionId]);
 }
 
-function invalidate_all_user_sessions(int $userId): void
+function invalidate_all_user_sessions(int $userId, ?string $exceptSessionId = null): void
 {
     $db = get_db();
+    if ($exceptSessionId !== null && $exceptSessionId !== '') {
+        $stmt = $db->prepare("UPDATE sessions SET is_active = 0 WHERE user_id = ? AND session_id <> ?");
+        $stmt->execute([$userId, $exceptSessionId]);
+        return;
+    }
     $stmt = $db->prepare("UPDATE sessions SET is_active = 0 WHERE user_id = ?");
     $stmt->execute([$userId]);
+}
+
+/**
+ * Gate for JSON API endpoints. Unlike a bare `$_SESSION['user']` check this also confirms the session is
+ * still active in the sessions table (so "revoke session", password changes, deactivation and expiry all
+ * take effect on API calls) and optionally enforces a role. Sends 401/403 JSON and exits on failure.
+ */
+function require_api_user(?string $role = null): array
+{
+    init_session();
+
+    $valid = !empty($_SESSION['user']) && validate_and_refresh_session();
+    if (!$valid) {
+        unset($_SESSION['user']);
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        http_response_code(401);
+        echo json_encode(['ok' => false, 'error' => 'unauthenticated']);
+        exit;
+    }
+
+    if ($role !== null && ($_SESSION['user']['role'] ?? '') !== $role) {
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'error' => 'forbidden']);
+        exit;
+    }
+
+    return $_SESSION['user'];
 }
 
 function get_active_sessions_for_user(int $userId): array
