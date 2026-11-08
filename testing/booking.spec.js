@@ -29,7 +29,7 @@ async function createInbox() {
   return { email: inbox.email_addr, sidToken: inbox.sid_token };
 }
 
-async function waitForConfirmationEmail(inbox, timeoutMs = 120_000) {
+async function waitForEmailLink(inbox, pageName, timeoutMs = 120_000) {
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
@@ -50,9 +50,8 @@ async function waitForConfirmationEmail(inbox, timeoutMs = 120_000) {
         .replace(/&#x3D;/gi, '=')
         .replace(/&quot;/gi, '"');
       const match = decodedBody.match(
-        /(?:https?:\/\/[^"'<>\s]+)?confirm_appointment\.php\?[^"'<>\s]+/i
+        new RegExp(`(?:https?:\\/\\/[^"'<>\\s]+)?${pageName}\\.php\\?[^"'<>\\s]+`, 'i')
       );
-
       if (match) {
         return new URL(match[0], process.env.E2E_BASE_URL).toString();
       }
@@ -183,18 +182,20 @@ test('customer can book, confirm by email, and admin can sign in', async ({ page
     // The e-mail verification link must only be e-mailed, never returned to the browser.
     const createBody = await (await createResponse).json();
     expect(createBody).not.toHaveProperty('verify_url');
-    // The booking was successfully created.
+    // The booking is now a request: the customer must verify by email first.
     await expect(page.locator('#resultCard')).toContainText(
-        /booking confirmed/i,
+        /verification request sent/i,
         { timeout: 30_000 }
     );
 
-    await expect(page.locator('#resultCard')).toContainText(
-        /statusbooked/i
-    );
+    // Step 4a: open the verification email link and confirm the customer.
+    const verifyUrl = await waitForEmailLink(inbox, 'verify_appointment');
+    await page.goto(verifyUrl);
+    await page.locator('#confirmBtn').click();                       // "Confirm customer and book"
+    await expect(page.locator('#resultArea')).toContainText(/appointment confirmed/i, { timeout: 30_000 });
 
-    // Step 4: read the confirmation email through Guerrilla Mail's API.
-    confirmationUrl = await waitForConfirmationEmail(inbox);
+    // Step 4b: the booking confirmation email arrives only after verification.
+    confirmationUrl = await waitForEmailLink(inbox, 'confirm_appointment');
     await page.goto(confirmationUrl);
     await expect(page.getByRole('heading', { name: /confirm or modify your appointment/i })).toBeVisible();
     await page.getByRole('button', { name: /^confirm appointment$/i }).click();
