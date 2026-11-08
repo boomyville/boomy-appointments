@@ -548,7 +548,7 @@ $nextAppointmentType = $nextAppointment['type_name'] ?? 'Appointment';
           <h2>Today at a glance</h2>
           <p><?php echo htmlspecialchars($todayStart->format('l, j F Y')); ?></p>
         </div>
-        <a href="calendar.php">Open calendar</a>
+        <a href="calendar.php">Open calendar</a> <a href="booking.php">Open Online Booking</a>
       </div>
 
       <div class="dashboard-today-grid">
