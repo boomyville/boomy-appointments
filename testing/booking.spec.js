@@ -79,6 +79,10 @@ test('customer can book, confirm by email, and admin can sign in', async ({ page
   try {
     // Step 1: choose the first configured service and provider.
     await page.goto('/booking.php');
+
+    console.log('Booking URL:', page.url());
+    console.log('Booking page title:', await page.title());
+
     await expect(page.locator('#appointmentTypeSelect')).toBeVisible();
     await expect(page.locator('#providerSelect')).toBeVisible();
     await expect(page.locator('#appointmentTypeSelect option')).not.toHaveCount(0);
