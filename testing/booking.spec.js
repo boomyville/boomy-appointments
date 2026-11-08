@@ -127,9 +127,17 @@ test('customer can book, confirm by email, and admin can sign in', async ({ page
     await page.locator('#step1Continue').click();
 
     // Step 2: select the first available date and time.
-    await expect(page.locator('#monthsContainer .month-card')).toBeVisible({
-        timeout: 30_000
-    });
+    // Wait until the calendar has finished loading and rendered its dates.
+    await expect(
+        page.locator('#monthsContainer .month-card').filter({
+            hasNotText: 'Loading calendar...'
+        }).first()
+    ).toBeVisible({ timeout: 30_000 });
+
+    // Wait for at least one genuinely available date.
+    await expect(
+        page.locator('#monthsContainer [data-date].is-available').first()
+    ).toBeVisible({ timeout: 30_000 });
 
     console.log(
         'CALENDAR CONTENT:',
