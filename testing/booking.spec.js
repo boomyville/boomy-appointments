@@ -83,6 +83,9 @@ test('customer can book, confirm by email, and admin can sign in', async ({ page
     console.log('Booking URL:', page.url());
     console.log('Booking page title:', await page.title());
 
+    await expect(page).toHaveURL(/\/appointments\/booking\.php/);
+    await expect(page.locator('#appointmentTypeSelect')).toBeVisible();
+
     await expect(page.locator('#appointmentTypeSelect')).toBeVisible();
     await expect(page.locator('#providerSelect')).toBeVisible();
     await expect(page.locator('#appointmentTypeSelect option')).not.toHaveCount(0);
