@@ -17,8 +17,8 @@ try {
   $db = get_db();
 
   try {
-    $stmt = $db->query("SELECT id, full_name, email, role, is_active, bookable FROM users WHERE role IS NOT NULL AND role <> '' AND role <> 'customer' ORDER BY full_name ASC, id ASC");
-    $providers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $db->query("SELECT id, full_name, email, role, is_active, bookable FROM users WHERE role IN ('admin', 'provider') AND is_active = 1 AND bookable = 1 ORDER BY full_name ASC, id ASC");
+  $providers = $stmt->fetchAll(PDO::FETCH_ASSOC);
   } catch (Throwable $e) {
     $providers = [];
   }
