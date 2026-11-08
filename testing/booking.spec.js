@@ -177,11 +177,15 @@ test('customer can book, confirm by email, and admin can sign in', async ({ page
     await page.locator('#step3Continue').click();
     await expect(page.locator('[data-panel="4"]')).toBeVisible();
     await page.locator('#confirmBookingBtn').click();
+    // The booking was successfully created.
+    await expect(page.locator('#resultCard')).toContainText(
+        /booking confirmed/i,
+        { timeout: 30_000 }
+    );
 
-    // The booking creates a pending email-verification appointment.
-    await expect(page.locator('#resultCard')).toContainText(/check your email|pending|verification/i, {
-      timeout: 30_000
-    });
+    await expect(page.locator('#resultCard')).toContainText(
+        /statusbooked/i
+    );
 
     // Step 4: read the confirmation email through Guerrilla Mail's API.
     confirmationUrl = await waitForConfirmationEmail(inbox);

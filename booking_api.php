@@ -734,7 +734,8 @@ if ($action === 'month' && $method === 'GET') {
         $matchCount = count($matches);
         $notesValue = $notes !== '' ? $notes : null;
         $allowDuplicate = !empty($data['allow_duplicate']);
-        $needsVerification = ($matchCount > 0) && !$allowDuplicate;
+        // $needsVerification = ($matchCount > 0) && !$allowDuplicate; This logic only requires verification for existing customers
+        $needsVerification = true;
         $resolvedCustomerName = booking_resolve_customer_name($data, $customerEmail);
 
         if ($customerMode === 'existing') {
