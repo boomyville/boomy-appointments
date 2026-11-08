@@ -70,7 +70,10 @@ jobs:
             --exclude='.git/' --exclude='.github/' --exclude='.gitignore' \
             --exclude='/config.php' --exclude='/adminer.php' --exclude='/manager.php' --exclude='/design/' \
             --exclude='/README.md' --exclude='/install.sql' --exclude='/config_sample.php' --exclude='/application' \
-            --exclude='/tests/' --exclude='/composer.json' --exclude='/composer.lock' --exclude='/phpunit.xml.dist' --exclude='/vendor/' --exclude='/.phpunit.cache/' \
+            --exclude='/tests/' --exclude='/testing/' \
+            --exclude='/node_modules/' --exclude='/test-results/' --exclude='/playwright-report/' --exclude='/.playwright/' \
+            --exclude='*.spec.js' --exclude='playwright.config.*' \
+            --exclude='/composer.json' --exclude='/composer.lock' --exclude='/phpunit.xml.dist' --exclude='/vendor/' --exclude='/.phpunit.cache/' \
             -e "ssh -i $HOME/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes" \
             ./ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/")
           
