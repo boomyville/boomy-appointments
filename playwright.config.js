@@ -7,7 +7,10 @@ module.exports = defineConfig({
     timeout: 15_000
   },
   retries: 0,
-  reporter: 'list',
+  reporter: [
+    ['list'],
+    ['junit', { outputFile: 'test-results/junit.xml' }]
+  ],
   use: {
     baseURL: process.env.E2E_BASE_URL,
     browserName: 'chromium',

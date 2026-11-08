@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: read
+  checks: write
 
 jobs:
   end_to_end:
@@ -42,3 +43,13 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Publish test report in GitHub
+        if: always()
+        uses: dorny/test-reporter@v2
+        with:
+          name: Playwright End-to-End Tests
+          path: test-results/junit.xml
+          reporter: java-junit
+          fail-on-error: false
+          fail-on-empty: false
