@@ -442,7 +442,9 @@ function booking_send_verification_email(array $appointment, array $provider, ar
     $providerName = format_appointment_person_name($provider) ?: 'Selected provider';
     $startDate = format_app_datetime((string) ($appointment['start_time'] ?? ''));
     $appointmentTypeName = trim((string) ($appointmentType['name'] ?? 'Appointment'));
-    $reasonLine = count($matches) > 1 ? 'We found multiple customer profiles that share this contact.' : 'We need one more step before the booking can be completed.';
+    $reasonLine = count($matches) > 1 
+        ? 'We found multiple customer profiles that share this contact.' 
+        : 'We need one more step before the booking can be completed.';
 
     $sameDay = build_same_day_appointments_email_block($appointment, false);
 
@@ -458,7 +460,9 @@ function booking_send_verification_email(array $appointment, array $provider, ar
         . $sameDay['html']
         . '<p><a href="' . htmlspecialchars($verifyUrl, ENT_QUOTES, 'UTF-8') . '" style="background:' . theme_email_primary() . ';color:#fff;display:inline-block;padding:12px 20px;border-radius:' . theme_email_radius('pill', '999px') . ';text-decoration:none;font-weight:700;">Verify and complete this booking</a></p>';
 
-    $bodyPlain = "Your new appointment is awaiting verification - {$siteName}\n\n{$reasonLine}\n\nAPPOINTMENT TO VERIFY\nAppointment type: {$appointmentTypeName}\nProvider: {$providerName}\nStart time: {$startDate}\n\n" . $sameDay['plain'] . "Verify and complete this booking: {$verifyUrl}\n";
+    $bodyPlain = "Your new appointment is awaiting verification - {$siteName}\n\n{$reasonLine}\n\nAPPOINTMENT TO VERIFY\nAppointment type: {$appointmentTypeName}\nProvider: {$providerName}\nStart time: {$startDate}\n\n" 
+        . $sameDay['plain'] 
+        . "Verify and complete this booking: {$verifyUrl}\n";
 
     $customer = get_customer_by_id((int) ($appointment['customer_id'] ?? 0));
     $recipient = trim((string) ($customer['email'] ?? ''));

@@ -1802,18 +1802,17 @@ function build_same_day_appointments_email_block(array $appointment, bool $withA
     $esc = fn($v): string => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
     $rows = $others;
 
-    if ($withActions) {
-        $timezone = new DateTimeZone(get_app_timezone_name());
-        $customer = get_customer_by_id((int) ($appointment['customer_id'] ?? 0));
-        $current = describe_same_day_appointment(
-            array_merge($appointment, ['full_name' => $customer['full_name'] ?? '']),
-            new DateTimeImmutable('now', $timezone),
-            $timezone
-        );
-        $current['is_current'] = true;
-        $rows[] = $current;
-        usort($rows, fn(array $a, array $b): int => strcmp($a['start_time'], $b['start_time']) ?: ($a['id'] <=> $b['id']));
-    }
+    // Always include the current appointment in the daily summary so it's a complete schedule
+    $timezone = new DateTimeZone(get_app_timezone_name());
+    $customer = get_customer_by_id((int) ($appointment['customer_id'] ?? 0));
+    $current = describe_same_day_appointment(
+        array_merge($appointment, ['full_name' => $customer['full_name'] ?? '']),
+        new DateTimeImmutable('now', $timezone),
+        $timezone
+    );
+    $current['is_current'] = true;
+    $rows[] = $current;
+    usort($rows, fn(array $a, array $b): int => strcmp($a['start_time'], $b['start_time']) ?: ($a['id'] <=> $b['id']));
 
     $dayLabel = format_app_datetime((string) $appointment['start_time'], 'l j F Y');
     $actionable = array_values(array_filter($rows, fn(array $r): bool => $r['can_delete']));
@@ -1825,9 +1824,9 @@ function build_same_day_appointments_email_block(array $appointment, bool $withA
 
     $intro = $withActions
         ? 'More than one appointment is booked with this email address on ' . $dayLabel . '. You can confirm or delete them individually or all together.'
-        : 'Other appointments are already booked with this email address on ' . $dayLabel . '.';
+        : 'Summary of all appointments associated with this email address on ' . $dayLabel . ':';
 
-    $html = '<h3>' . $esc($withActions ? 'Your appointments on ' . $dayLabel : 'Other appointments on ' . $dayLabel) . '</h3>'
+    $html = '<h3>' . $esc('Appointments on ' . $dayLabel) . '</h3>'
         . '<p>' . $esc($intro) . '</p>'
         . '<table role="presentation" style="border-collapse:collapse;width:100%;">';
     $plain = $intro . "\n\n";
