@@ -32,6 +32,9 @@ jobs:
           E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
           E2E_ADMIN_USERNAME: ${{ secrets.E2E_ADMIN_USERNAME }}
           E2E_ADMIN_PASSWORD: ${{ secrets.E2E_ADMIN_PASSWORD }}
+          # Optional: enables the "provider cannot read mail settings" security test
+          E2E_PROVIDER_USERNAME: ${{ secrets.E2E_PROVIDER_USERNAME }}
+          E2E_PROVIDER_PASSWORD: ${{ secrets.E2E_PROVIDER_PASSWORD }}
 
       - name: Upload Playwright report and traces
         if: always()

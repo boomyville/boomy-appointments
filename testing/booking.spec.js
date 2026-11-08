@@ -176,7 +176,13 @@ test('customer can book, confirm by email, and admin can sign in', async ({ page
 
     await page.locator('#step3Continue').click();
     await expect(page.locator('[data-panel="4"]')).toBeVisible();
+    const createResponse = page.waitForResponse(
+      r => r.url().includes('booking_api.php?action=create') && r.request().method() === 'POST'
+    );
     await page.locator('#confirmBookingBtn').click();
+    // The e-mail verification link must only be e-mailed, never returned to the browser.
+    const createBody = await (await createResponse).json();
+    expect(createBody).not.toHaveProperty('verify_url');
     // The booking was successfully created.
     await expect(page.locator('#resultCard')).toContainText(
         /booking confirmed/i,
