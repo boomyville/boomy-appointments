@@ -78,7 +78,7 @@ test('customer can book, confirm by email, and admin can sign in', async ({ page
 
   try {
     // Step 1: choose the first configured service and provider.
-    await page.goto('/booking.php');
+    await page.goto('booking.php');
 
     console.log('Booking URL:', page.url());
     console.log('Booking page title:', await page.title());
@@ -129,7 +129,7 @@ test('customer can book, confirm by email, and admin can sign in', async ({ page
     await expect(page.getByText(/thanks for confirming your appointment/i)).toBeVisible();
 
     // Step 5: verify that the configured admin account can sign in.
-    await page.goto('/login.php');
+    await page.goto('login.php');
     await page.locator('#email').fill(adminUsername);
     await page.locator('#password').fill(adminPassword);
     await page.getByRole('button', { name: /sign in/i }).click();
