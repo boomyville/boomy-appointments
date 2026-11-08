@@ -613,7 +613,7 @@ if ($role !== 'admin') {
 
           <div class="field">
             <label for="phone">Phone</label>
-            <input id="phone" name="phone" type="tel" placeholder="(555) 123-4567" required />
+            <input id="phone" name="phone" type="tel" placeholder="0400 000 000" required />
           </div>
 
           <div class="field">

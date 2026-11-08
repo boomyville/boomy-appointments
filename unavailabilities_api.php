@@ -7,12 +7,7 @@ require_once __DIR__ . '/functions.php';
 header('Content-Type: application/json; charset=utf-8');
 
 try {
-    init_session();
-    if (!is_logged_in()) {
-        http_response_code(401);
-        echo json_encode(['ok' => false, 'error' => 'Authentication session invalid. Please log back in.']);
-        exit;
-    }
+    require_api_user();
 
     $db = get_db();
     $action = $_GET['action'] ?? '';

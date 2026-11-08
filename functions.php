@@ -697,11 +697,22 @@ function get_app_timezone_name(): string
     return 'UTC';
 }
 
-function get_app_root_url(): string
+/**
+ * Base URL of the app.
+ *
+ * $requireConfigured: set for links that carry secrets (password reset, account confirmation). When the
+ * "root_url" setting is empty the URL would be built from the Host header, which an attacker controls, so
+ * a poisoned reset email could leak the token. In that mode we refuse instead of guessing.
+ */
+function get_app_root_url(bool $requireConfigured = false): string
 {
     $configured = trim((string) get_setting('root_url', ''));
     if ($configured !== '') {
         return rtrim($configured, '/');
+    }
+
+    if ($requireConfigured) {
+        throw new RuntimeException('The Root URL setting must be configured before links containing secrets can be generated.');
     }
 
     $scheme = 'http';
@@ -711,7 +722,8 @@ function get_app_root_url(): string
     }
 
     $host = trim((string) ($_SERVER['HTTP_HOST'] ?? ''), '/');
-    if ($host === '') {
+    // Only accept a plain hostname / IPv4 / [IPv6] with optional port; anything else is header junk.
+    if ($host === '' || !preg_match('/^(?:[A-Za-z0-9.\-]+|\[[0-9A-Fa-f:]+\])(?::\d{1,5})?$/', $host)) {
         $host = 'localhost';
     }
 
@@ -726,9 +738,9 @@ function get_app_root_url(): string
     return rtrim($root_url, '/');
 }
 
-function build_app_url(string $path, array $query = []): string
+function build_app_url(string $path, array $query = [], bool $requireConfiguredRoot = false): string
 {
-    $url = get_app_root_url() . '/' . ltrim($path, '/');
+    $url = get_app_root_url($requireConfiguredRoot) . '/' . ltrim($path, '/');
     if (!empty($query)) {
         $url .= '?' . http_build_query($query);
     }
@@ -750,27 +762,158 @@ function get_email_domain_whitelist(): array
     return array_filter(array_map('trim', explode("\n", $setting)));
 }
 
-// Get the client's IP address (tries common proxy headers)
-function get_client_ip(): string
+/**
+ * True if $ip falls inside $cidr (or equals it when no prefix is given). IPv4 and IPv6.
+ */
+function ip_matches_cidr(string $ip, string $cidr): bool
 {
-    $ip = '';
-    if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
-        $ip = $_SERVER['HTTP_CLIENT_IP'];
-    } elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-        // may contain comma-separated list of IPs; take the first public one
-        $list = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
-        $list = array_map('trim', $list);
-        // return the last (closest to client) or first? use first non-private
-        foreach ($list as $candidate) {
-            if (filter_var($candidate, FILTER_VALIDATE_IP)) {
-                $ip = $candidate;
-                break;
+    $cidr = trim($cidr);
+    if ($cidr === '') {
+        return false;
+    }
+    [$subnet, $bits] = array_pad(explode('/', $cidr, 2), 2, null);
+    $ipBin  = @inet_pton($ip);
+    $subBin = @inet_pton((string) $subnet);
+    if ($ipBin === false || $subBin === false || strlen($ipBin) !== strlen($subBin)) {
+        return false;
+    }
+    $max   = strlen($ipBin) * 8;
+    $bits  = $bits === null ? $max : max(0, min($max, (int) $bits));
+    $bytes = intdiv($bits, 8);
+    $rem   = $bits % 8;
+    if ($bytes > 0 && substr($ipBin, 0, $bytes) !== substr($subBin, 0, $bytes)) {
+        return false;
+    }
+    if ($rem === 0) {
+        return true;
+    }
+    $mask = (0xFF << (8 - $rem)) & 0xFF;
+    return (ord($ipBin[$bytes]) & $mask) === (ord($subBin[$bytes]) & $mask);
+}
+
+/**
+ * Is this address a reverse proxy we may believe X-Forwarded-For from?
+ * Define TRUSTED_PROXIES in config.php (array of IPs / CIDRs) to be explicit. Without it, loopback and
+ * private ranges (Docker networks, LAN reverse proxies such as SWAG) are trusted, public addresses are not.
+ */
+function is_trusted_proxy_ip(string $ip): bool
+{
+    if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+        return false;
+    }
+    if (defined('TRUSTED_PROXIES') && is_array(TRUSTED_PROXIES)) {
+        foreach (TRUSTED_PROXIES as $entry) {
+            if (ip_matches_cidr($ip, (string) $entry)) {
+                return true;
             }
         }
-    } elseif (!empty($_SERVER['REMOTE_ADDR'])) {
-        $ip = $_SERVER['REMOTE_ADDR'];
+        return false;
     }
-    return (string)$ip;
+    return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
+}
+
+/**
+ * The client's IP address. REMOTE_ADDR is the only value a client cannot forge, so forwarded headers
+ * (X-Forwarded-For / X-Real-IP) are only honoured when the direct peer is a trusted proxy, and then the
+ * right-most address that is not itself a trusted proxy wins (left-most entries are client-supplied).
+ * HTTP_CLIENT_IP is never trusted.
+ */
+function get_client_ip(): string
+{
+    $remote = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+    if ($remote === '' || !is_trusted_proxy_ip($remote)) {
+        return substr($remote, 0, 45);
+    }
+
+    $xff = (string) ($_SERVER['HTTP_X_FORWARDED_FOR'] ?? '');
+    if ($xff !== '') {
+        $chain = array_values(array_filter(
+            array_map('trim', explode(',', $xff)),
+            static fn($c) => filter_var($c, FILTER_VALIDATE_IP) !== false
+        ));
+        for ($i = count($chain) - 1; $i >= 0; $i--) {
+            if (!is_trusted_proxy_ip($chain[$i])) {
+                return substr($chain[$i], 0, 45);
+            }
+        }
+        if ($chain) {
+            return substr($chain[0], 0, 45);
+        }
+    }
+
+    $real = trim((string) ($_SERVER['HTTP_X_REAL_IP'] ?? ''));
+    if ($real !== '' && filter_var($real, FILTER_VALIDATE_IP)) {
+        return substr($real, 0, 45);
+    }
+
+    return substr($remote, 0, 45);
+}
+
+/**
+ * Generic fixed-window rate limiter backed by the rate_limits table.
+ * Returns true when the hit is allowed (and records it), false when the limit is exceeded.
+ * Fails open if the database is unavailable so a hiccup cannot lock everybody out.
+ */
+function rate_limit_hit(string $bucket, string $key, int $maxHits, int $windowSeconds): bool
+{
+    try {
+        $db = get_db();
+        static $ensured = false;
+        if (!$ensured) {
+            $db->exec("CREATE TABLE IF NOT EXISTS rate_limits (
+                id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                bucket VARCHAR(40) NOT NULL,
+                key_hash CHAR(64) NOT NULL,
+                hit_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_rate_limits_lookup (bucket, key_hash, hit_at),
+                KEY idx_rate_limits_time (hit_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            $ensured = true;
+        }
+
+        $keyHash = hash('sha256', strtolower($key));
+        $count = $db->prepare('SELECT COUNT(*) FROM rate_limits WHERE bucket = ? AND key_hash = ? AND hit_at > (NOW() - INTERVAL ? SECOND)');
+        $count->execute([$bucket, $keyHash, $windowSeconds]);
+        if ((int) $count->fetchColumn() >= $maxHits) {
+            return false;
+        }
+
+        $db->prepare('INSERT INTO rate_limits (bucket, key_hash) VALUES (?, ?)')->execute([$bucket, $keyHash]);
+
+        if (random_int(1, 50) === 1) {
+            $db->exec('DELETE FROM rate_limits WHERE hit_at < (NOW() - INTERVAL 1 DAY)');
+        }
+        return true;
+    } catch (Throwable $e) {
+        error_log('rate_limit_hit failed: ' . $e->getMessage());
+        return true;
+    }
+}
+
+/**
+ * Too many failed logins? Limits: 5 failures per IP+email and 20 failures per IP in 15 minutes.
+ * Keyed on IP so a stranger cannot lock the real admin out of their own account.
+ */
+function login_attempts_exceeded(string $email): bool
+{
+    try {
+        $db = get_db();
+        $ip = get_client_ip();
+        $window = '(NOW() - INTERVAL 15 MINUTE)';
+
+        $stmt = $db->prepare("SELECT COUNT(*) FROM login_attempts WHERE success = 0 AND ip_address = ? AND username = ? AND attempted_at > $window");
+        $stmt->execute([$ip, $email]);
+        if ((int) $stmt->fetchColumn() >= 5) {
+            return true;
+        }
+
+        $stmt = $db->prepare("SELECT COUNT(*) FROM login_attempts WHERE success = 0 AND ip_address = ? AND attempted_at > $window");
+        $stmt->execute([$ip]);
+        return (int) $stmt->fetchColumn() >= 20;
+    } catch (Throwable $e) {
+        error_log('login_attempts_exceeded failed: ' . $e->getMessage());
+        return false;
+    }
 }
 
 // Insert a login attempt record
@@ -970,7 +1113,12 @@ function send_password_reset_email(string $email, string $code): bool
     if (!$user) return false;
     
     $app_name = APP_NAME ?? 'Boomy Appointments';
-    $reset_url = build_app_url('reset_password.php', ['code' => $code]);
+    try {
+        $reset_url = build_app_url('reset_password.php', ['code' => $code], true);
+    } catch (RuntimeException $e) {
+        error_log('send_password_reset_email: ' . $e->getMessage());
+        return false;
+    }
     
     $subject = "Password Reset - $app_name";
     $emailRadius = theme_email_radius('s', '4px');
@@ -1009,7 +1157,12 @@ function send_account_confirmation_email(string $email, string $code): bool
     $user = get_user_by_email($email);
     if (!$user) return false;
     $app_name = APP_NAME ?? 'Boomy Appointments';
-    $confirm_url = build_app_url('confirm_account.php', ['code' => $code]);
+    try {
+        $confirm_url = build_app_url('confirm_account.php', ['code' => $code], true);
+    } catch (RuntimeException $e) {
+        error_log('send_account_confirmation_email: ' . $e->getMessage());
+        return false;
+    }
     $subject = "Confirm your account - $app_name";
     $emailRadius = theme_email_radius('s', '4px');
     $body_html = "
@@ -3044,14 +3197,7 @@ function get_session_lifetime_hours(): int
 
 function get_client_ip_for_session(): string
 {
-    $ip = $_SERVER['HTTP_X_FORWARDED_FOR']
-        ?? $_SERVER['HTTP_X_REAL_IP']
-        ?? $_SERVER['REMOTE_ADDR']
-        ?? '';
-    if (str_contains($ip, ',')) {
-        $ip = trim(explode(',', $ip)[0]);
-    }
-    return substr($ip, 0, 45);
+    return get_client_ip();
 }
 
 function get_client_ua_for_session(): string
@@ -3137,11 +3283,48 @@ function invalidate_session_record(string $sessionId): void
     $stmt->execute([$sessionId]);
 }
 
-function invalidate_all_user_sessions(int $userId): void
+function invalidate_all_user_sessions(int $userId, ?string $exceptSessionId = null): void
 {
     $db = get_db();
+    if ($exceptSessionId !== null && $exceptSessionId !== '') {
+        $stmt = $db->prepare("UPDATE sessions SET is_active = 0 WHERE user_id = ? AND session_id <> ?");
+        $stmt->execute([$userId, $exceptSessionId]);
+        return;
+    }
     $stmt = $db->prepare("UPDATE sessions SET is_active = 0 WHERE user_id = ?");
     $stmt->execute([$userId]);
+}
+
+/**
+ * Gate for JSON API endpoints. Unlike a bare `$_SESSION['user']` check this also confirms the session is
+ * still active in the sessions table (so "revoke session", password changes, deactivation and expiry all
+ * take effect on API calls) and optionally enforces a role. Sends 401/403 JSON and exits on failure.
+ */
+function require_api_user(?string $role = null): array
+{
+    init_session();
+
+    $valid = !empty($_SESSION['user']) && validate_and_refresh_session();
+    if (!$valid) {
+        unset($_SESSION['user']);
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        http_response_code(401);
+        echo json_encode(['ok' => false, 'error' => 'unauthenticated']);
+        exit;
+    }
+
+    if ($role !== null && ($_SESSION['user']['role'] ?? '') !== $role) {
+        if (!headers_sent()) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'error' => 'forbidden']);
+        exit;
+    }
+
+    return $_SESSION['user'];
 }
 
 function get_active_sessions_for_user(int $userId): array

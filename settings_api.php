@@ -30,11 +30,7 @@ if (!function_exists('normalize_booking_calendar_height_setting')) {
 
 $action = $_GET['action'] ?? 'get';
 
-if (empty($_SESSION['user'])) {
-    http_response_code(401);
-    echo json_encode(['error' => 'unauthenticated']);
-    exit;
-}
+require_api_user();
 
 try {
     $db = get_db();
@@ -53,8 +49,20 @@ try {
             'email_whitelist_enabled', 'email_domain_whitelist', 'email_domain_blacklist',
             'smtp_host', 'smtp_port', 'smtp_encryption', 'smtp_username', 'smtp_password', 'mail_from_address', 'mail_from_name'
         ];
+        // Mail server details are admin-only, and the SMTP password is never sent back to anyone
+        // (the settings form keeps the stored value when the field is left blank).
+        $isAdmin = ($_SESSION['user']['role'] ?? '') === 'admin';
+        $secret = ['smtp_host', 'smtp_port', 'smtp_encryption', 'smtp_username', 'smtp_password', 'mail_from_address', 'mail_from_name'];
         $out = [];
-        foreach ($keys as $k) $out[$k] = get_setting($k, null);
+        foreach ($keys as $k) {
+            if (in_array($k, $secret, true) && (!$isAdmin || $k === 'smtp_password')) {
+                continue;
+            }
+            $out[$k] = get_setting($k, null);
+        }
+        if ($isAdmin) {
+            $out['smtp_password_set'] = trim((string) get_setting('smtp_password', '')) !== '';
+        }
         echo json_encode(['ok' => true, 'settings' => $out]);
         exit;
     }
@@ -623,6 +631,14 @@ try {
             exit;
         }
 
+        // Stop a hijacked session from brute-forcing the current password
+        if (!rate_limit_hit('chpw_user', (string) ($_SESSION['user']['id'] ?? $email), 5, 900)) {
+            header('Retry-After: 900');
+            http_response_code(429);
+            echo json_encode(['error' => 'Too many attempts. Please wait 15 minutes and try again.']);
+            exit;
+        }
+
         $user = verify_user_credentials($email, $current);
         if (!$user) {
             http_response_code(401);
@@ -644,6 +660,9 @@ try {
             echo json_encode(['error' => 'Failed to update password']);
             exit;
         }
+
+        // Log out every other device; this one stays signed in.
+        invalidate_all_user_sessions((int) $user['id'], session_id());
 
         echo json_encode(['ok' => true, 'message' => 'Password changed successfully']);
         exit;
@@ -718,6 +737,7 @@ try {
     http_response_code(400);
     echo json_encode(['error' => 'unknown action']);
 } catch (Throwable $e) {
+    error_log('settings_api.php: ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['error' => $e->getMessage()]);
+    echo json_encode(['error' => 'Server error']);
 }
