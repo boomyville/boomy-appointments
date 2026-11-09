@@ -686,7 +686,7 @@ if ($action === 'month' && $method === 'GET') {
         $data = json_decode(file_get_contents('php://input'), true) ?? [];
         $token = (string) ($data['csrf_token'] ?? '');
         if (!verify_csrf_token($token)) booking_api_response(['error' => 'csrf'], 400);
-        booking_throttle('book_create', 10, 3600);
+        booking_throttle('book_create', 30, 3600);
 
         $providerId = (int) ($data['provider_id'] ?? 0);
         $appointmentTypeId = (int) ($data['appointment_type_id'] ?? 0);

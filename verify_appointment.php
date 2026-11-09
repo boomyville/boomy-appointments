@@ -342,7 +342,8 @@ if ($siteName === '') {
         div.className = 'match-item';
         div.style.marginBottom = '8px';
         
-        const isMatch = profile.full_name === appointment.customer?.full_name;
+        const bookedId = String(appointment.customer?.id ?? appointment.customer_id ?? '');
+        const isMatch = bookedId !== '' && String(profile.id) === bookedId;
 
         div.innerHTML = `
           <label class="match-choice">
@@ -356,7 +357,14 @@ if ($siteName === '') {
         els.matchesList.appendChild(div);
       });
       
-      setNotice('Multiple profiles share this contact info. Please select the correct identity or create a new profile.');
+      if (!document.querySelector('input[name="selected_customer_id"]:checked')) {
+        const first = els.matchesList.querySelector('input[name="selected_customer_id"]');
+        if (first) first.checked = true;
+      }
+
+      setNotice(matches.length > 1
+        ? 'Multiple profiles share this contact info. Please select the correct identity or create a new profile.'
+        : 'Review your appointment details below, then confirm to finalize the booking.');
     } else {
       // Clean baseline profile fallback option
       const defaultDiv = document.createElement('div');
@@ -443,6 +451,8 @@ if ($siteName === '') {
     const provider = data.provider || null;
     const appointmentType = data.appointment_type || null;
     const matches = data.matches || [];
+    // The API returns the booked customer next to the appointment, not inside it.
+    appointment.customer = data.customer || appointment.customer || null;
 
     els.loadingNotice.classList.add('hidden');
     els.requestArea.classList.remove('hidden');

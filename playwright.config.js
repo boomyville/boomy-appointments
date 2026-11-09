@@ -7,6 +7,11 @@ module.exports = defineConfig({
     timeout: 15_000
   },
   retries: 0,
+  // Every spec shares one runner IP and therefore the same rate-limit / booking-limit buckets,
+  // so the files must run one after another.
+  workers: 1,
+  fullyParallel: false,
+  globalTeardown: require.resolve('./testing/global-teardown.js'),
   reporter: [
     ['list'],
     ['junit', { outputFile: 'test-results/junit.xml' }]

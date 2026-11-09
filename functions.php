@@ -3,12 +3,33 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 
+/**
+ * Is the visitor talking to us over HTTPS? Behind a TLS-terminating reverse proxy (SWAG, nginx, Cloudflare)
+ * PHP only sees plain HTTP, so $_SERVER['HTTPS'] is empty and the session cookie would silently lose its
+ * Secure flag. X-Forwarded-Proto is honoured only when the direct peer is a trusted proxy.
+ */
+function request_is_https(): bool
+{
+    if (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off') {
+        return true;
+    }
+    if ((int) ($_SERVER['SERVER_PORT'] ?? 0) === 443) {
+        return true;
+    }
+    $remote = (string) ($_SERVER['REMOTE_ADDR'] ?? '');
+    if ($remote !== '' && is_trusted_proxy_ip($remote)) {
+        $proto = strtolower(trim(explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]));
+        return $proto === 'https';
+    }
+    return false;
+}
+
 // Session hardening and initialization
 function init_session(): void
 {
     if (session_status() === PHP_SESSION_NONE) {
         // Harden session cookie params
-        $secure = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+        $secure = request_is_https();
         session_set_cookie_params([
             'lifetime' => 0,
             'path' => '/',
