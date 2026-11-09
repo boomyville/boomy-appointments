@@ -634,7 +634,7 @@ if ($action === 'month' && $method === 'GET') {
     }
 
     if ($action === 'customer_check' && $method === 'POST') {
-        $data = json_decode(file_get_contents('php://input'), true) ?? [];
+        $data = normalize_json_input(file_get_contents('php://input'), ['answers']);
         $token = (string) ($data['csrf_token'] ?? '');
         if (!verify_csrf_token($token)) booking_api_response(['error' => 'csrf'], 400);
         booking_throttle('book_cust_check', 10, 600);
@@ -683,7 +683,7 @@ if ($action === 'month' && $method === 'GET') {
     }
 
     if ($action === 'create' && $method === 'POST') {
-        $data = json_decode(file_get_contents('php://input'), true) ?? [];
+        $data = normalize_json_input(file_get_contents('php://input'), ['answers']);
         $token = (string) ($data['csrf_token'] ?? '');
         if (!verify_csrf_token($token)) booking_api_response(['error' => 'csrf'], 400);
         booking_throttle('book_create', 30, 3600);
@@ -831,7 +831,7 @@ update_customer_meta((int) $customer['id'], booking_extract_client_meta($data));
     }
 
     if ($action === 'verify' && $method === 'POST') {
-        $data = json_decode(file_get_contents('php://input'), true) ?? [];
+        $data = normalize_json_input(file_get_contents('php://input'), ['answers']);
         $token = (string) ($data['csrf_token'] ?? '');
         if (!verify_csrf_token($token)) booking_api_response(['error' => 'csrf'], 400);
         booking_throttle('book_verify', 20, 600);

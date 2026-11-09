@@ -3,6 +3,37 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
 
+// Never show PHP warnings / notices to visitors: they leak file paths and corrupt JSON responses.
+// They still go to the error log. Put define('APP_DEBUG', true); in config.php on a development machine to see them.
+if (!(defined('APP_DEBUG') && APP_DEBUG)) {
+    ini_set('display_errors', '0');
+    ini_set('display_startup_errors', '0');
+}
+ini_set('log_errors', '1');
+
+/**
+ * Decode a JSON request body into an array and make it safe to cast to strings / ints.
+ * Clients can send arrays or objects where we expect text ({"customer_email": [1]}); casting those with
+ * (string) raises "Array to string conversion". Any array value whose key is not listed in $arrayKeys
+ * becomes '' (which the normal "required field" validation then rejects).
+ */
+function normalize_json_input($raw, array $arrayKeys = []): array
+{
+    if (!is_string($raw) || $raw === '') {
+        return [];
+    }
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        return [];
+    }
+    foreach ($data as $key => $value) {
+        if (is_array($value) && !in_array($key, $arrayKeys, true)) {
+            $data[$key] = '';
+        }
+    }
+    return $data;
+}
+
 /**
  * Is the visitor talking to us over HTTPS? Behind a TLS-terminating reverse proxy (SWAG, nginx, Cloudflare)
  * PHP only sees plain HTTP, so $_SERVER['HTTPS'] is empty and the session cookie would silently lose its

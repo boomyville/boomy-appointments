@@ -11,8 +11,8 @@ function input_data(): array
 {
     $raw = file_get_contents('php://input');
     if ($raw) {
-        $data = json_decode($raw, true);
-        if (is_array($data)) return $data;
+        $data = normalize_json_input($raw);
+        if ($data) return $data;
     }
     return $_POST ?? [];
 }

@@ -22,7 +22,8 @@ const providerUsername = process.env.E2E_PROVIDER_USERNAME;
 const providerPassword = process.env.E2E_PROVIDER_PASSWORD;
 
 // The tests share rate-limit buckets (same runner IP), so keep them in order.
-test.describe.configure({ mode: 'serial' });
+// No serial mode: the specs run one after another anyway (workers: 1), and in serial mode one failure
+// would hide the result of every test after it.
 
 test.beforeAll(() => {
   expect(rawBase, 'Set the E2E_BASE_URL GitHub secret').toBeTruthy();

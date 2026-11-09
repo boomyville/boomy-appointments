@@ -9,13 +9,21 @@ const H = require('./helpers');
  * "known gap" test, which removes itself, and there are no lockouts or e-mails.
  */
 
-test.describe.configure({ mode: 'serial' });
+// No serial mode: the specs run one after another anyway (workers: 1), and in serial mode one failure
+// would hide the result of every test after it.
 
 test.beforeAll(() => {
   expect(H.baseURL, 'Set the E2E_BASE_URL GitHub secret').not.toBe('/');
 });
 
-const LEAK_PATTERN = /Stack trace|PDOException|SQLSTATE|Fatal error|Parse error|Warning:|Notice:|Deprecated:|on line \d+|\/var\/www|\/home\/|\/srv\//i;
+// PHP warnings come out as "<b>Warning</b>:  ... in /path/file.php on line <b>12</b>" when display_errors is on.
+const LEAK_PATTERN = new RegExp([
+  '<b>(?:Warning|Notice|Deprecated|Fatal error|Parse error)<\\/b>',
+  '\\b(?:Warning|Notice|Deprecated|Fatal error|Parse error):',
+  'Stack trace|PDOException|SQLSTATE',
+  'on line (?:<b>)?\\d+',
+  '\\/(?:var|home|srv|tmp|usr|opt|app)\\/[\\w.\\/-]+',
+].join('|'), 'i');
 
 /* ------------------------------------------------------------------------------------------ CSRF */
 
