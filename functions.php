@@ -1679,6 +1679,7 @@ function build_theme_css(array $theme): string
 function render_theme_head(): void
 {
     try {
+        echo '<link rel="icon" type="image/svg+xml" href="assets/favicon.svg">' . "\n";
         $theme = get_theme_settings();
         if (isset($theme['custom']['theme_font'])) {
             $google = theme_font_options()[$theme['values']['theme_font']]['google'] ?? null;
