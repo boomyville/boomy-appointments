@@ -2,7 +2,7 @@
   <style>
     .glyph-stroke {
       fill: none;
-      stroke: #1a1a1a;
+      stroke: #84282f;
       stroke-width: 8;
       stroke-linecap: butt;
       stroke-linejoin: miter;
@@ -11,7 +11,7 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       font-weight: 700;
       font-size: 30px;
-      fill: #1a1a1a;
+      fill: #84282f;
       letter-spacing: -1px;
     }
   </style>
