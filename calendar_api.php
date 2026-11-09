@@ -33,7 +33,7 @@ try {
     $rangeEnd = $rangeEndDate->format('Y-m-d H:i:s');
 
     // Build base SELECT query for real appointments
-    $sql = "SELECT a.id, a.customer_id, a.provider_id, a.appointment_type_id, a.start_time, a.end_time, a.status, a.notes,
+   $sql = "SELECT a.id, a.customer_id, a.provider_id, a.appointment_type_id, a.start_time, a.end_time, a.status, a.booking_source, a.notes,
                     c.full_name AS customer_name, c.email AS customer_email, c.mobile AS customer_mobile, t.name AS type_name, t.color_hex
             FROM appointments a
             LEFT JOIN customers c ON c.id = a.customer_id
@@ -95,6 +95,7 @@ try {
             'extendedProps' => [
                 'customer_name' => $r['customer_name'] ?? null,
                 'status' => $r['status'],
+                'booking_source' => $r['booking_source'] ?? 'unknown',
                 'provider_id' => (int)$r['provider_id'],
                 'appointment_type' => $r['type_name'] ?? null,
                 'appointment_type_id' => (int)$r['appointment_type_id'],

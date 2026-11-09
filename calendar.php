@@ -2400,6 +2400,11 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
         title.className = 'booking-event__title';
         title.textContent = arg.event.extendedProps.customer_name || arg.event.title || 'Appointment';
 
+        if (String(arg.event.extendedProps.booking_source || '').toLowerCase() === 'online') {
+          // Uses the Secondary theme color set in settings.php, with a fallback
+          title.style.color = 'var(--accent-2, var(--theme-secondary, #10b981))';
+        }
+
         const status = document.createElement('div');
         status.className = 'booking-event__status';
         status.textContent = String(arg.event.extendedProps.status || 'booked').replace(/_/g, ' ');
