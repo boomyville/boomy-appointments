@@ -423,6 +423,18 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
       transition: transform 0.15s ease, box-shadow 0.15s ease;
     }
 
+    .booking-event__age {
+      position: absolute;
+      bottom: 3px;
+      left: 6px;
+      font-size: 0.65rem;
+      font-weight: 800;
+      line-height: 1;
+      opacity: 0.85;
+      pointer-events: none;
+      z-index: 9;
+    }
+
     .fc-status-cycler-dot:hover {
       transform: scale(1.25);
       box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
@@ -2521,6 +2533,16 @@ function render_customer_field_label(string $label, array $fieldSettings): strin
         wrapper.appendChild(title);
         wrapper.appendChild(status);
         wrapper.appendChild(statusDot);
+
+        // Optional (Settings > Booking): days since the appointment was booked. Booked today shows nothing.
+        const daysSinceBooked = Number(arg.event.extendedProps.days_since_booked);
+        if (bookingCalendarSettings.show_days_since_booked && Number.isFinite(daysSinceBooked) && daysSinceBooked > 0) {
+          const ageBadge = document.createElement('div');
+          ageBadge.className = 'booking-event__age';
+          ageBadge.textContent = String(daysSinceBooked);
+          ageBadge.setAttribute('title', 'Booked ' + daysSinceBooked + (daysSinceBooked === 1 ? ' day' : ' days') + ' ago');
+          wrapper.appendChild(ageBadge);
+        }
         
         return { domNodes: [wrapper] };
       },

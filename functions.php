@@ -2214,6 +2214,24 @@ function get_customer_field_settings(): array
     ];
 }
 
+/**
+ * Whole calendar days between the day an appointment was booked and today, in the clinic's time zone.
+ * Booked today = 0, booked yesterday = 1 and so on. $createdTs is a Unix timestamp (use
+ * UNIX_TIMESTAMP(created_at) in SQL, which is correct whatever time zone the database runs in).
+ * Returns null when the timestamp is missing; a booking "from the future" (clock skew) counts as 0.
+ */
+function appointment_days_since_created($createdTs, ?DateTimeImmutable $now = null): ?int
+{
+    if ($createdTs === null || $createdTs === '' || !is_numeric($createdTs)) {
+        return null;
+    }
+    $tz = new DateTimeZone(get_app_timezone_name());
+    $createdDay = (new DateTimeImmutable('@' . (int) $createdTs))->setTimezone($tz)->setTime(0, 0);
+    $today = ($now ?? new DateTimeImmutable('now', $tz))->setTimezone($tz)->setTime(0, 0);
+
+    return max(0, (int) $createdDay->diff($today)->format('%r%a'));
+}
+
 function get_booking_calendar_settings(): array
 {
     static $cache = null;
@@ -2233,6 +2251,7 @@ function get_booking_calendar_settings(): array
         'start_time' => (string) get_setting('booking_start_time', '09:00'),
         'end_time' => (string) get_setting('booking_end_time', '21:00'),
         'show_now_indicator' => (bool) (int) get_setting('booking_show_now_indicator', '1'),
+        'show_days_since_booked' => (bool) (int) get_setting('booking_show_days_since_booked', '0'),
         'snap_minutes' => (int) get_setting('booking_snap_minutes', '15'),
     ];
     return $cache;

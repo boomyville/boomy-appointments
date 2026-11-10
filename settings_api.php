@@ -44,7 +44,7 @@ try {
             'booking_phone_display', 'booking_phone_required', 'booking_phone_numbers_only', 'booking_phone_min', 'booking_phone_max',
             'booking_dob_display', 'booking_dob_required', 'booking_gender_display', 'booking_gender_required',
             'booking_show_monday', 'booking_show_tuesday', 'booking_show_wednesday', 'booking_show_thursday', 'booking_show_friday', 'booking_show_saturday', 'booking_show_sunday',
-            'booking_start_time', 'booking_end_time', 'notify_admin_on_booking', 'notify_admin_on_cancel', 'booking_week_start_day', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes', 'auto_no_show', 'prevent_same_user_booking', 'disable_online_booking',
+            'booking_start_time', 'booking_end_time', 'notify_admin_on_booking', 'notify_admin_on_cancel', 'booking_week_start_day', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_show_days_since_booked', 'booking_snap_minutes', 'auto_no_show', 'prevent_same_user_booking', 'disable_online_booking',
             'password_min_length', 'password_max_length', 'password_require_lowercase', 'password_require_uppercase', 'password_require_number', 'password_require_symbol', 'confirmation_email_message', 'reminder_email_message',
             'email_whitelist_enabled', 'email_domain_whitelist', 'email_domain_blacklist',
             'smtp_host', 'smtp_port', 'smtp_encryption', 'smtp_username', 'smtp_password', 'mail_from_address', 'mail_from_name'
@@ -184,7 +184,7 @@ try {
             'booking' => [
                 'booking_deadline_hours', 'booking_max_advance_days',
                 'booking_show_monday', 'booking_show_tuesday', 'booking_show_wednesday', 'booking_show_thursday', 'booking_show_friday', 'booking_show_saturday', 'booking_show_sunday',
-                'booking_start_time', 'notify_admin_on_booking', 'notify_admin_on_cancel', 'booking_end_time', 'booking_week_start_day', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_snap_minutes', 'auto_no_show', 'prevent_same_user_booking', 'disable_online_booking',
+                'booking_start_time', 'notify_admin_on_booking', 'notify_admin_on_cancel', 'booking_end_time', 'booking_week_start_day', 'booking_calendar_height', 'booking_show_now_indicator', 'booking_show_days_since_booked', 'booking_snap_minutes', 'auto_no_show', 'prevent_same_user_booking', 'disable_online_booking',
                 'booking_step1_message', 'booking_step4_message', 'user_questions'
             ],
             'authentication' => [

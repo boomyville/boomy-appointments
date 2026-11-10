@@ -34,6 +34,7 @@ try {
 
     // Build base SELECT query for real appointments
    $sql = "SELECT a.id, a.customer_id, a.provider_id, a.appointment_type_id, a.start_time, a.end_time, a.status, a.booking_source, a.notes,
+                    UNIX_TIMESTAMP(a.created_at) AS created_ts,
                     c.full_name AS customer_name, c.email AS customer_email, c.mobile AS customer_mobile, t.name AS type_name, t.color_hex
             FROM appointments a
             LEFT JOIN customers c ON c.id = a.customer_id
@@ -78,6 +79,8 @@ try {
     $stmt->execute($params);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    $showDaysSinceBooked = !empty(get_booking_calendar_settings()['show_days_since_booked']);
+
     $events = [];
     foreach ($rows as $r) {
         $title = $r['customer_name'] ? $r['customer_name'] : 'Appt #' . $r['id'];
@@ -85,6 +88,11 @@ try {
 
         $isoStart = str_replace(' ', 'T', $r['start_time']) . 'Z';
         $isoEnd = str_replace(' ', 'T', $r['end_time']) . 'Z';
+
+        $extraProps = [];
+        if ($showDaysSinceBooked) {
+            $extraProps['days_since_booked'] = appointment_days_since_created($r['created_ts'] ?? null);
+        }
 
         $events[] = [
             'id' => (int)$r['id'],
@@ -104,7 +112,7 @@ try {
                 'customer_mobile' => $r['customer_mobile'] ?? null, 
                 'end_time' => $isoEnd,
                 'notes' => $r['notes'] ?? null,                     
-            ]
+            ] + $extraProps
         ];
     }
 

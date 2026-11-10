@@ -83,6 +83,7 @@ $booking_end_time = get_setting('booking_end_time', '21:00');
 $booking_week_start_day = normalize_booking_week_start_day_setting(get_setting('booking_week_start_day', '0'));
 $booking_calendar_height = normalize_booking_calendar_height_setting(get_setting('booking_calendar_height', '1800'));
 $booking_show_now_indicator = (int) get_setting('booking_show_now_indicator', '1');
+$booking_show_days_since_booked = (int) get_setting('booking_show_days_since_booked', '0');
 $booking_snap_minutes = (int) get_setting('booking_snap_minutes', '15');
 $booking_snap_options = [1, 2, 5, 10, 15, 20, 30, 40, 45, 60];
 $auto_no_show = (int) get_setting('auto_no_show', '0');
@@ -552,6 +553,11 @@ $reminder_email_message = get_setting('reminder_email_message', '');
       <fieldset class="field-group">
         <legend>Live Time Marker</legend>
         <label><input type="checkbox" name="booking_show_now_indicator" value="1" <?php echo $booking_show_now_indicator ? 'checked' : ''; ?>> Show red line for the current time</label>
+      </fieldset>
+      <fieldset class="field-group">
+        <legend>Booking Age</legend>
+        <label><input type="checkbox" name="booking_show_days_since_booked" value="1" <?php echo $booking_show_days_since_booked ? 'checked' : ''; ?>> Show a small number at the bottom left of each appointment: how many days ago it was booked</label>
+        <p style="font-size: 0.9em; color: #666; margin-top: 6px;">Booked today shows no number, booked 12 days ago shows 12.</p>
       </fieldset>
       <fieldset class="field-group">
         <legend>Standard Breaks</legend>
